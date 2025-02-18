@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { Wand2 } from 'lucide-react';
+import { $getSelection, $isRangeSelection, $createTextNode } from 'lexical';
+import { Wand2, Copy, Clipboard, TextSelect, RectangleEllipsis, MessageCirclePlus } from 'lucide-react';
 import { InlineAIPrompt } from './InlineAIPrompt';
 import {
   ContextMenu,
@@ -8,6 +9,9 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { ContextMenuSeparator } from '@radix-ui/react-context-menu';
+// import { $createParagraphNode } from 'lexical';
+
 
 interface AIContextMenuProps {
   children: React.ReactNode;
@@ -17,6 +21,9 @@ export function AIContextMenu({ children }: AIContextMenuProps) {
   const [editor] = useLexicalComposerContext();
   const [showInlinePrompt, setShowInlinePrompt] = useState(false);
   const [promptPosition, setPromptPosition] = useState({ x: 0, y: 0 });
+  const [paragraphTopics, setParagraphTopics] = useState<Set<string>>(new Set()); // Paragraph topics (yellow)
+  const [essayTopics, setEssayTopics] = useState<Set<string>>(new Set()); // Essay topics (blue)
+
 
   const handleAIAction = () => {
     const selection = window.getSelection();
@@ -33,6 +40,91 @@ export function AIContextMenu({ children }: AIContextMenuProps) {
     setShowInlinePrompt(true);
   };
 
+  const handleCopy = () => {
+    editor.update(() => {
+      const selection = $getSelection();
+      if ($isRangeSelection(selection)) {
+        const selectedText = selection.getTextContent();
+        if (selectedText) {
+          navigator.clipboard.writeText(selectedText).then(() => {
+            console.log('Text copied to clipboard:', selectedText);
+          }).catch((err) => {
+            console.error('Failed to copy text:', err);
+          });
+        }
+      }
+    });
+  };
+
+  const handlePaste = () => {
+    navigator.clipboard.readText().then((clipboardText) => {
+      editor.update(() => {
+        const selection = $getSelection();
+        if ($isRangeSelection(selection)) {
+          const textNode = $createTextNode(clipboardText);
+          selection.insertNodes([textNode]);
+        }
+      });
+    }).catch((err) => {
+      console.error('Failed to read from clipboard:', err);
+    });
+  };
+
+  const handleSelectAsParagraphTopic = () => {
+    editor.update(() => {
+      const selection = $getSelection();
+      if ($isRangeSelection(selection)) {
+        const selectedText = selection.getTextContent();
+        if (selectedText) {
+          const isAlreadyTopic = paragraphTopics.has(selectedText);
+  
+          if (isAlreadyTopic) {
+            selection.insertNodes([$createTextNode(selectedText)]); // Remove highlight
+            setParagraphTopics((prev) => {
+              const newSet = new Set(prev);
+              newSet.delete(selectedText);
+              return newSet;
+            });
+          } else {
+            const spanNode = $createTextNode(selectedText);
+            spanNode.setStyle("background-color: yellow;"); // Highlight yellow
+            selection.insertNodes([spanNode]);
+  
+            setParagraphTopics((prev) => new Set(prev).add(selectedText));
+          }
+        }
+      }
+    });
+  };
+
+  const handleSelectAsEssayTopic = () => {
+    editor.update(() => {
+      const selection = $getSelection();
+      if ($isRangeSelection(selection)) {
+        const selectedText = selection.getTextContent();
+        if (selectedText) {
+          const isAlreadyEssayTopic = essayTopics.has(selectedText);
+  
+          if (isAlreadyEssayTopic) {
+            selection.insertNodes([$createTextNode(selectedText)]); // Remove highlight
+            setEssayTopics((prev) => {
+              const newSet = new Set(prev);
+              newSet.delete(selectedText);
+              return newSet;
+            });
+          } else {
+            const spanNode = $createTextNode(selectedText);
+            spanNode.setStyle("background-color: lightblue;"); // Highlight blue
+            selection.insertNodes([spanNode]);
+  
+            setEssayTopics((prev) => new Set(prev).add(selectedText));
+          }
+        }
+      }
+    });
+  };
+  
+
   const handleContextMenu = (e: React.MouseEvent) => {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) return;
@@ -47,6 +139,43 @@ export function AIContextMenu({ children }: AIContextMenuProps) {
             {children}
           </ContextMenuTrigger>
           <ContextMenuContent>
+            <ContextMenuItem 
+              onSelect={handleCopy} // Use the handleCopy function
+              className="flex items-center"
+            >
+              <Copy className="mr-2 h-4 w-4" />
+              <span>Copy</span>
+            </ContextMenuItem>
+            <ContextMenuItem 
+              onSelect={handlePaste} // Use the handlePaste function
+              className="flex items-center"
+            >
+              <Clipboard className="mr-2 h-4 w-4" />
+              <span>Paste</span>
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem 
+              onSelect={handleSelectAsParagraphTopic}
+              className="flex items-center"
+            >
+              <RectangleEllipsis className="mr-2 h-4 w-4" />
+              <span>Select as Paragraph Topic</span>
+            </ContextMenuItem>
+            <ContextMenuItem 
+              onSelect={handleSelectAsEssayTopic}
+              className="flex items-center"
+            >
+              <TextSelect className="mr-2 h-4 w-4" />
+              <span>Select as Essay Topic</span>
+            </ContextMenuItem>
+            <ContextMenuItem 
+              onSelect={handleAIAction}
+              className="flex items-center"
+            >
+              <MessageCirclePlus className="mr-2 h-4 w-4" />
+              <span>Select for Custom Feedback</span>
+            </ContextMenuItem>
+            <ContextMenuSeparator />
             <ContextMenuItem 
               onSelect={handleAIAction}
               className="flex items-center"
@@ -78,4 +207,4 @@ export function AIContextMenu({ children }: AIContextMenuProps) {
       )}
     </>
   );
-} 
+}

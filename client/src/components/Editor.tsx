@@ -30,6 +30,11 @@ import { AIContextMenu } from './AIContextMenu';
 import { EditorToolbar } from './EditorToolbar';
 import { theme } from '@/lib/editor-theme';
 import { toast } from "sonner";
+import DropdownMenuWithCheckboxes from './ui/dropdown-menu-select';
+import { updateHighlightedText } from "../utils/highlightUtils";
+import { $createParagraphButtonNode, ParagraphButtonNode } from '../utils/paragraphButtonNode';
+import { $createParagraphNode } from 'lexical';
+
 
 // Error handler
 function onError(error: Error): void {
@@ -93,7 +98,7 @@ export default function Editor({
       await new Promise(resolve => setTimeout(resolve, 500));
       
       // Save to localStorage as a backup
-      localStorage.setItem('coherence-doc', JSON.stringify({
+      localStorage.setItem('ripple-doc', JSON.stringify({
         title: documentTitle,
         content: editorState,
         lastSaved: new Date().toISOString()
@@ -118,7 +123,7 @@ export default function Editor({
       const newTitle = `${documentTitle} - ${timestamp}`;
       
       // Save to localStorage with a new key
-      const docKey = `coherence-doc-${Date.now()}`;
+      const docKey = `ripple-doc-${Date.now()}`;
       localStorage.setItem(docKey, JSON.stringify({
         title: newTitle,
         content: editorState,
@@ -151,7 +156,7 @@ export default function Editor({
 
   // Load saved content on mount
   useEffect(() => {
-    const saved = localStorage.getItem('coherence-doc');
+    const saved = localStorage.getItem('ripple-doc');
     if (saved) {
       const { title, content } = JSON.parse(saved);
       setDocumentTitle(title);
@@ -159,9 +164,28 @@ export default function Editor({
     }
   }, []);
 
+  const handleSelectionChange = (items: string[]) => {
+    setSelectedItems(items);
+    updateHighlightedText(items, Editor);
+  };
+
   const toggleAIPanel = () => {
     setIsAIPanelOpen(!isAIPanelOpen);
   };
+
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+
+  const topic_items = [
+    { id: "1", label: "Paragraph Topics" },
+    { id: "2", label: "Essay Topics" }
+  ];
+
+  const feedback_items = [
+    { id: "1", label: "Overall Feedback" },
+    { id: "2", label: "Paragraph Feedback" },
+    { id: "3", label: "Sentence Feedback" },
+    { id: "4", label: "Custom Feedback" }
+  ];
 
   const initialConfig = {
     namespace: 'GoogleDocsEditor',
@@ -171,6 +195,7 @@ export default function Editor({
       HeadingNode,
       ListNode,
       ListItemNode,
+      ParagraphButtonNode,
       LinkNode
     ],
   };
@@ -182,6 +207,32 @@ export default function Editor({
     onEditorChange?.(jsonString);
   };
 
+  // const handleAddParagraphButton = () => {
+  //   const [editor] = useLexicalComposerContext();
+  //   console.log('handleAddParagraphButton called'); // Check if function is called
+    
+  //   editor.update(() => {
+  //     const selection = $getSelection();
+  //     console.log('Current selection:', selection);
+      
+  //     if ($isRangeSelection(selection)) {
+  //       console.log('Selection is a range selection');
+        
+  //       const paragraphNode = $createParagraphNode();
+  //       const buttonNode = $createParagraphButtonNode(paragraphNode.getKey());
+        
+  //       paragraphNode.append(buttonNode);
+  //       console.log('Created paragraphNode and buttonNode:', paragraphNode, buttonNode);
+        
+  //       selection.insertNodes([paragraphNode]);
+  //       console.log('Inserted nodes into selection');
+  //     } else {
+  //       console.log('Selection is not a range selection');
+  //     }
+  //   });
+  // };
+  
+
   return (
     <div className={cn("w-full h-full relative", className)}>
       <LexicalComposer initialConfig={initialConfig}>
@@ -191,7 +242,7 @@ export default function Editor({
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-2">
                   <div className="w-3 h-3 rounded-full bg-stone-200 dark:bg-zinc-700" />
-                  <span className="text-sm font-semibold">Coherence</span>
+                  <span className="text-sm font-semibold">Ripple</span>
                 </div>
                 <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
                 <input 
@@ -205,51 +256,53 @@ export default function Editor({
               <div className="absolute left-1/2 -translate-x-1/2 flex items-center space-x-4">
                 <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full mx-2" />
                 <div className="flex space-x-1 text-sm">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-7 px-3 text-xs">File</Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-48">
-                      <DropdownMenuItem
-                        onClick={handleSave}
-                        disabled={isSaving}
-                        className="flex items-center"
-                      >
-                        <Save className="mr-2 h-4 w-4" />
-                        <span>Save</span>
-                        <span className="ml-auto text-xs text-muted-foreground">⌘S</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={handleSaveAs}
-                        disabled={isSaving}
-                        className="flex items-center"
-                      >
-                        <FileDown className="mr-2 h-4 w-4" />
-                        <span>Save As...</span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <Button variant="ghost" size="sm" className="h-7 px-3 text-xs">Edit</Button>
-                  <Button variant="ghost" size="sm" className="h-7 px-3 text-xs">View</Button>
-                  <Button variant="ghost" size="sm" className="h-7 px-3 text-xs">Insert</Button>
-                  <Button variant="ghost" size="sm" className="h-7 px-3 text-xs">Format</Button>
-                  <Button variant="ghost" size="sm" className="h-7 px-3 text-xs">Tools</Button>
+                  
+                <DropdownMenuWithCheckboxes
+                  label="View Topic Sentences"
+                  items={topic_items}
+                  selectedItems={selectedItems}
+                  onSelectedItemsChange={handleSelectionChange}
+                />
+
+                <DropdownMenuWithCheckboxes
+                  label="Check for Feedback"
+                  items={feedback_items}
+                  selectedItems={selectedItems}
+                  onSelectedItemsChange={handleSelectionChange}
+                />
+                  
                 </div>
                 <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full mx-2" />
               </div>
               <div className="ml-auto flex items-center space-x-2">
                 <ModeToggle />
                 <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full mx-2" />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="h-7 px-3 text-xs flex items-center space-x-1"
-                >
-                  <Save className="h-3.5 w-3.5" />
-                  <span>{isSaving ? 'Saving...' : 'Save'}</span>
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-7 px-3 text-xs">
+                      {isSaving ? "Saving..." : "Save"}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-48">
+                    <DropdownMenuItem
+                      onClick={handleSave}
+                      disabled={isSaving}
+                      className="flex items-center"
+                    >
+                      <Save className="mr-2 h-4 w-4" />
+                      <span>{isSaving ? "Saving..." : "Save"}</span>
+                      <span className="ml-auto text-xs text-muted-foreground">⌘S</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={handleSaveAs}
+                      disabled={isSaving}
+                      className="flex items-center"
+                    >
+                      <FileDown className="mr-2 h-4 w-4" />
+                      <span>Save As...</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           </div>
@@ -349,5 +402,6 @@ export default function Editor({
         </div>
       </div>
     </div>
+    
   );
 } 
