@@ -16,9 +16,10 @@ import { ContextMenuSeparator } from '@radix-ui/react-context-menu';
 interface AIContextMenuProps {
   children: React.ReactNode;
   onAddInsight?: (content: string, highlightedText: string, highlightStyle?: string) => void;
+  onStartComment?: (text: string, highlightStyle: string) => void;
 }
 
-export function AIContextMenu({ children, onAddInsight }: AIContextMenuProps) {
+export function AIContextMenu({ children, onAddInsight, onStartComment }: AIContextMenuProps) {
   const [editor] = useLexicalComposerContext();
   const [showInlinePrompt, setShowInlinePrompt] = useState(false);
   const [promptPosition, setPromptPosition] = useState({ x: 0, y: 0 });
@@ -129,21 +130,21 @@ export function AIContextMenu({ children, onAddInsight }: AIContextMenuProps) {
 
   const handleAddComment = () => {
     const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) return;
+    if (!selection || selection.isCollapsed || !onStartComment) return;
 
     const text = selection.toString();
-    setSelectedText(text);
-    setCommentMode(true);
-
-    // Get the mouse position from the context menu event
-    const mouseEvent = window.event as MouseEvent;
     
-    // Position the prompt above the click position
-    setPromptPosition({
-      x: Math.max(20, Math.min(mouseEvent.clientX, window.innerWidth - 420)),
-      y: Math.max(20, mouseEvent.clientY - 20)
+    // Add temporary highlight
+    editor.update(() => {
+      const selection = $getSelection();
+      if ($isRangeSelection(selection)) {
+        const textNode = $createTextNode(text);
+        textNode.setStyle("background-color: #fef9c3"); // Light yellow highlight
+        selection.insertNodes([textNode]);
+      }
     });
-    setShowInlinePrompt(true);
+
+    onStartComment(text, "#fef9c3");
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -226,32 +227,11 @@ export function AIContextMenu({ children, onAddInsight }: AIContextMenuProps) {
           }}
         >
           <InlineAIPrompt
-            onSubmit={(comment: string) => {
-              if (commentMode && onAddInsight) {
-                // Add the comment to insights with the highlighted text
-                editor.update(() => {
-                  const selection = $getSelection();
-                  if ($isRangeSelection(selection)) {
-                    const textNode = $createTextNode(selectedText);
-                    textNode.setStyle("background-color: #fef9c3"); // Light yellow highlight
-                    selection.insertNodes([textNode]);
-                  }
-                });
-                onAddInsight(comment, selectedText, "#fef9c3");
-              } else {
-                console.log('Inline prompt:', comment);
-              }
+            onSubmit={(prompt: string) => {
+              console.log('Inline prompt:', prompt);
               setShowInlinePrompt(false);
-              setCommentMode(false);
-              setSelectedText('');
             }}
-            onClose={() => {
-              setShowInlinePrompt(false);
-              setCommentMode(false);
-              setSelectedText('');
-            }}
-            title={commentMode ? "Add Comment" : "AI Assistant"}
-            placeholder={commentMode ? "Write your comment..." : "Ask AI to help with your text..."}
+            onClose={() => setShowInlinePrompt(false)}
           />
         </div>
       )}

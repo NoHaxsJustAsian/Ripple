@@ -24,7 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { MessageSquare, LightbulbIcon, Save, FileDown } from 'lucide-react';
+import { MessageSquare, LightbulbIcon, Save, FileDown, X } from 'lucide-react';
 import { AISidePanel } from './AISidePanel';
 import { AIContextMenu } from './AIContextMenu';
 import { EditorToolbar } from './EditorToolbar';
@@ -70,6 +70,7 @@ interface AIInsight {
   type: 'suggestion' | 'comment' | 'improvement';
   highlightedText?: string;
   highlightStyle?: string;
+  isHighlighted?: boolean;
 }
 
 export default function Editor({ 
@@ -82,12 +83,17 @@ export default function Editor({
   const [isInsightsOpen, setIsInsightsOpen] = useState(false);
   const [documentTitle, setDocumentTitle] = useState('Untitled document');
   const [isSaving, setIsSaving] = useState(false);
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   
   const [insights, setInsights] = useState<AIInsight[]>([
     { id: 1, content: "Consider rephrasing this sentence for clarity", type: 'suggestion' },
     { id: 2, content: "This paragraph could be more concise", type: 'improvement' },
     { id: 3, content: "Good use of active voice here", type: 'comment' },
   ]);
+
+  const [selectedInsight, setSelectedInsight] = useState<number | null>(null);
+  const [showCommentInput, setShowCommentInput] = useState(false);
+  const [pendingComment, setPendingComment] = useState<{text: string; highlightStyle: string} | null>(null);
 
   const handleSave = useCallback(async () => {
     if (!editorState) return;
@@ -209,100 +215,130 @@ export default function Editor({
   };
 
   const handleAddInsight = useCallback((content: string, highlightedText: string, highlightStyle?: string) => {
+    const newId = Date.now();
     setInsights(prev => [
       ...prev,
       {
-        id: Date.now(),
+        id: newId,
         content,
         type: 'comment',
         highlightedText,
-        highlightStyle
+        highlightStyle,
+        isHighlighted: true
       }
     ]);
+    setSelectedInsight(newId);
+    setShowCommentInput(false);
+    setPendingComment(null);
     // Automatically open insights panel when adding a comment
     setIsInsightsOpen(true);
   }, []);
+
+  const handleStartComment = useCallback((text: string, highlightStyle: string) => {
+    setPendingComment({ text, highlightStyle });
+    setShowCommentInput(true);
+    setIsInsightsOpen(true);
+  }, []);
+
+  // Update highlights when selection changes
+  useEffect(() => {
+    if (selectedInsight === null) {
+      setInsights(prev => prev.map(insight => ({ ...insight, isHighlighted: false })));
+    } else {
+      setInsights(prev => prev.map(insight => ({
+        ...insight,
+        isHighlighted: insight.id === selectedInsight
+      })));
+    }
+  }, [selectedInsight]);
 
   return (
     <div className={cn("w-full h-full relative", className)}>
       <LexicalComposer initialConfig={initialConfig}>
         <div className="h-full flex flex-col">
-          <div className="px-4 py-2 border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex items-center space-x-4 relative">
-              <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 rounded-full bg-stone-200 dark:bg-zinc-700" />
-                  <span className="text-sm font-semibold">Ripple</span>
-                </div>
-                <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
-                <input 
-                  type="text" 
-                  value={documentTitle}
-                  onChange={(e) => setDocumentTitle(e.target.value)}
-                  placeholder="Untitled document"
-                  className="bg-transparent border-none text-sm focus:outline-none focus:ring-0 p-0 h-6 text-stone-800 dark:text-zinc-100"
-                />
-              </div>
-              <div className="absolute left-1/2 -translate-x-1/2 flex items-center space-x-4">
-                <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full mx-2" />
-                <div className="flex space-x-1 text-sm">
-                  
-                <DropdownMenuWithCheckboxes
-                  label="View Topic Sentences"
-                  items={topic_items}
-                  selectedItems={selectedItems}
-                  onSelectedItemsChange={handleSelectionChange}
-                />
+          <div className="sticky top-4 z-30">
+            <div className="mx-4 rounded-lg overflow-hidden border border-border/40">
+              <div className="px-4 py-2 border-b border-border/40 bg-blue-100/60 dark:bg-blue-900/10 backdrop-blur supports-[backdrop-filter]:bg-blue-100/40 dark:supports-[backdrop-filter]:bg-blue-900/5">
+                <div className="flex items-center justify-between space-x-4">
+                  {/* Left section */}
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-3 h-3 rounded-full bg-stone-200 dark:bg-zinc-700" />
+                      <span className="text-sm font-semibold">Ripple</span>
+                    </div>
+                    <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
+                    <input 
+                      type="text" 
+                      value={documentTitle}
+                      onChange={(e) => setDocumentTitle(e.target.value)}
+                      placeholder="Untitled document"
+                      className="bg-transparent border-none text-sm focus:outline-none focus:ring-0 p-0 h-6 text-stone-800 dark:text-zinc-100"
+                    />
+                    <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
+                    <ModeToggle />
+                    <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        className="h-7 px-3 text-xs flex items-center space-x-2"
+                      >
+                        <Save className="h-3.5 w-3.5" />
+                        <span>Save</span>
+                        <span className="text-xs text-muted-foreground ml-1">{isMac ? '⌘S' : 'Ctrl+S'}</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleSaveAs}
+                        disabled={isSaving}
+                        className="h-7 px-3 text-xs flex items-center space-x-2"
+                      >
+                        <FileDown className="h-3.5 w-3.5" />
+                        <span>Save As</span>
+                      </Button>
+                    </div>
+                  </div>
 
-                <DropdownMenuWithCheckboxes
-                  label="Check for Feedback"
-                  items={feedback_items}
-                  selectedItems={selectedItems}
-                  onSelectedItemsChange={handleSelectionChange}
-                />
-                  
-                </div>
-                <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full mx-2" />
-              </div>
-              <div className="ml-auto flex items-center space-x-2">
-                <ModeToggle />
-                <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full mx-2" />
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-7 px-3 text-xs">
-                      {isSaving ? "Saving..." : "Save"}
+                  {/* Right section - Dropdowns and AI buttons */}
+                  <div className="flex items-center space-x-4">
+                    <div className="flex space-x-1 text-sm">
+                      <DropdownMenuWithCheckboxes
+                        label="View Topic Sentences"
+                        items={topic_items}
+                        selectedItems={selectedItems}
+                        onSelectedItemsChange={handleSelectionChange}
+                      />
+                      <DropdownMenuWithCheckboxes
+                        label="Check for Feedback"
+                        items={feedback_items}
+                        selectedItems={selectedItems}
+                        onSelectedItemsChange={handleSelectionChange}
+                      />
+                    </div>
+                    <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
+                    <Button
+                      variant={isInsightsOpen ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setIsInsightsOpen(!isInsightsOpen)}
+                      className="h-7 px-3 text-xs flex items-center space-x-1"
+                    >
+                      <LightbulbIcon className="h-3.5 w-3.5" />
+                      <span>Insights</span>
                     </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-48">
-                    <DropdownMenuItem
-                      onClick={handleSave}
-                      disabled={isSaving}
-                      className="flex items-center"
+                    <Button
+                      variant={isAIPanelOpen ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={toggleAIPanel}
+                      className="h-7 px-3 text-xs flex items-center space-x-1"
                     >
-                      <Save className="mr-2 h-4 w-4" />
-                      <span>{isSaving ? "Saving..." : "Save"}</span>
-                      <span className="ml-auto text-xs text-muted-foreground">⌘S</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={handleSaveAs}
-                      disabled={isSaving}
-                      className="flex items-center"
-                    >
-                      <FileDown className="mr-2 h-4 w-4" />
-                      <span>Save As...</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-          </div>
-          <div className="sticky top-4 z-30 px-4">
-            <div className="relative">
-              <div className="absolute left-0 top-1/2 -translate-y-1/2">
-                <div className="w-[1px] h-8 bg-border/40 dark:bg-zinc-800 rounded-full mx-2" />
-              </div>
-              <div className="absolute right-0 top-1/2 -translate-y-1/2">
-                <div className="w-[1px] h-8 bg-border/40 dark:bg-zinc-800 rounded-full mx-2" />
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      <span>Chat</span>
+                    </Button>
+                  </div>
+                </div>
               </div>
               <EditorToolbar />
             </div>
@@ -311,7 +347,10 @@ export default function Editor({
             <div className="mx-auto" style={{ width: '816px' }}>
               <div className="py-12">
                 <div className="relative bg-[#FFFDF7] dark:bg-card min-h-[1056px] shadow-sm">
-                  <AIContextMenu onAddInsight={handleAddInsight}>
+                  <AIContextMenu 
+                    onAddInsight={handleAddInsight}
+                    onStartComment={handleStartComment}
+                  >
                     <RichTextPlugin
                       contentEditable={
                         <ContentEditable 
@@ -348,28 +387,6 @@ export default function Editor({
         </div>
       </LexicalComposer>
       
-      {/* Fixed AI buttons */}
-      <div className="fixed right-4 top-[10px] flex items-center space-x-2 z-50">
-        <Button
-          variant={isInsightsOpen ? "secondary" : "ghost"}
-          size="sm"
-          onClick={() => setIsInsightsOpen(!isInsightsOpen)}
-          className="h-7 px-3 text-xs flex items-center space-x-1"
-        >
-          <LightbulbIcon className="h-3.5 w-3.5" />
-          <span>Insights</span>
-        </Button>
-        <Button
-          variant={isAIPanelOpen ? "secondary" : "ghost"}
-          size="sm"
-          onClick={toggleAIPanel}
-          className="h-7 px-3 text-xs flex items-center space-x-1"
-        >
-          <MessageSquare className="h-3.5 w-3.5" />
-          <span>Chat</span>
-        </Button>
-      </div>
-
       <AISidePanel isOpen={isAIPanelOpen} onClose={toggleAIPanel} />
 
       {/* AI Insights Cards */}
@@ -379,8 +396,76 @@ export default function Editor({
         isInsightsOpen ? "opacity-100 translate-x-0" : "opacity-0 translate-x-[316px]"
       )}>
         <div className="p-4 space-y-3">
+          {showCommentInput && pendingComment && (
+            <Card className="pointer-events-auto bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+              <CardContent className="p-3">
+                <div className="flex flex-col space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Add Comment</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setShowCommentInput(false);
+                        setPendingComment(null);
+                      }}
+                      className="h-6 w-6 p-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="text-sm text-muted-foreground pl-4 border-l-2 border-muted">
+                    <p style={{ backgroundColor: pendingComment.highlightStyle }}>
+                      "{pendingComment.text}"
+                    </p>
+                  </div>
+                  <div className="relative">
+                    <textarea
+                      placeholder="Write your comment..."
+                      className="w-full h-24 p-2 text-sm resize-none rounded-md border border-input bg-background focus:outline-none"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          const comment = e.currentTarget.value.trim();
+                          if (comment) {
+                            handleAddInsight(comment, pendingComment.text, pendingComment.highlightStyle);
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-xs text-muted-foreground">
+                      Press Enter to send
+                    </span>
+                    <Button
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={(e) => {
+                        const textarea = e.currentTarget.parentElement?.previousElementSibling?.querySelector('textarea') as HTMLTextAreaElement;
+                        const comment = textarea?.value.trim();
+                        if (comment) {
+                          handleAddInsight(comment, pendingComment.text, pendingComment.highlightStyle);
+                        }
+                      }}
+                    >
+                      Comment
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
           {insights.map((insight) => (
-            <Card key={insight.id} className="pointer-events-auto bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <Card 
+              key={insight.id} 
+              className={cn(
+                "pointer-events-auto bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+                selectedInsight === insight.id && "ring-2 ring-blue-500"
+              )}
+              onClick={() => setSelectedInsight(selectedInsight === insight.id ? null : insight.id)}
+            >
               <CardContent className="p-3">
                 <div className="flex items-start space-x-2">
                   <LightbulbIcon className="h-4 w-4 mt-0.5 text-yellow-500" />
@@ -388,7 +473,7 @@ export default function Editor({
                     <p className="text-sm">{insight.content}</p>
                     {insight.highlightedText && (
                       <div className="text-sm text-muted-foreground pl-4 border-l-2 border-muted">
-                        <p style={insight.highlightStyle ? { backgroundColor: insight.highlightStyle } : undefined}>
+                        <p style={insight.isHighlighted && insight.highlightStyle ? { backgroundColor: insight.highlightStyle } : undefined}>
                           "{insight.highlightedText}"
                         </p>
                       </div>

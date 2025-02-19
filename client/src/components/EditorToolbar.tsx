@@ -55,7 +55,7 @@ export function EditorToolbar() {
   };
 
   return (
-    <div className="flex items-center px-4 py-2 h-12 border border-border/40 rounded-md bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">      
+    <div className="flex items-center px-4 py-2 h-12 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">      
       <div className="absolute left-1/2 -translate-x-1/2 flex items-center space-x-4">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

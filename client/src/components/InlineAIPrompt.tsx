@@ -61,19 +61,19 @@ export function InlineAIPrompt({
               className="w-full h-24 p-2 text-sm resize-none rounded-md border border-input bg-background focus:outline-none"
               autoFocus
             />
-            <div className="absolute right-2 bottom-2 flex items-center space-x-2">
-              <span className="text-xs text-muted-foreground">
-                Press Enter to send
-              </span>
-              <Button
-                size="sm"
-                onClick={handleSubmit}
-                disabled={!prompt.trim()}
-                className="h-7 text-xs"
-              >
-                Send
-              </Button>
-            </div>
+          </div>
+          <div className="flex items-center justify-between mt-2">
+            <span className="text-xs text-muted-foreground">
+              Press Enter to send
+            </span>
+            <Button
+              size="sm"
+              onClick={handleSubmit}
+              disabled={!prompt.trim()}
+              className="h-6 px-2 text-xs"
+            >
+              Send
+            </Button>
           </div>
         </div>
       </CardContent>

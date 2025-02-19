@@ -7,9 +7,10 @@ import { cn } from '@/lib/utils';
 interface AISidePanelProps {
   isOpen: boolean;
   onClose: () => void;
+  className?: string;
 }
 
-export function AISidePanel({ isOpen, onClose }: AISidePanelProps) {
+export function AISidePanel({ isOpen, onClose, className }: AISidePanelProps) {
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const [input, setInput] = useState('');
 
@@ -31,9 +32,10 @@ export function AISidePanel({ isOpen, onClose }: AISidePanelProps) {
   return (
     <div
       className={cn(
-        "fixed right-0 top-12 bottom-0 w-[300px] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
-        "border-l border-border/40 transition-transform duration-200 ease-in-out z-50",
-        isOpen ? "translate-x-0" : "translate-x-[300px]"
+        "fixed right-4 top-[80px] bottom-4 w-[300px] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+        "border border-border/40 transition-transform duration-200 ease-in-out z-50 rounded-lg overflow-hidden",
+        isOpen ? "translate-x-0" : "translate-x-[316px]",
+        className
       )}
     >
       <div className="flex items-center h-12 px-4 border-b border-border/40">
