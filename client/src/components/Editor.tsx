@@ -1,5 +1,4 @@
-import { $getRoot, $getSelection, $isRangeSelection, FORMAT_TEXT_COMMAND } from 'lexical';
-import { useEffect, useState, useCallback } from 'react';
+import { $getRoot, $getSelection, $isRangeSelection, EditorState, ElementNode, FORMAT_TEXT_COMMAND, RangeSelection, SELECTION_CHANGE_COMMAND, TextNode } from 'lexical';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
@@ -13,7 +12,6 @@ import { LinkPlugin } from '@lexical/react/LexicalLinkPlugin';
 import { TabIndentationPlugin } from '@lexical/react/LexicalTabIndentationPlugin';
 import { ListNode, ListItemNode } from '@lexical/list';
 import { LinkNode } from '@lexical/link';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ModeToggle } from '@/components/ui/mode-toggle';
 import {
@@ -34,6 +32,26 @@ import DropdownMenuWithCheckboxes from './ui/dropdown-menu-select';
 import { updateHighlightedText } from "../utils/highlightUtils";
 import { $createParagraphButtonNode, ParagraphButtonNode } from '../utils/paragraphButtonNode';
 import { $createParagraphNode } from 'lexical';
+import { useCallback, useEffect, useState } from 'react';
+// import { Button, Container, FormElement, Text, Textarea } from '@nextui-org/react'
+import { v4 as uuidv4 } from 'uuid'
+// import { FiMessageCircle } from 'react-icons/fi'
+import { $isAtNodeEnd } from "@lexical/selection"
+
+import LexicalPlainTextPlugin from '@lexical/react/LexicalPlainTextPlugin';
+import LexicalContentEditable from '@lexical/react/LexicalContentEditable';
+import LexicalOnChangePlugin from '@lexical/react/LexicalOnChangePlugin';
+// import './styles/Lexical.scss'
+import { CommentInstance, CommentNode, SET_COMMENT_COMMAND } from './lexical-nodes/comment';
+import CommentPlugin, { $isCommentNode, UPDATE_COMMENT_COMMAND } from './lexical-nodes/comment';
+import { useRecoilState, useRecoilValue, useSetRecoilState } from 'recoil';
+import { activeCommentState, allCommentInstancesState, lastUpdatedCommentInstanceState } from './store/commentStore';
+
+import { COMMAND_PRIORITY_LOW } from 'lexical';
+import { Button } from './ui/button';
+
+const LowPriority = COMMAND_PRIORITY_LOW;
+
 
 
 // Error handler
@@ -74,7 +92,7 @@ export default function Editor({
   className = '', 
   placeholder = 'Type @ to insert...',
   onEditorChange 
-}: EditorProps): JSX.Element {
+}: EditorProps) {
   const [editorState, setEditorState] = useState<string>();
   const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
   const [isInsightsOpen, setIsInsightsOpen] = useState(false);
@@ -196,15 +214,9 @@ export default function Editor({
       ListNode,
       ListItemNode,
       ParagraphButtonNode,
-      LinkNode
+      LinkNode,
+      CommentNode
     ],
-  };
-
-  const onChange = (editorState: any) => {
-    const editorStateJSON = editorState.toJSON();
-    const jsonString = JSON.stringify(editorStateJSON);
-    setEditorState(jsonString);
-    onEditorChange?.(jsonString);
   };
 
   // const handleAddParagraphButton = () => {
@@ -233,9 +245,183 @@ export default function Editor({
   // };
   
 
+  
+  // When the editor changes, you can get notified via the
+  // LexicalOnChangePlugin!
+  const onChange = (editorState: any) => {
+
+    const editorStateJSON = editorState.toJSON();
+
+    const jsonString = JSON.stringify(editorStateJSON);
+
+    setEditorState(jsonString);
+
+    onEditorChange?.(jsonString);
+
+  };
+  
+  // Lexical React plugins are React components, which makes them
+  // highly composable. Furthermore, you can lazy load plugins if
+  // desired, so you don't pay the cost for plugins until you
+  // actually use them.
+  function MyCustomAutoFocusPlugin() {
+    const [editor] = useLexicalComposerContext();
+  
+    useEffect(() => {
+      // Focus the editor when the effect fires!
+      editor.focus();
+    }, [editor]);
+  
+    return null;
+  }
+  
+  // Catch any errors that occur during Lexical updates and log them
+  // or throw them as needed. If you don't throw them, Lexical will
+  // try to recover gracefully without losing user data.
+  function onError(error: Error) {
+    console.error(error);
+  }
+  
+  interface EditorProps {
+    className?: string
+  }
+  
+  function getSelectedNode(selection: RangeSelection): TextNode | ElementNode {
+    const anchor = selection.anchor;
+    const focus = selection.focus;
+    const anchorNode = selection.anchor.getNode();
+    const focusNode = selection.focus.getNode();
+    if (anchorNode === focusNode) {
+      return anchorNode;
+    }
+    const isBackward = selection.isBackward();
+    if (isBackward) {
+      return $isAtNodeEnd(focus) ? anchorNode : focusNode;
+    } else {
+      return $isAtNodeEnd(anchor) ? focusNode : anchorNode;
+    }
+  }
+  
+  
+  const CommentStatePlugin: React.FC = () => {
+    return null;
+    const [editor] = useLexicalComposerContext()
+  
+    const [isComment, setIsComment] = useState<boolean>(false)
+  
+    const [activeCommentInstance, setActiveCommentInstance] = useRecoilState(activeCommentState)
+  
+    const setAllCommentInstances = useSetRecoilState(allCommentInstancesState)
+  
+    const [inputContent, setInputContent] = useState("")
+  
+    useEffect(() => {
+      if (!activeCommentInstance) return
+  
+      const copyActiveCommentInstance: CommentInstance = JSON.parse(JSON.stringify(activeCommentInstance))
+  
+      const state = editor.getEditorState()
+  
+      state.read(() => {
+        state._nodeMap.forEach((node) => {
+          if ($isCommentNode(node) && (node as CommentNode).__commentInstance.uuid === activeCommentInstance.uuid) {
+            const [prevCommentInstance, thisCommentInstance] = [JSON.stringify((node as CommentNode).__commentInstance), JSON.stringify(activeCommentInstance)]
+            if (prevCommentInstance !== thisCommentInstance) editor.dispatchCommand(UPDATE_COMMENT_COMMAND, copyActiveCommentInstance)
+          }
+        })
+      })
+    }, [activeCommentInstance])
+  
+    const setActiveStates = useCallback(() => {
+      const state = editor.getEditorState()
+  
+      state.read(() => {
+        const commentInstances: CommentInstance[] = []
+  
+        state._nodeMap.forEach((node, key, map) => {
+          node.__type === CommentNode.getType()
+  
+          const commentInstance = (node as CommentNode).__commentInstance || {}
+  
+          if (commentInstance.uuid) commentInstances.push(commentInstance)
+        })
+  
+        setAllCommentInstances(commentInstances)
+      })
+  
+      const selection = $getSelection()
+  
+      if ($isRangeSelection(selection)) {
+        const node = getSelectedNode(selection as RangeSelection)
+  
+        const parent = node.getParent()
+  
+        let commentNode: CommentNode | undefined
+  
+        if ($isCommentNode(node)) commentNode = node as CommentNode
+        else if (parent && $isCommentNode(parent)) commentNode = parent as CommentNode
+  
+        if (commentNode) {
+          setIsComment(true)
+          const activeCommentInstance: CommentInstance = JSON.parse(JSON.stringify(commentNode.__commentInstance))
+          setActiveCommentInstance(activeCommentInstance)
+        } else {
+          setIsComment(false)
+          setActiveCommentInstance(undefined)
+        }
+      }
+    }, [editor])
+  
+    useEffect(() => {
+      return editor.registerCommand(
+        SELECTION_CHANGE_COMMAND,
+        (_payload, e) => {
+          setActiveStates()
+          return false
+        },
+        LowPriority
+      )
+    })
+  }
+  
+
+const AddCommentPlugin: React.FC = () => {
+  const [editor] = useLexicalComposerContext()
+
+  const [inputContent, setInputContent] = useState("I love lexical!!!")
+
+  const addComment = () => {
+    if (!inputContent) return
+
+    editor.update(() => {
+      const sel = $getSelection()
+      const textContent = sel?.getTextContent() || ""
+
+      const dummyCommentInstance: CommentInstance = {
+        uuid: uuidv4(),
+        textContent,
+        comments: [
+          {
+            content: inputContent,
+            time: 'just now',
+            userName: 'sereneinserenade'
+          }
+        ]
+      }
+
+      editor.dispatchCommand(SET_COMMENT_COMMAND, dummyCommentInstance)
+
+      setInputContent("")
+    })
+  }
+
+  const onKeyboardEvent = (event: React.KeyboardEvent<HTMLInputElement>) => event.code === 'Enter' && event.metaKey && addComment()
+
+
   return (
     <div className={cn("w-full h-full relative", className)}>
-      <LexicalComposer initialConfig={initialConfig}>
+      <LexicalComposer initialConfig={{ ...initialConfig, nodes: [CommentNode] }}>
+        <CommentStatePlugin />
         <div className="h-full flex flex-col">
           <div className="px-4 py-2 border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <div className="flex items-center space-x-4 relative">
@@ -270,6 +456,7 @@ export default function Editor({
                   selectedItems={selectedItems}
                   onSelectedItemsChange={handleSelectionChange}
                 />
+                <Button color="secondary" onClick={addComment} style={{ marginTop: '2ch' }}> Add New Comment (⌘/Ctrl + ↵) </Button>
                   
                 </div>
                 <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full mx-2" />
@@ -348,6 +535,8 @@ export default function Editor({
                 </div>
                 <HistoryPlugin />
                 <AutoFocusPlugin />
+                {/* <CommentPlugin />
+                <AddCommentPlugin /> */}
                 <ListPlugin />
                 <LinkPlugin />
                 <TabIndentationPlugin />
@@ -361,7 +550,7 @@ export default function Editor({
       {/* Fixed AI buttons */}
       <div className="fixed right-4 top-[10px] flex items-center space-x-2 z-50">
         <Button
-          variant={isInsightsOpen ? "secondary" : "ghost"}
+          variant={isInsightsOpen ? "default" : "ghost"}
           size="sm"
           onClick={() => setIsInsightsOpen(!isInsightsOpen)}
           className="h-7 px-3 text-xs flex items-center space-x-1"
@@ -370,7 +559,7 @@ export default function Editor({
           <span>Insights</span>
         </Button>
         <Button
-          variant={isAIPanelOpen ? "secondary" : "ghost"}
+          variant={isAIPanelOpen ? "default" : "ghost"}
           size="sm"
           onClick={toggleAIPanel}
           className="h-7 px-3 text-xs flex items-center space-x-1"
@@ -404,4 +593,4 @@ export default function Editor({
     </div>
     
   );
-} 
+} }
