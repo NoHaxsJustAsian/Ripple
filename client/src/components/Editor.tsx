@@ -68,6 +68,8 @@ interface AIInsight {
   id: number;
   content: string;
   type: 'suggestion' | 'comment' | 'improvement';
+  highlightedText?: string;
+  highlightStyle?: string;
 }
 
 export default function Editor({ 
@@ -81,8 +83,7 @@ export default function Editor({
   const [documentTitle, setDocumentTitle] = useState('Untitled document');
   const [isSaving, setIsSaving] = useState(false);
   
-  // Mock insights for now
-  const [insights] = useState<AIInsight[]>([
+  const [insights, setInsights] = useState<AIInsight[]>([
     { id: 1, content: "Consider rephrasing this sentence for clarity", type: 'suggestion' },
     { id: 2, content: "This paragraph could be more concise", type: 'improvement' },
     { id: 3, content: "Good use of active voice here", type: 'comment' },
@@ -207,31 +208,20 @@ export default function Editor({
     onEditorChange?.(jsonString);
   };
 
-  // const handleAddParagraphButton = () => {
-  //   const [editor] = useLexicalComposerContext();
-  //   console.log('handleAddParagraphButton called'); // Check if function is called
-    
-  //   editor.update(() => {
-  //     const selection = $getSelection();
-  //     console.log('Current selection:', selection);
-      
-  //     if ($isRangeSelection(selection)) {
-  //       console.log('Selection is a range selection');
-        
-  //       const paragraphNode = $createParagraphNode();
-  //       const buttonNode = $createParagraphButtonNode(paragraphNode.getKey());
-        
-  //       paragraphNode.append(buttonNode);
-  //       console.log('Created paragraphNode and buttonNode:', paragraphNode, buttonNode);
-        
-  //       selection.insertNodes([paragraphNode]);
-  //       console.log('Inserted nodes into selection');
-  //     } else {
-  //       console.log('Selection is not a range selection');
-  //     }
-  //   });
-  // };
-  
+  const handleAddInsight = useCallback((content: string, highlightedText: string, highlightStyle?: string) => {
+    setInsights(prev => [
+      ...prev,
+      {
+        id: Date.now(),
+        content,
+        type: 'comment',
+        highlightedText,
+        highlightStyle
+      }
+    ]);
+    // Automatically open insights panel when adding a comment
+    setIsInsightsOpen(true);
+  }, []);
 
   return (
     <div className={cn("w-full h-full relative", className)}>
@@ -321,7 +311,7 @@ export default function Editor({
             <div className="mx-auto" style={{ width: '816px' }}>
               <div className="py-12">
                 <div className="relative bg-[#FFFDF7] dark:bg-card min-h-[1056px] shadow-sm">
-                  <AIContextMenu>
+                  <AIContextMenu onAddInsight={handleAddInsight}>
                     <RichTextPlugin
                       contentEditable={
                         <ContentEditable 
@@ -394,7 +384,16 @@ export default function Editor({
               <CardContent className="p-3">
                 <div className="flex items-start space-x-2">
                   <LightbulbIcon className="h-4 w-4 mt-0.5 text-yellow-500" />
-                  <p className="text-sm">{insight.content}</p>
+                  <div className="space-y-1">
+                    <p className="text-sm">{insight.content}</p>
+                    {insight.highlightedText && (
+                      <div className="text-sm text-muted-foreground pl-4 border-l-2 border-muted">
+                        <p style={insight.highlightStyle ? { backgroundColor: insight.highlightStyle } : undefined}>
+                          "{insight.highlightedText}"
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>

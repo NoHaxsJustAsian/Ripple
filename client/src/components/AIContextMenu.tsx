@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { $getSelection, $isRangeSelection, $createTextNode } from 'lexical';
-import { Wand2, Copy, Clipboard, TextSelect, RectangleEllipsis, MessageCirclePlus } from 'lucide-react';
+import { Wand2, Copy, Clipboard, TextSelect, RectangleEllipsis, MessageCirclePlus, MessageSquare } from 'lucide-react';
 import { InlineAIPrompt } from './InlineAIPrompt';
 import {
   ContextMenu,
@@ -15,14 +15,17 @@ import { ContextMenuSeparator } from '@radix-ui/react-context-menu';
 
 interface AIContextMenuProps {
   children: React.ReactNode;
+  onAddInsight?: (content: string, highlightedText: string, highlightStyle?: string) => void;
 }
 
-export function AIContextMenu({ children }: AIContextMenuProps) {
+export function AIContextMenu({ children, onAddInsight }: AIContextMenuProps) {
   const [editor] = useLexicalComposerContext();
   const [showInlinePrompt, setShowInlinePrompt] = useState(false);
   const [promptPosition, setPromptPosition] = useState({ x: 0, y: 0 });
   const [paragraphTopics, setParagraphTopics] = useState<Set<string>>(new Set()); // Paragraph topics (yellow)
   const [essayTopics, setEssayTopics] = useState<Set<string>>(new Set()); // Essay topics (blue)
+  const [commentMode, setCommentMode] = useState(false);
+  const [selectedText, setSelectedText] = useState('');
 
 
   const handleAIAction = () => {
@@ -123,7 +126,25 @@ export function AIContextMenu({ children }: AIContextMenuProps) {
       }
     });
   };
-  
+
+  const handleAddComment = () => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) return;
+
+    const text = selection.toString();
+    setSelectedText(text);
+    setCommentMode(true);
+
+    // Get the mouse position from the context menu event
+    const mouseEvent = window.event as MouseEvent;
+    
+    // Position the prompt above the click position
+    setPromptPosition({
+      x: Math.max(20, Math.min(mouseEvent.clientX, window.innerWidth - 420)),
+      y: Math.max(20, mouseEvent.clientY - 20)
+    });
+    setShowInlinePrompt(true);
+  };
 
   const handleContextMenu = (e: React.MouseEvent) => {
     const selection = window.getSelection();
@@ -152,6 +173,14 @@ export function AIContextMenu({ children }: AIContextMenuProps) {
             >
               <Clipboard className="mr-2 h-4 w-4" />
               <span>Paste</span>
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem 
+              onSelect={handleAddComment}
+              className="flex items-center"
+            >
+              <MessageSquare className="mr-2 h-4 w-4" />
+              <span>Add Comment</span>
             </ContextMenuItem>
             <ContextMenuSeparator />
             <ContextMenuItem 
@@ -197,11 +226,32 @@ export function AIContextMenu({ children }: AIContextMenuProps) {
           }}
         >
           <InlineAIPrompt
-            onSubmit={(prompt: string) => {
-              console.log('Inline prompt:', prompt);
+            onSubmit={(comment: string) => {
+              if (commentMode && onAddInsight) {
+                // Add the comment to insights with the highlighted text
+                editor.update(() => {
+                  const selection = $getSelection();
+                  if ($isRangeSelection(selection)) {
+                    const textNode = $createTextNode(selectedText);
+                    textNode.setStyle("background-color: #fef9c3"); // Light yellow highlight
+                    selection.insertNodes([textNode]);
+                  }
+                });
+                onAddInsight(comment, selectedText, "#fef9c3");
+              } else {
+                console.log('Inline prompt:', comment);
+              }
               setShowInlinePrompt(false);
+              setCommentMode(false);
+              setSelectedText('');
             }}
-            onClose={() => setShowInlinePrompt(false)}
+            onClose={() => {
+              setShowInlinePrompt(false);
+              setCommentMode(false);
+              setSelectedText('');
+            }}
+            title={commentMode ? "Add Comment" : "AI Assistant"}
+            placeholder={commentMode ? "Write your comment..." : "Ask AI to help with your text..."}
           />
         </div>
       )}
