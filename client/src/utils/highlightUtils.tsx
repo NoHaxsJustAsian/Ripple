@@ -18,8 +18,10 @@ export const updateHighlightedText = (items: string[], editor: any) => {
 
     nodes.forEach((node) => {
       if (node.getTextContent().includes("Topic Sentence")) { 
-        if (items.includes("Paragraph Topics") || items.includes("Essay Topics")) {
-          (node as any).setStyle("background-color: yellow"); // Apply highlight
+        if (items.includes("Paragraph Topics")) {
+          (node as any).setStyle("background-color: #93c5fd"); // Apply blue highlight
+        } else if (items.includes("Essay Topics")) {
+          (node as any).setStyle("background-color: #c4b5fd"); // Apply purple highlight
         } else {
           (node as any).setStyle("background-color: transparent"); // Remove highlight
         }

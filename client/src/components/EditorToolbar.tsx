@@ -8,7 +8,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Check, ChevronDown } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Check, ChevronDown, MessageSquare } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
 const FONT_SIZES = {
@@ -18,7 +24,12 @@ const FONT_SIZES = {
   'Huge': '18pt'
 };
 
-export function EditorToolbar() {
+interface EditorToolbarProps {
+  onStartComment?: () => void;
+  hasSelection?: boolean;
+}
+
+export function EditorToolbar({ onStartComment, hasSelection = false }: EditorToolbarProps) {
   const [editor] = useLexicalComposerContext();
   const [fontSize, setFontSize] = useState('11pt');
   const [isBold, setIsBold] = useState(false);
@@ -118,6 +129,32 @@ export function EditorToolbar() {
             <span className="underline">U</span>
           </Button>
         </div>
+
+        <div className="h-4 w-px bg-border/40" />
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onStartComment}
+                  disabled={!hasSelection}
+                  className="h-8 px-3 text-xs flex items-center space-x-1"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  <span>Comment</span>
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {!hasSelection && (
+              <TooltipContent>
+                <p>Select text to comment</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
       </div>
     </div>
   );

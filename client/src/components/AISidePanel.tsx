@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { MessageSquare } from 'lucide-react';
@@ -13,6 +13,16 @@ interface AISidePanelProps {
 export function AISidePanel({ isOpen, onClose, className }: AISidePanelProps) {
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const [input, setInput] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (isOpen && textareaRef.current) {
+      // Small delay to ensure the panel is visible before focusing
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 100);
+    }
+  }, [isOpen]);
 
   const handleSubmit = () => {
     if (input.trim()) {
@@ -65,6 +75,7 @@ export function AISidePanel({ isOpen, onClose, className }: AISidePanelProps) {
         <div className="p-4 border-t border-border/40">
           <div className="relative">
             <textarea
+              ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { $getSelection, $isRangeSelection, $createTextNode } from 'lexical';
+import { $getSelection, $isRangeSelection, $createTextNode, $createParagraphNode } from 'lexical';
 import { Wand2, Copy, Clipboard, TextSelect, RectangleEllipsis, MessageCirclePlus, MessageSquare } from 'lucide-react';
 import { InlineAIPrompt } from './InlineAIPrompt';
 import {
@@ -90,9 +90,12 @@ export function AIContextMenu({ children, onAddInsight, onStartComment }: AICont
               return newSet;
             });
           } else {
-            const spanNode = $createTextNode(selectedText);
-            spanNode.setStyle("background-color: yellow;"); // Highlight yellow
-            selection.insertNodes([spanNode]);
+            // Create highlighted node
+            const highlightedNode = $createTextNode(selectedText);
+            highlightedNode.setStyle("background-color: #93c5fd"); // Highlight blue
+            const emptyTextNode = $createTextNode("");
+            selection.insertNodes([highlightedNode, emptyTextNode]);
+            selection.setTextNodeRange(emptyTextNode, 0, emptyTextNode, 0);
   
             setParagraphTopics((prev) => new Set(prev).add(selectedText));
           }
@@ -117,9 +120,12 @@ export function AIContextMenu({ children, onAddInsight, onStartComment }: AICont
               return newSet;
             });
           } else {
-            const spanNode = $createTextNode(selectedText);
-            spanNode.setStyle("background-color: lightblue;"); // Highlight blue
-            selection.insertNodes([spanNode]);
+            // Create highlighted node
+            const highlightedNode = $createTextNode(selectedText);
+            highlightedNode.setStyle("background-color: #c4b5fd"); // Highlight purple
+            const emptyTextNode = $createTextNode("");
+            selection.insertNodes([highlightedNode, emptyTextNode]);
+            selection.setTextNodeRange(emptyTextNode, 0, emptyTextNode, 0);
   
             setEssayTopics((prev) => new Set(prev).add(selectedText));
           }
