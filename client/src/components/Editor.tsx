@@ -1,4 +1,4 @@
-import { $getRoot, $getSelection, $isRangeSelection, FORMAT_TEXT_COMMAND } from 'lexical';
+import { $getRoot, $getSelection, $isRangeSelection, FORMAT_TEXT_COMMAND, $createTextNode, TextNode } from 'lexical';
 import { useEffect, useState, useCallback } from 'react';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
@@ -24,7 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { MessageSquare, LightbulbIcon, Save, FileDown, X } from 'lucide-react';
+import { MessageSquare, LightbulbIcon, Save, FileDown, X, Pencil, Trash2 } from 'lucide-react';
 import { AISidePanel } from './AISidePanel';
 import { AIContextMenu } from './AIContextMenu';
 import { EditorToolbar } from './EditorToolbar';
@@ -34,6 +34,7 @@ import DropdownMenuWithCheckboxes from './ui/dropdown-menu-select';
 import { updateHighlightedText } from "../utils/highlightUtils";
 import { $createParagraphButtonNode, ParagraphButtonNode } from '../utils/paragraphButtonNode';
 import { $createParagraphNode } from 'lexical';
+import { CommentNode } from './nodes/CommentNode';
 
 
 // Error handler
@@ -67,10 +68,16 @@ interface EditorProps {
 interface AIInsight {
   id: number;
   content: string;
-  type: 'suggestion' | 'comment' | 'improvement';
+  type: 'comment' | 'improvement';
   highlightedText?: string;
   highlightStyle?: string;
   isHighlighted?: boolean;
+}
+
+interface PendingComment {
+  text: string;
+  highlightStyle: string;
+  editingId?: number;
 }
 
 export default function Editor({ 
@@ -86,14 +93,13 @@ export default function Editor({
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   
   const [insights, setInsights] = useState<AIInsight[]>([
-    { id: 1, content: "Consider rephrasing this sentence for clarity", type: 'suggestion' },
     { id: 2, content: "This paragraph could be more concise", type: 'improvement' },
     { id: 3, content: "Good use of active voice here", type: 'comment' },
   ]);
 
   const [selectedInsight, setSelectedInsight] = useState<number | null>(null);
   const [showCommentInput, setShowCommentInput] = useState(false);
-  const [pendingComment, setPendingComment] = useState<{text: string; highlightStyle: string} | null>(null);
+  const [pendingComment, setPendingComment] = useState<PendingComment | null>(null);
 
   const handleSave = useCallback(async () => {
     if (!editorState) return;
@@ -203,8 +209,10 @@ export default function Editor({
       ListNode,
       ListItemNode,
       ParagraphButtonNode,
-      LinkNode
+      LinkNode,
+      CommentNode
     ],
+    editable: true,
   };
 
   const onChange = (editorState: any) => {
@@ -230,12 +238,21 @@ export default function Editor({
     setSelectedInsight(newId);
     setShowCommentInput(false);
     setPendingComment(null);
-    // Automatically open insights panel when adding a comment
     setIsInsightsOpen(true);
   }, []);
 
   const handleStartComment = useCallback((text: string, highlightStyle: string) => {
     setPendingComment({ text, highlightStyle });
+    setShowCommentInput(true);
+    setIsInsightsOpen(true);
+  }, []);
+
+  const handleStartEdit = useCallback((insight: AIInsight) => {
+    setPendingComment({ 
+      text: insight.highlightedText || '', 
+      highlightStyle: insight.highlightStyle || '',
+      editingId: insight.id 
+    });
     setShowCommentInput(true);
     setIsInsightsOpen(true);
   }, []);
@@ -251,6 +268,19 @@ export default function Editor({
       })));
     }
   }, [selectedInsight]);
+
+  const handleEditComment = useCallback((insightId: number, newContent: string) => {
+    setInsights(prev => prev.map(insight => 
+      insight.id === insightId 
+        ? { ...insight, content: newContent }
+        : insight
+    ));
+  }, []);
+
+  const handleDeleteInsight = useCallback((insightId: number) => {
+    setInsights(prev => prev.filter(insight => insight.id !== insightId));
+    setSelectedInsight(null);
+  }, []);
 
   return (
     <div className={cn("w-full h-full relative", className)}>
@@ -401,7 +431,9 @@ export default function Editor({
               <CardContent className="p-3">
                 <div className="flex flex-col space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Add Comment</span>
+                    <span className="text-sm font-medium">
+                      {pendingComment.editingId ? 'Edit Comment' : 'Add Comment'}
+                    </span>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -423,13 +455,23 @@ export default function Editor({
                     <textarea
                       placeholder="Write your comment..."
                       className="w-full h-24 p-2 text-sm resize-none rounded-md border border-input bg-background focus:outline-none"
+                      defaultValue={pendingComment.editingId ? 
+                        insights.find(i => i.id === pendingComment.editingId)?.content : 
+                        ''
+                      }
                       autoFocus
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
                           const comment = e.currentTarget.value.trim();
                           if (comment) {
-                            handleAddInsight(comment, pendingComment.text, pendingComment.highlightStyle);
+                            if (pendingComment.editingId) {
+                              handleEditComment(pendingComment.editingId, comment);
+                              setShowCommentInput(false);
+                              setPendingComment(null);
+                            } else {
+                              handleAddInsight(comment, pendingComment.text, pendingComment.highlightStyle);
+                            }
                           }
                         }
                       }}
@@ -437,7 +479,7 @@ export default function Editor({
                   </div>
                   <div className="flex items-center justify-between mt-2">
                     <span className="text-xs text-muted-foreground">
-                      Press Enter to send
+                      Press Enter to {pendingComment.editingId ? 'save' : 'send'}
                     </span>
                     <Button
                       size="sm"
@@ -446,11 +488,17 @@ export default function Editor({
                         const textarea = e.currentTarget.parentElement?.previousElementSibling?.querySelector('textarea') as HTMLTextAreaElement;
                         const comment = textarea?.value.trim();
                         if (comment) {
-                          handleAddInsight(comment, pendingComment.text, pendingComment.highlightStyle);
+                          if (pendingComment.editingId) {
+                            handleEditComment(pendingComment.editingId, comment);
+                            setShowCommentInput(false);
+                            setPendingComment(null);
+                          } else {
+                            handleAddInsight(comment, pendingComment.text, pendingComment.highlightStyle);
+                          }
                         }
                       }}
                     >
-                      Comment
+                      {pendingComment.editingId ? 'Save' : 'Comment'}
                     </Button>
                   </div>
                 </div>
@@ -469,8 +517,36 @@ export default function Editor({
               <CardContent className="p-3">
                 <div className="flex items-start space-x-2">
                   <LightbulbIcon className="h-4 w-4 mt-0.5 text-yellow-500" />
-                  <div className="space-y-1">
-                    <p className="text-sm">{insight.content}</p>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-start justify-between">
+                      <p className="text-sm flex-1">{insight.content}</p>
+                      <div className="flex items-center space-x-1 ml-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStartEdit(insight);
+                          }}
+                          className="h-6 w-6 p-0"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm('Are you sure you want to delete this insight?')) {
+                              handleDeleteInsight(insight.id);
+                            }
+                          }}
+                          className="h-6 w-6 p-0"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
                     {insight.highlightedText && (
                       <div className="text-sm text-muted-foreground pl-4 border-l-2 border-muted">
                         <p style={insight.isHighlighted && insight.highlightStyle ? { backgroundColor: insight.highlightStyle } : undefined}>

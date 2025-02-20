@@ -20,10 +20,10 @@ const FONT_SIZES = {
 
 export function EditorToolbar() {
   const [editor] = useLexicalComposerContext();
+  const [fontSize, setFontSize] = useState('11pt');
   const [isBold, setIsBold] = useState(false);
   const [isItalic, setIsItalic] = useState(false);
   const [isUnderline, setIsUnderline] = useState(false);
-  const [fontSize, setFontSize] = useState('11pt');
 
   useEffect(() => {
     editor.registerUpdateListener(({ editorState }) => {

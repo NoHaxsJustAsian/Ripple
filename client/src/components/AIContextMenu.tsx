@@ -162,14 +162,14 @@ export function AIContextMenu({ children, onAddInsight, onStartComment }: AICont
           </ContextMenuTrigger>
           <ContextMenuContent>
             <ContextMenuItem 
-              onSelect={handleCopy} // Use the handleCopy function
+              onSelect={handleCopy}
               className="flex items-center"
             >
               <Copy className="mr-2 h-4 w-4" />
               <span>Copy</span>
             </ContextMenuItem>
             <ContextMenuItem 
-              onSelect={handlePaste} // Use the handlePaste function
+              onSelect={handlePaste}
               className="flex items-center"
             >
               <Clipboard className="mr-2 h-4 w-4" />
