@@ -1,18 +1,10 @@
-import { $getRoot, $getSelection, $isRangeSelection, FORMAT_TEXT_COMMAND, $createTextNode, TextNode, COMMAND_PRIORITY_EDITOR, KEY_ENTER_COMMAND, KEY_BACKSPACE_COMMAND, KEY_DELETE_COMMAND } from 'lexical';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Highlight from '@tiptap/extension-highlight';
+import TextStyle from '@tiptap/extension-text-style';
+import { Color } from '@tiptap/extension-color';
+import Underline from '@tiptap/extension-underline';
 import { useEffect, useState, useCallback, useRef, useContext, createContext } from 'react';
-import { LexicalComposer } from '@lexical/react/LexicalComposer';
-import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
-import { ContentEditable } from '@lexical/react/LexicalContentEditable';
-import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
-import { AutoFocusPlugin } from '@lexical/react/LexicalAutoFocusPlugin';
-import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
-import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { HeadingNode } from '@lexical/rich-text';
-import { ListPlugin } from '@lexical/react/LexicalListPlugin';
-import { LinkPlugin } from '@lexical/react/LexicalLinkPlugin';
-import { TabIndentationPlugin } from '@lexical/react/LexicalTabIndentationPlugin';
-import { ListNode, ListItemNode } from '@lexical/list';
-import { LinkNode } from '@lexical/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ModeToggle } from '@/components/ui/mode-toggle';
@@ -21,35 +13,12 @@ import { MessageSquare, LightbulbIcon, Save, FileDown, X, Pencil, Trash2 } from 
 import { AISidePanel } from './AISidePanel';
 import { AIContextMenu } from './AIContextMenu';
 import { EditorToolbar } from './EditorToolbar';
-import { theme } from '@/lib/editor-theme';
 import { toast } from "sonner";
 import DropdownMenuWithCheckboxes from './ui/dropdown-menu-select';
 import { updateHighlightedText } from "../utils/highlightUtils";
-import { $createParagraphButtonNode, ParagraphButtonNode } from '../utils/paragraphButtonNode';
-import { CommentNode } from './nodes/CommentNode';
-
-
-// Error handler
-function onError(error: Error): void {
-  console.error(error);
-}
-
-interface OnChangePluginProps {
-  onChange: (editorState: any) => void;
-}
-
-// OnChange Plugin to track editor changes
-function OnChangePlugin({ onChange }: OnChangePluginProps): null {
-  const [editor] = useLexicalComposerContext();
-  
-  useEffect(() => {
-    return editor.registerUpdateListener(({ editorState }) => {
-      onChange(editorState);
-    });
-  }, [editor, onChange]);
-  
-  return null;
-}
+import { EditorView } from 'prosemirror-view';
+import { CommentExtension } from '../extensions/Comment';
+import '@/styles/comment.css';
 
 interface EditorProps {
   className?: string;
@@ -72,88 +41,11 @@ interface PendingComment {
   editingId?: number;
 }
 
-// Plugin to track text changes and update comments
-function CommentSyncPlugin(): null {
-  const [editor] = useLexicalComposerContext();
-  const [insights, setInsights] = useContext(InsightsContext);
-
-  useEffect(() => {
-    return editor.registerUpdateListener(({ editorState }) => {
-      editorState.read(() => {
-        const root = $getRoot();
-        const nodes = root.getChildren();
-
-        // Find all text nodes with background color style (highlighted)
-        nodes.forEach(node => {
-          if (node instanceof TextNode && node.getStyle()?.includes('background-color')) {
-            const nodeText = node.getTextContent();
-            const nodeStyle = node.getStyle();
-            const bgColor = nodeStyle.match(/background-color:\s*([^;]+)/)?.[1];
-
-            // Find the corresponding insight
-            const matchingInsight = insights.find(insight => 
-              insight.highlightStyle?.includes(bgColor || '') && 
-              insight.highlightedText !== nodeText // Text has changed
-            );
-
-            if (matchingInsight) {
-              // Update the insight with the new text
-              setInsights(prev => prev.map(insight => 
-                insight.id === matchingInsight.id
-                  ? { ...insight, highlightedText: nodeText }
-                  : insight
-              ));
-            }
-          }
-        });
-      });
-    });
-  }, [editor, insights, setInsights]);
-
-  return null;
-}
-
-// Plugin to control where users can type
-function TypeControlPlugin(): null {
-  const [editor] = useLexicalComposerContext();
-
-  useEffect(() => {
-    // Handle keypress events directly
-    const removeKeyDownListener = editor.registerRootListener(
-      (rootElement: null | HTMLElement) => {
-        if (rootElement !== null) {
-          rootElement.addEventListener('keydown', (event) => {
-            if (event.key.length === 1) { // Single character keys
-              const selection = $getSelection();
-              if (!$isRangeSelection(selection)) {
-                return;
-              }
-
-              const nodes = selection.getNodes();
-              // Only allow typing if none of the selected text nodes are highlighted
-              const canType = nodes.every(node => {
-                if (node instanceof TextNode) {
-                  const style = node.getStyle();
-                  return !(style && style.includes('background-color'));
-                }
-                return true;
-              });
-
-              if (!canType) {
-                event.preventDefault();
-              }
-            }
-          });
-        }
-      }
-    );
-
-    return () => {
-      removeKeyDownListener();
-    };
-  }, [editor]);
-
-  return null;
+interface CommentType {
+  id: string;
+  content: string;
+  createdAt: Date;
+  quotedText: string;
 }
 
 // Create a context for insights
@@ -164,21 +56,117 @@ export default function Editor({
   placeholder = 'Type @ to insert...',
   onEditorChange 
 }: EditorProps): JSX.Element {
-  const [editorState, setEditorState] = useState<string>();
   const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
-  const [isInsightsOpen, setIsInsightsOpen] = useState(false);
+  const [isInsightsOpen, setIsInsightsOpen] = useState(true);
   const [documentTitle, setDocumentTitle] = useState('Untitled document');
   const [isSaving, setIsSaving] = useState(false);
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-  
-  const [insights, setInsights] = useState<AIInsight[]>([
-    { id: 2, content: "This paragraph could be more concise", type: 'improvement' },
-    { id: 3, content: "Good use of active voice here", type: 'comment' },
-  ]);
-
-  const [selectedInsight, setSelectedInsight] = useState<number | null>(null);
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [pendingComment, setPendingComment] = useState<PendingComment | null>(null);
+  const [selectedInsight, setSelectedInsight] = useState<number | null>(null);
+  const [insights, setInsights] = useState<AIInsight[]>([]);
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+  const [comments, setComments] = useState<CommentType[]>([]);
+  const commentsSectionRef = useRef<HTMLDivElement | null>(null);
+  
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Highlight.configure({
+        multicolor: true,
+      }),
+      TextStyle,
+      Color,
+      Underline,
+      CommentExtension.configure({
+        HTMLAttributes: {
+          class: 'tiptap-comment',
+        },
+        onCommentActivated: (commentId: string | null) => {
+          setActiveCommentId(commentId);
+          if (commentId) setTimeout(() => focusCommentWithActiveId(commentId));
+        },
+      }),
+    ],
+    content: '',
+    editorProps: {
+      attributes: {
+        class: cn(
+          "outline-none min-h-[1028px] text-[11pt]",
+          "px-[64px] py-[84px]",
+          "text-stone-800 dark:text-zinc-50",
+          "caret-blue-500",
+          "[&>div]:min-h-[24px]",
+          "[&>div]:break-words",
+          "[&>div]:max-w-[666px]"
+        ),
+      },
+      handlePaste: (view: EditorView, event: ClipboardEvent) => {
+        const clipboardData = event.clipboardData;
+        if (!clipboardData) return false;
+        
+        const text = clipboardData.getData('text');
+        try {
+          JSON.parse(text);
+          event.preventDefault();
+          return true;
+        } catch (e) {
+          return false;
+        }
+      },
+    },
+    onUpdate: ({ editor }) => {
+      const html = editor.getHTML();
+      onEditorChange?.(html);
+    },
+  });
+
+  const handleToolbarComment = useCallback(() => {
+    if (!editor) return;
+    
+    const { from, to } = editor.state.selection;
+    if (from === to) return; // No selection
+    
+    const text = editor.state.doc.textBetween(from, to);
+    
+    editor.chain()
+      .setHighlight({ color: '#fef9c3' })
+      .setTextSelection(to)
+      .run();
+
+    setPendingComment({ text, highlightStyle: "#fef9c3" });
+    setShowCommentInput(true);
+    setIsInsightsOpen(true);
+  }, [editor]);
+
+  const handleSelectAsParagraphTopic = useCallback(() => {
+    if (!editor) return;
+    
+    const { from, to } = editor.state.selection;
+    if (from === to) return; // No selection
+    
+    const text = editor.state.doc.textBetween(from, to);
+    
+    editor.chain()
+      .setHighlight({ color: '#93c5fd' })
+      .setTextSelection(to)
+      .run();
+  }, [editor]);
+
+  const handleSelectAsEssayTopic = useCallback(() => {
+    if (!editor) return;
+    
+    const { from, to } = editor.state.selection;
+    if (from === to) return; // No selection
+    
+    const text = editor.state.doc.textBetween(from, to);
+    
+    editor.chain()
+      .setHighlight({ color: '#c4b5fd' })
+      .setTextSelection(to)
+      .run();
+  }, [editor]);
+
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
   const [isEditingComment, setIsEditingComment] = useState(false);
 
@@ -192,18 +180,14 @@ export default function Editor({
   }, [showCommentInput, pendingComment]);
 
   const handleSave = useCallback(async () => {
-    if (!editorState) return;
+    if (!editor) return;
 
     setIsSaving(true);
     try {
-      // TODO: Implement actual save to backend
-      // For now, we'll just simulate a save
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Save to localStorage as a backup
       localStorage.setItem('ripple-doc', JSON.stringify({
         title: documentTitle,
-        content: editorState,
+        content: editor.getHTML(),
+        comments,
         lastSaved: new Date().toISOString()
       }));
 
@@ -214,26 +198,24 @@ export default function Editor({
     } finally {
       setIsSaving(false);
     }
-  }, [editorState, documentTitle]);
+  }, [editor, documentTitle, comments]);
 
   const handleSaveAs = useCallback(async () => {
-    if (!editorState) return;
+    if (!editor) return;
 
     setIsSaving(true);
     try {
-      // Create a new document with a timestamp
       const timestamp = new Date().toISOString().split('T')[0];
       const newTitle = `${documentTitle} - ${timestamp}`;
       
-      // Save to localStorage with a new key
       const docKey = `ripple-doc-${Date.now()}`;
       localStorage.setItem(docKey, JSON.stringify({
         title: newTitle,
-        content: editorState,
+        content: editor.getHTML(),
+        comments,
         lastSaved: new Date().toISOString()
       }));
 
-      // Update current document title
       setDocumentTitle(newTitle);
       toast.success("Document saved as new copy");
     } catch (error) {
@@ -242,7 +224,7 @@ export default function Editor({
     } finally {
       setIsSaving(false);
     }
-  }, [editorState, documentTitle]);
+  }, [editor, documentTitle, comments]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -260,12 +242,13 @@ export default function Editor({
   // Load saved content on mount
   useEffect(() => {
     const saved = localStorage.getItem('ripple-doc');
-    if (saved) {
-      const { title, content } = JSON.parse(saved);
+    if (saved && editor) {
+      const { title, content, comments: savedComments = [] } = JSON.parse(saved);
       setDocumentTitle(title);
-      setEditorState(content);
+      setComments(savedComments);
+      editor.commands.setContent(content);
     }
-  }, []);
+  }, [editor]);
 
   const handleSelectionChange = (items: string[]) => {
     setSelectedItems(items);
@@ -290,46 +273,32 @@ export default function Editor({
     { id: "4", label: "Custom Feedback" }
   ];
 
-  const initialConfig = {
-    namespace: 'GoogleDocsEditor',
-    theme,
-    onError,
-    nodes: [
-      HeadingNode,
-      ListNode,
-      ListItemNode,
-      ParagraphButtonNode,
-      LinkNode,
-      CommentNode
-    ],
-    editable: true,
-  };
-
-  const onChange = (editorState: any) => {
-    const editorStateJSON = editorState.toJSON();
-    const jsonString = JSON.stringify(editorStateJSON);
-    setEditorState(jsonString);
-    onEditorChange?.(jsonString);
-  };
-
   const handleAddInsight = useCallback((content: string, highlightedText: string, highlightStyle?: string) => {
+    console.log('Adding insight:', { content, highlightedText, highlightStyle });
     const newId = Date.now();
-    setInsights(prev => [
-      ...prev,
-      {
-        id: newId,
-        content,
-        type: 'comment',
-        highlightedText,
-        highlightStyle,
-        isHighlighted: true
-      }
-    ]);
+    const newInsight: AIInsight = {
+      id: newId,
+      content,
+      type: 'comment',
+      highlightedText,
+      highlightStyle,
+      isHighlighted: true
+    };
+    setInsights(prev => {
+      const newInsights = [...prev, newInsight];
+      console.log('New insights state:', newInsights);
+      return newInsights;
+    });
     setSelectedInsight(newId);
     setShowCommentInput(false);
     setPendingComment(null);
     setIsInsightsOpen(true);
   }, []);
+
+  // Log insights whenever they change
+  useEffect(() => {
+    console.log('Current insights:', insights);
+  }, [insights]);
 
   const handleStartComment = useCallback((text: string, highlightStyle: string) => {
     setPendingComment({ text, highlightStyle });
@@ -380,343 +349,319 @@ export default function Editor({
     setSelectedInsight(null);
   }, []);
 
-  function EditorContent() {
-    const [editor] = useLexicalComposerContext();
-    const [hasSelection, setHasSelection] = useState(false);
+  const focusCommentWithActiveId = (id: string) => {
+    if (!commentsSectionRef.current) return;
 
-    useEffect(() => {
-      return editor.registerUpdateListener(() => {
-        const selection = window.getSelection();
-        setHasSelection(!!selection && !selection.isCollapsed);
-      });
-    }, [editor]);
+    const commentInput = commentsSectionRef.current.querySelector<HTMLTextAreaElement>(`textarea#${id}`);
+    if (!commentInput) return;
 
-    const handleToolbarComment = useCallback(() => {
-      const selection = window.getSelection();
-      if (!selection || selection.isCollapsed) {
-        return;
+    commentInput.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+      inline: 'center'
+    });
+    commentInput.focus();
+  };
+
+  useEffect(() => {
+    if (!activeCommentId) return;
+    focusCommentWithActiveId(activeCommentId);
+  }, [activeCommentId]);
+
+  const handleAddComment = useCallback(() => {
+    if (!editor) return;
+    const { from, to } = editor.state.selection;
+    if (from === to) return;
+
+    const quotedText = editor.state.doc.textBetween(from, to);
+    const commentId = `c${Date.now()}`;
+    const newComment: CommentType = {
+      id: commentId,
+      content: '',
+      createdAt: new Date(),
+      quotedText
+    };
+
+    setComments(prev => [...prev, newComment]);
+    editor.chain().setComment(commentId).run();
+    setActiveCommentId(commentId);
+    setIsInsightsOpen(true);
+    
+    // Small delay to ensure the DOM is updated
+    setTimeout(() => {
+      const textarea = document.getElementById(commentId) as HTMLTextAreaElement;
+      if (textarea) {
+        textarea.focus();
       }
-  
-      const text = selection.toString();
-      
-      editor.update(() => {
-        const selection = $getSelection();
-        if ($isRangeSelection(selection)) {
-          const highlightedTextNode = $createTextNode(text);
-          highlightedTextNode.setStyle("background-color: #fef9c3");
-          selection.insertNodes([highlightedTextNode]);
-          const plainTextNode = $createTextNode("");
-          selection.insertNodes([plainTextNode]);
-          // collapse selection to the plain text node by setting anchor and focus
-          selection.anchor.key = plainTextNode.getKey();
-          selection.anchor.offset = 0;
-          selection.focus.key = plainTextNode.getKey();
-          selection.focus.offset = 0;
-        }
-      });
-  
-      setPendingComment({ text, highlightStyle: "#fef9c3" });
-      setShowCommentInput(true);
-      setIsInsightsOpen(true);
-    }, [editor]);
-
-    return (
-      <>
-        <EditorToolbar onStartComment={handleToolbarComment} hasSelection={hasSelection} />
-        <div className="flex-1 overflow-auto bg-[#FAF9F6] dark:bg-background/10">
-          <div className="mx-auto" style={{ width: '794px' }}>
-            <div className="py-12">
-              <div className="relative bg-[#FFFDF7] dark:bg-card shadow-sm">
-                <div className="absolute inset-0 pointer-events-none">
-                  {Array.from({ length: 10 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="absolute w-full border-b border-dashed border-gray-200 dark:border-gray-800"
-                      style={{ top: `${(i + 1) * 1028}px` }}
-                    />
-                  ))}
-                </div>
-                <AIContextMenu 
-                  onAddInsight={handleAddInsight}
-                  onStartComment={handleStartComment}
-                >
-                  <RichTextPlugin
-                    contentEditable={
-                      <ContentEditable 
-                        className={cn(
-                          "outline-none min-h-[1028px] text-[11pt]",
-                          "px-[64px] py-[84px]",
-                          "text-stone-800 dark:text-zinc-50",
-                          "caret-blue-500",
-                          "[&>div]:min-h-[24px]",
-                          "[&>div]:break-words",
-                          "[&>div]:max-w-[666px]"
-                        )}
-                      />
-                    }
-                    placeholder={
-                      <div className={cn(
-                        "absolute top-[84px] left-[64px]",
-                        "text-[11pt] pointer-events-none",
-                        "text-stone-400 dark:text-zinc-500"
-                      )}>
-                        {placeholder}
-                      </div>
-                    }
-                    ErrorBoundary={LexicalErrorBoundary}
-                  />
-                </AIContextMenu>
-              </div>
-              <HistoryPlugin />
-              <AutoFocusPlugin />
-              <ListPlugin />
-              <LinkPlugin />
-              <TabIndentationPlugin />
-              <OnChangePlugin onChange={onChange} />
-            </div>
-          </div>
-        </div>
-      </>
-    );
-  }
+    }, 50);
+  }, [editor]);
 
   return (
     <div className={cn("w-full h-full relative", className)}>
       <InsightsContext.Provider value={[insights, setInsights]}>
-        <LexicalComposer initialConfig={initialConfig}>
-          <div className="h-full flex flex-col">
-            <div className="sticky top-4 z-30">
-              <div className="mx-4 rounded-lg overflow-hidden border border-border/40">
-                <div className="px-4 py-2 border-b border-border/40 bg-blue-100/60 dark:bg-blue-900/10 backdrop-blur supports-[backdrop-filter]:bg-blue-100/40 dark:supports-[backdrop-filter]:bg-blue-900/5">
-                  <div className="flex items-center justify-between space-x-4">
-                    {/* Left section */}
-                    <div className="flex items-center space-x-4">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-3 h-3 rounded-full bg-stone-200 dark:bg-zinc-700" />
-                        <span className="text-sm font-semibold">Ripple</span>
-                      </div>
-                      <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
-                      <input 
-                        type="text" 
-                        value={documentTitle}
-                        onChange={(e) => setDocumentTitle(e.target.value)}
-                        placeholder="Untitled document"
-                        className="bg-transparent border-none text-sm focus:outline-none focus:ring-0 p-0 h-6 text-stone-800 dark:text-zinc-100"
-                      />
-                      <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
-                      <ModeToggle />
-                      <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleSave}
-                          disabled={isSaving}
-                          className="h-7 px-3 text-xs flex items-center space-x-2"
-                        >
-                          <Save className="h-3.5 w-3.5" />
-                          <span>Save</span>
-                          <span className="text-xs text-muted-foreground ml-1">{isMac ? '⌘S' : 'Ctrl+S'}</span>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleSaveAs}
-                          disabled={isSaving}
-                          className="h-7 px-3 text-xs flex items-center space-x-2"
-                        >
-                          <FileDown className="h-3.5 w-3.5" />
-                          <span>Save As</span>
-                        </Button>
-                      </div>
+        <div className="h-full flex flex-col">
+          <div className="sticky top-4 z-30">
+            <div className="mx-4 rounded-lg overflow-hidden border border-border/40">
+              <div className="px-4 py-2 border-b border-border/40 bg-blue-100/60 dark:bg-blue-900/10 backdrop-blur supports-[backdrop-filter]:bg-blue-100/40 dark:supports-[backdrop-filter]:bg-blue-900/5">
+                <div className="flex items-center justify-between space-x-4">
+                  {/* Left section */}
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-3 h-3 rounded-full bg-stone-200 dark:bg-zinc-700" />
+                      <span className="text-sm font-semibold">Ripple</span>
                     </div>
-
-                    {/* Right section */}
-                    <div className="flex items-center space-x-4">
-                      <div className="flex space-x-1 text-sm">
-                        <DropdownMenuWithCheckboxes
-                          label="View Topic Sentences"
-                          items={topic_items}
-                          selectedItems={selectedItems}
-                          onSelectedItemsChange={handleSelectionChange}
-                        />
-                        <DropdownMenuWithCheckboxes
-                          label="Check for Feedback"
-                          items={feedback_items}
-                          selectedItems={selectedItems}
-                          onSelectedItemsChange={handleSelectionChange}
-                        />
-                      </div>
-                      <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
+                    <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
+                    <input 
+                      type="text" 
+                      value={documentTitle}
+                      onChange={(e) => setDocumentTitle(e.target.value)}
+                      placeholder="Untitled document"
+                      className="bg-transparent border-none text-sm focus:outline-none focus:ring-0 p-0 h-6 text-stone-800 dark:text-zinc-100"
+                    />
+                    <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
+                    <ModeToggle />
+                    <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
+                    <div className="flex items-center space-x-2">
                       <Button
-                        variant={isInsightsOpen ? "secondary" : "ghost"}
+                        variant="ghost"
                         size="sm"
-                        onClick={() => setIsInsightsOpen(!isInsightsOpen)}
-                        className="h-7 px-3 text-xs flex items-center space-x-1"
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        className="h-7 px-3 text-xs flex items-center space-x-2"
                       >
-                        <LightbulbIcon className="h-3.5 w-3.5" />
-                        <span>Insights</span>
+                        <Save className="h-3.5 w-3.5" />
+                        <span>Save</span>
+                        <span className="text-xs text-muted-foreground ml-1">{isMac ? '⌘S' : 'Ctrl+S'}</span>
                       </Button>
                       <Button
-                        variant={isAIPanelOpen ? "secondary" : "ghost"}
+                        variant="ghost"
                         size="sm"
-                        onClick={toggleAIPanel}
-                        className="h-7 px-3 text-xs flex items-center space-x-1"
+                        onClick={handleSaveAs}
+                        disabled={isSaving}
+                        className="h-7 px-3 text-xs flex items-center space-x-2"
                       >
-                        <MessageSquare className="h-3.5 w-3.5" />
-                        <span>Chat</span>
+                        <FileDown className="h-3.5 w-3.5" />
+                        <span>Save As</span>
                       </Button>
                     </div>
                   </div>
+
+                  {/* Right section */}
+                  <div className="flex items-center space-x-4">
+                    <div className="flex space-x-1 text-sm">
+                      <DropdownMenuWithCheckboxes
+                        label="View Topic Sentences"
+                        items={topic_items}
+                        selectedItems={selectedItems}
+                        onSelectedItemsChange={handleSelectionChange}
+                      />
+                      <DropdownMenuWithCheckboxes
+                        label="Check for Feedback"
+                        items={feedback_items}
+                        selectedItems={selectedItems}
+                        onSelectedItemsChange={handleSelectionChange}
+                      />
+                    </div>
+                    <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
+                    <Button
+                      variant={isInsightsOpen ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setIsInsightsOpen(!isInsightsOpen)}
+                      className="h-7 px-3 text-xs flex items-center space-x-1"
+                    >
+                      <LightbulbIcon className="h-3.5 w-3.5" />
+                      <span>Insights</span>
+                    </Button>
+                    <Button
+                      variant={isAIPanelOpen ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={toggleAIPanel}
+                      className="h-7 px-3 text-xs flex items-center space-x-1"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      <span>Chat</span>
+                    </Button>
+                  </div>
                 </div>
-                <EditorContent />
+              </div>
+              <EditorToolbar 
+                editor={editor} 
+                hasSelection={!!editor?.state.selection.content()}
+                onAddComment={handleAddComment}
+              />
+              <div className="flex-1 overflow-auto bg-[#FAF9F6] dark:bg-background/10">
+                <div className="mx-auto relative" style={{ width: '794px' }}>
+                  <div className="py-12">
+                    <div className="relative bg-[#FFFDF7] dark:bg-card shadow-sm">
+                      <AIContextMenu 
+                        editor={editor}
+                        onSelectAsParagraphTopic={handleSelectAsParagraphTopic}
+                        onSelectAsEssayTopic={handleSelectAsEssayTopic}
+                        comments={comments}
+                        setComments={setComments}
+                        activeCommentId={activeCommentId}
+                        setActiveCommentId={setActiveCommentId}
+                        onAddComment={handleAddComment}
+                      >
+                        <EditorContent editor={editor} />
+                      </AIContextMenu>
+                    </div>
+                  </div>
+
+                  {/* Comments Section */}
+                  <div 
+                    ref={commentsSectionRef} 
+                    className={cn(
+                      "absolute top-0 right-0 w-[300px] space-y-2 py-12",
+                      "transition-all duration-150 ease-in-out",
+                      isInsightsOpen 
+                        ? "opacity-100 pointer-events-auto translate-x-0" 
+                        : "opacity-0 pointer-events-none translate-x-8"
+                    )}
+                    style={{
+                      right: "-332px"
+                    }}
+                  >
+                    {comments.length === 0 ? (
+                      <div className="text-center text-muted-foreground pt-8">
+                        No comments yet
+                      </div>
+                    ) : (
+                      comments.map((comment) => (
+                        <Card 
+                          key={comment.id}
+                          className={cn(
+                            "bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+                            "border border-border/40 shadow-sm transition-all duration-200",
+                            activeCommentId === comment.id && "ring-2 ring-blue-500"
+                          )}
+                        >
+                          <CardContent className="p-3">
+                            <div className="flex flex-col space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-sm">Comment</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {new Date(comment.createdAt).toLocaleDateString()}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={() => setActiveCommentId(comment.id)}
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={() => {
+                                      editor?.chain().focus().unsetComment(comment.id).run();
+                                      setComments(comments.filter(c => c.id !== comment.id));
+                                    }}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                              {comment.quotedText && (
+                                <div 
+                                  className="text-sm text-muted-foreground bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70"
+                                  onClick={() => {
+                                    if (!editor) return;
+                                    
+                                    // Find the comment mark
+                                    let foundPos: { from: number; to: number } | null = null;
+                                    editor.state.doc.descendants((node, pos) => {
+                                      const mark = node.marks.find(m => 
+                                        m.type.name === 'comment' && 
+                                        m.attrs.commentId === comment.id
+                                      );
+                                      if (mark) {
+                                        foundPos = { from: pos, to: pos + node.nodeSize };
+                                        return false; // Stop searching once found
+                                      }
+                                    });
+
+                                    if (foundPos) {
+                                      // Set selection and focus editor
+                                      editor
+                                        .chain()
+                                        .focus()
+                                        .setTextSelection(foundPos)
+                                        .run();
+
+                                      // Only scroll if not in view
+                                      const selection = window.getSelection();
+                                      if (selection && selection.rangeCount > 0) {
+                                        const range = selection.getRangeAt(0);
+                                        const rect = range.getBoundingClientRect();
+                                        if (rect.top < 0 || rect.bottom > window.innerHeight) {
+                                          editor.commands.scrollIntoView();
+                                        }
+                                      }
+                                    }
+                                  }}
+                                >
+                                  "{comment.quotedText}"
+                                </div>
+                              )}
+                              <div className={cn(
+                                "text-sm",
+                                activeCommentId === comment.id && "bg-muted rounded-md p-2"
+                              )}>
+                                {activeCommentId === comment.id ? (
+                                  <div className="space-y-2">
+                                    <div className="relative">
+                                      <textarea
+                                        id={comment.id}
+                                        value={comment.content}
+                                        onChange={(e) => {
+                                          setComments(prev => prev.map(c => 
+                                            c.id === comment.id 
+                                              ? { ...c, content: e.target.value }
+                                              : c
+                                          ));
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            setActiveCommentId(null);
+                                          }
+                                        }}
+                                        placeholder="Add a comment..."
+                                        className="w-full min-h-[60px] bg-transparent border-none p-0 resize-none focus:outline-none focus:ring-0"
+                                        autoFocus
+                                      />
+                                    </div>
+                                    <div className="flex justify-end">
+                                      <Button
+                                        size="sm"
+                                        className="h-7 text-xs flex items-center gap-1.5"
+                                        onClick={() => setActiveCommentId(null)}
+                                      >
+                                        Save <span className="opacity-60">⏎</span>
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  comment.content || "No content"
+                                )}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-            <CommentSyncPlugin />
-            <TypeControlPlugin />
           </div>
-
-          {/* AI Insights Cards */}
-          <div className={cn(
-            "fixed right-[calc(50%-408px-316px)] top-[140px] bottom-0 w-[300px] transition-all duration-200 ease-in-out z-50",
-            "pointer-events-none",
-            isInsightsOpen ? "opacity-100 translate-x-0" : "opacity-0 translate-x-[316px]"
-          )}>
-            <div className="p-4 space-y-3">
-              {showCommentInput && pendingComment && (
-                <Card className="pointer-events-auto bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                  <CardContent className="p-3">
-                    <div className="flex flex-col space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">
-                          {pendingComment.editingId ? 'Edit Comment' : 'Add Comment'}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleFinishEdit}
-                          className="h-6 w-6 p-0"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="text-sm text-muted-foreground pl-4 border-l-2 border-muted">
-                        <p style={{ backgroundColor: pendingComment.highlightStyle }}>
-                          "{pendingComment.text}"
-                        </p>
-                      </div>
-                      <div className="relative">
-                        <textarea
-                          ref={commentInputRef}
-                          placeholder="Write your comment..."
-                          className="w-full h-24 p-2 text-sm resize-none rounded-md border border-input bg-background focus:outline-none"
-                          defaultValue={pendingComment.editingId ? 
-                            insights.find(i => i.id === pendingComment.editingId)?.content : 
-                            ''
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                              e.preventDefault();
-                              const comment = e.currentTarget.value.trim();
-                              if (comment) {
-                                if (pendingComment.editingId) {
-                                  handleEditComment(pendingComment.editingId, comment);
-                                  setShowCommentInput(false);
-                                  setPendingComment(null);
-                                } else {
-                                  handleAddInsight(comment, pendingComment.text, pendingComment.highlightStyle);
-                                }
-                              }
-                            }
-                          }}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between mt-2">
-                        <span className="text-xs text-muted-foreground">
-                          Press Enter to {pendingComment.editingId ? 'save' : 'send'}
-                        </span>
-                        <Button
-                          size="sm"
-                          className="h-6 px-2 text-xs"
-                          onClick={(e) => {
-                            const textarea = e.currentTarget.parentElement?.previousElementSibling?.querySelector('textarea') as HTMLTextAreaElement;
-                            const comment = textarea?.value.trim();
-                            if (comment) {
-                              if (pendingComment.editingId) {
-                                handleEditComment(pendingComment.editingId, comment);
-                                setShowCommentInput(false);
-                                setPendingComment(null);
-                              } else {
-                                handleAddInsight(comment, pendingComment.text, pendingComment.highlightStyle);
-                              }
-                            }
-                          }}
-                        >
-                          {pendingComment.editingId ? 'Save' : 'Comment'}
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-              {insights.map((insight) => (
-                <Card 
-                  key={insight.id} 
-                  className={cn(
-                    "pointer-events-auto bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
-                    selectedInsight === insight.id && "ring-2 ring-blue-500",
-                    isEditingComment && insight.id !== selectedInsight && "opacity-50 pointer-events-none"
-                  )}
-                  onClick={() => !isEditingComment && setSelectedInsight(selectedInsight === insight.id ? null : insight.id)}
-                >
-                  <CardContent className="p-3">
-                    <div className="flex items-start space-x-2">
-                      <LightbulbIcon className="h-4 w-4 mt-0.5 text-yellow-500" />
-                      <div className="flex-1 space-y-1">
-                        <div className="flex items-start justify-between">
-                          <p className="text-sm flex-1">{insight.content}</p>
-                          <div className="flex items-center space-x-1 ml-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleStartEdit(insight);
-                              }}
-                              className="h-6 w-6 p-0"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (confirm('Are you sure you want to delete this insight?')) {
-                                  handleDeleteInsight(insight.id);
-                                }
-                              }}
-                              className="h-6 w-6 p-0"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </div>
-                        {insight.highlightedText && (
-                          <div className="text-sm text-muted-foreground pl-4 border-l-2 border-muted">
-                            <p style={insight.isHighlighted && insight.highlightStyle ? { backgroundColor: insight.highlightStyle } : undefined}>
-                              "{insight.highlightedText}"
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </LexicalComposer>
+        </div>
         
         <AISidePanel isOpen={isAIPanelOpen} onClose={toggleAIPanel} />
       </InsightsContext.Provider>

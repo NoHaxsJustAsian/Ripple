@@ -1,0 +1,10 @@
+.tiptap-comment {
+  background-color: rgba(255, 212, 0, 0.2);
+  border-bottom: 2px solid rgb(255, 212, 0);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.tiptap-comment:hover {
+  background-color: rgba(255, 212, 0, 0.4);
+} 

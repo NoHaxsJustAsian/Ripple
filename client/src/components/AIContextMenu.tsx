@@ -1,7 +1,6 @@
-import { useState } from 'react';
-import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { $getSelection, $isRangeSelection, $createTextNode, $createParagraphNode } from 'lexical';
-import { Wand2, Copy, Clipboard, TextSelect, RectangleEllipsis, MessageCirclePlus, MessageSquare } from 'lucide-react';
+import { useState, Dispatch, SetStateAction, useEffect } from 'react';
+import { Editor } from '@tiptap/react';
+import { Wand2, Copy, Clipboard, TextSelect, RectangleEllipsis } from 'lucide-react';
 import { InlineAIPrompt } from './InlineAIPrompt';
 import {
   ContextMenu,
@@ -10,152 +9,208 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { ContextMenuSeparator } from '@radix-ui/react-context-menu';
-// import { $createParagraphNode } from 'lexical';
 
+interface CommentType {
+  id: string;
+  content: string;
+  createdAt: Date;
+  quotedText: string;
+}
 
 interface AIContextMenuProps {
   children: React.ReactNode;
-  onAddInsight?: (content: string, highlightedText: string, highlightStyle?: string) => void;
-  onStartComment?: (text: string, highlightStyle: string) => void;
+  editor: Editor | null;
+  onSelectAsParagraphTopic?: () => void;
+  onSelectAsEssayTopic?: () => void;
+  comments: CommentType[];
+  setComments: Dispatch<SetStateAction<CommentType[]>>;
+  activeCommentId: string | null;
+  setActiveCommentId: Dispatch<SetStateAction<string | null>>;
+  onAddComment: () => void;
 }
 
-export function AIContextMenu({ children, onAddInsight, onStartComment }: AIContextMenuProps) {
-  const [editor] = useLexicalComposerContext();
+export function AIContextMenu({ 
+  children, 
+  editor,
+  onSelectAsParagraphTopic,
+  onSelectAsEssayTopic,
+  comments,
+  setComments,
+  activeCommentId,
+  setActiveCommentId,
+  onAddComment
+}: AIContextMenuProps) {
   const [showInlinePrompt, setShowInlinePrompt] = useState(false);
   const [promptPosition, setPromptPosition] = useState({ x: 0, y: 0 });
-  const [paragraphTopics, setParagraphTopics] = useState<Set<string>>(new Set()); // Paragraph topics (yellow)
-  const [essayTopics, setEssayTopics] = useState<Set<string>>(new Set()); // Essay topics (blue)
-  const [commentMode, setCommentMode] = useState(false);
-  const [selectedText, setSelectedText] = useState('');
-
 
   const handleAIAction = () => {
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) return;
+    if (!editor) return;
+    const { from, to } = editor.state.selection;
+    if (from === to) return; // No selection
 
-    // Get the mouse position from the context menu event
     const mouseEvent = window.event as MouseEvent;
     
-    // Position the prompt above the click position
     setPromptPosition({
-      x: Math.max(20, Math.min(mouseEvent.clientX, window.innerWidth - 420)), // Keep prompt within viewport
-      y: Math.max(20, mouseEvent.clientY - 20) // 20px above click position
+      x: Math.max(20, Math.min(mouseEvent.clientX, window.innerWidth - 420)),
+      y: Math.max(20, mouseEvent.clientY - 20)
     });
     setShowInlinePrompt(true);
   };
 
   const handleCopy = () => {
-    editor.update(() => {
-      const selection = $getSelection();
-      if ($isRangeSelection(selection)) {
-        const selectedText = selection.getTextContent();
-        if (selectedText) {
-          navigator.clipboard.writeText(selectedText).then(() => {
-            console.log('Text copied to clipboard:', selectedText);
-          }).catch((err) => {
-            console.error('Failed to copy text:', err);
-          });
-        }
-      }
-    });
+    if (!editor) return;
+    const text = editor.state.doc.textBetween(
+      editor.state.selection.from,
+      editor.state.selection.to
+    );
+    navigator.clipboard.writeText(text);
   };
 
   const handlePaste = () => {
-    navigator.clipboard.readText().then((clipboardText) => {
-      editor.update(() => {
-        const selection = $getSelection();
-        if ($isRangeSelection(selection)) {
-          const textNode = $createTextNode(clipboardText);
-          selection.insertNodes([textNode]);
+    if (!editor) return;
+    navigator.clipboard.readText().then((text) => {
+      editor.commands.insertContent(text);
+    });
+  };
+
+  const handleUpdateComment = (commentId: string) => {
+    if (!editor) return;
+    
+    // Find all marks with this comment ID
+    const marks: { from: number; to: number }[] = [];
+    editor.state.doc.descendants((node, pos) => {
+      const mark = node.marks.find(m => m.type.name === 'comment' && m.attrs.commentId === commentId);
+      if (mark) {
+        marks.push({ from: pos, to: pos + node.nodeSize });
+      }
+    });
+
+    if (marks.length > 0) {
+      // Get the combined text from all marks
+      const quotedText = marks.map(({ from, to }) => 
+        editor.state.doc.textBetween(from, to)
+      ).join(' ');
+
+      // Update the comment with the new quoted text
+      setComments(prev => prev.map(comment => 
+        comment.id === commentId 
+          ? { ...comment, quotedText }
+          : comment
+      ));
+    } else {
+      // If no marks found, remove the comment
+      setComments(prev => prev.filter(comment => comment.id !== commentId));
+      setActiveCommentId(null);
+    }
+  };
+
+  // Add observer for comment changes
+  useEffect(() => {
+    if (!editor) return;
+
+    const observer = new MutationObserver(() => {
+      // Update all existing comments
+      comments.forEach(comment => handleUpdateComment(comment.id));
+    });
+
+    const element = editor.view.dom;
+    observer.observe(element, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+    });
+
+    return () => observer.disconnect();
+  }, [editor, comments]);
+
+  // Handle selection changes to update comment text
+  useEffect(() => {
+    if (!editor || !activeCommentId) return;
+
+    const handleSelectionChange = () => {
+      // Store current selection
+      const { from: currentFrom, to: currentTo } = editor.state.selection;
+      
+      // Find all marks with this comment ID
+      const marks: { from: number; to: number }[] = [];
+      editor.state.doc.descendants((node, pos) => {
+        const mark = node.marks.find(m => m.type.name === 'comment' && m.attrs.commentId === activeCommentId);
+        if (mark) {
+          marks.push({ from: pos, to: pos + node.nodeSize });
         }
       });
-    }).catch((err) => {
-      console.error('Failed to read from clipboard:', err);
-    });
-  };
 
-  const handleSelectAsParagraphTopic = () => {
-    editor.update(() => {
-      const selection = $getSelection();
-      if ($isRangeSelection(selection)) {
-        const selectedText = selection.getTextContent();
-        if (selectedText) {
-          const isAlreadyTopic = paragraphTopics.has(selectedText);
-  
-          if (isAlreadyTopic) {
-            selection.insertNodes([$createTextNode(selectedText)]); // Remove highlight
-            setParagraphTopics((prev) => {
-              const newSet = new Set(prev);
-              newSet.delete(selectedText);
-              return newSet;
-            });
-          } else {
-            // Create highlighted node
-            const highlightedNode = $createTextNode(selectedText);
-            highlightedNode.setStyle("background-color: #93c5fd"); // Highlight blue
-            const emptyTextNode = $createTextNode("");
-            selection.insertNodes([highlightedNode, emptyTextNode]);
-            selection.setTextNodeRange(emptyTextNode, 0, emptyTextNode, 0);
-  
-            setParagraphTopics((prev) => new Set(prev).add(selectedText));
-          }
+      if (marks.length > 0) {
+        // Get the combined text from all marks
+        const quotedText = marks.map(({ from, to }) => 
+          editor.state.doc.textBetween(from, to)
+        ).join(' ');
+
+        // Only update the quoted text if it changed
+        setComments(prev => prev.map(comment => 
+          comment.id === activeCommentId && comment.quotedText !== quotedText
+            ? { ...comment, quotedText }
+            : comment
+        ));
+
+        // If we're currently inside the comment mark, restore the cursor position
+        const isInsideComment = marks.some(({ from, to }) => 
+          currentFrom >= from && currentTo <= to
+        );
+        
+        if (isInsideComment) {
+          editor.commands.setTextSelection({ from: currentFrom, to: currentTo });
         }
       }
-    });
-  };
+    };
 
-  const handleSelectAsEssayTopic = () => {
-    editor.update(() => {
-      const selection = $getSelection();
-      if ($isRangeSelection(selection)) {
-        const selectedText = selection.getTextContent();
-        if (selectedText) {
-          const isAlreadyEssayTopic = essayTopics.has(selectedText);
-  
-          if (isAlreadyEssayTopic) {
-            selection.insertNodes([$createTextNode(selectedText)]); // Remove highlight
-            setEssayTopics((prev) => {
-              const newSet = new Set(prev);
-              newSet.delete(selectedText);
-              return newSet;
-            });
-          } else {
-            // Create highlighted node
-            const highlightedNode = $createTextNode(selectedText);
-            highlightedNode.setStyle("background-color: #c4b5fd"); // Highlight purple
-            const emptyTextNode = $createTextNode("");
-            selection.insertNodes([highlightedNode, emptyTextNode]);
-            selection.setTextNodeRange(emptyTextNode, 0, emptyTextNode, 0);
-  
-            setEssayTopics((prev) => new Set(prev).add(selectedText));
-          }
-        }
-      }
-    });
-  };
+    // Use transaction handler instead of selection update
+    const handleTransaction = () => {
+      handleSelectionChange();
+    };
 
-  const handleAddComment = () => {
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed || !onStartComment) return;
+    editor.on('transaction', handleTransaction);
+    return () => {
+      editor.off('transaction', handleTransaction);
+    };
+  }, [editor, activeCommentId]);
 
-    const text = selection.toString();
+  const handleClickQuotedText = (commentId: string) => {
+    if (!editor) return;
     
-    // Add temporary highlight
-    editor.update(() => {
-      const selection = $getSelection();
-      if ($isRangeSelection(selection)) {
-        const textNode = $createTextNode(text);
-        textNode.setStyle("background-color: #fef9c3"); // Light yellow highlight
-        selection.insertNodes([textNode]);
+    // Find the mark with this comment ID
+    let foundPos: { from: number; to: number } | null = null;
+    editor.state.doc.descendants((node, pos) => {
+      const mark = node.marks.find(m => 
+        m.type.name === 'comment' && 
+        m.attrs.commentId === commentId
+      );
+      if (mark) {
+        foundPos = { from: pos, to: pos + node.nodeSize };
+        return false; // Stop searching
       }
     });
 
-    onStartComment(text, "#fef9c3");
+    if (foundPos) {
+      // Set selection without scrolling
+      editor.commands.setTextSelection(foundPos);
+      // Only scroll if not in view
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        if (rect.top < 0 || rect.bottom > window.innerHeight) {
+          editor.commands.scrollIntoView();
+        }
+      }
+    }
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) return;
+    if (!editor) return;
+    const { from, to } = editor.state.selection;
+    if (from === to) return;
     e.preventDefault();
   };
 
@@ -183,46 +238,30 @@ export function AIContextMenu({ children, onAddInsight, onStartComment }: AICont
             </ContextMenuItem>
             <ContextMenuSeparator />
             <ContextMenuItem 
-              onSelect={handleAddComment}
+              onSelect={onAddComment}
               className="flex items-center"
             >
-              <MessageSquare className="mr-2 h-4 w-4" />
+              <TextSelect className="mr-2 h-4 w-4" />
               <span>Add Comment</span>
             </ContextMenuItem>
             <ContextMenuSeparator />
             <ContextMenuItem 
-              onSelect={handleSelectAsParagraphTopic}
+              onSelect={onSelectAsParagraphTopic}
               className="flex items-center"
             >
               <RectangleEllipsis className="mr-2 h-4 w-4" />
               <span>Select as Paragraph Topic</span>
             </ContextMenuItem>
             <ContextMenuItem 
-              onSelect={handleSelectAsEssayTopic}
-              className="flex items-center"
-            >
-              <TextSelect className="mr-2 h-4 w-4" />
-              <span>Select as Essay Topic</span>
-            </ContextMenuItem>
-            <ContextMenuItem 
-              onSelect={handleAIAction}
-              className="flex items-center"
-            >
-              <MessageCirclePlus className="mr-2 h-4 w-4" />
-              <span>Select for Custom Feedback</span>
-            </ContextMenuItem>
-            <ContextMenuSeparator />
-            <ContextMenuItem 
-              onSelect={handleAIAction}
+              onSelect={onSelectAsEssayTopic}
               className="flex items-center"
             >
               <Wand2 className="mr-2 h-4 w-4" />
-              <span>Ask AI Assistant</span>
+              <span>Select as Essay Topic</span>
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
       </div>
-
       {showInlinePrompt && (
         <div 
           style={{ 
