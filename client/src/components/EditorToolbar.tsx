@@ -6,7 +6,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { Check, ChevronDown, MessageSquare } from 'lucide-react';
+import { Check, ChevronDown, MessageSquare, Edit } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
 const FONT_SIZES = {
@@ -20,9 +20,10 @@ interface EditorToolbarProps {
   editor: Editor | null;
   hasSelection?: boolean;
   onAddComment?: () => void;
+  onSuggestEdit?: () => void;
 }
 
-export function EditorToolbar({ editor, hasSelection = false, onAddComment }: EditorToolbarProps) {
+export function EditorToolbar({ editor, hasSelection = false, onAddComment, onSuggestEdit }: EditorToolbarProps) {
   const getCurrentFontSize = () => {
     if (!editor) return 'Normal';
     const attrs = editor.getAttributes('textStyle');
@@ -104,6 +105,16 @@ export function EditorToolbar({ editor, hasSelection = false, onAddComment }: Ed
           className="h-8 w-8 p-0"
         >
           <MessageSquare className="h-4 w-4" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onSuggestEdit}
+          disabled={!hasSelection}
+          className="h-8 w-8 p-0"
+        >
+          <Edit className="h-4 w-4" />
         </Button>
 
         <div className="h-4 w-px bg-border/40" />

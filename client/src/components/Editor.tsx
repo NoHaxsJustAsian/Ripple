@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ModeToggle } from '@/components/ui/mode-toggle';
 import { cn } from "@/lib/utils";
-import { MessageSquare, LightbulbIcon, Save, FileDown, X, Pencil, Trash2 } from 'lucide-react';
+import { MessageSquare, LightbulbIcon, Save, FileDown, X, Pencil, Trash2, Check } from 'lucide-react';
 import { AISidePanel } from './AISidePanel';
 import { AIContextMenu } from './AIContextMenu';
 import { EditorToolbar } from './EditorToolbar';
@@ -18,6 +18,7 @@ import DropdownMenuWithCheckboxes from './ui/dropdown-menu-select';
 import { updateHighlightedText } from "../utils/highlightUtils";
 import { EditorView } from 'prosemirror-view';
 import { CommentExtension } from '../extensions/Comment';
+import { SuggestEditExtension } from '../extensions/SuggestEdit';
 import '@/styles/comment.css';
 
 interface EditorProps {
@@ -41,11 +42,17 @@ interface PendingComment {
   editingId?: number;
 }
 
+interface SuggestedEdit {
+  original: string;
+  suggested: string;
+}
+
 interface CommentType {
   id: string;
   content: string;
   createdAt: Date;
   quotedText: string;
+  suggestedEdit?: SuggestedEdit;
 }
 
 // Create a context for insights
@@ -85,6 +92,15 @@ export default function Editor({
         onCommentActivated: (commentId: string | null) => {
           setActiveCommentId(commentId);
           if (commentId) setTimeout(() => focusCommentWithActiveId(commentId));
+        },
+      }),
+      SuggestEditExtension.configure({
+        HTMLAttributes: {
+          class: 'tiptap-suggest-edit',
+        },
+        onSuggestEdit: (original: string, suggested: string) => {
+          console.log('Suggested edit:', { original, suggested });
+          // You can add your own logic here to handle suggested edits
         },
       }),
     ],
@@ -396,6 +412,40 @@ export default function Editor({
     }, 50);
   }, [editor]);
 
+  const handleSuggestEdit = useCallback(() => {
+    if (!editor) return;
+    
+    const { from, to } = editor.state.selection;
+    if (from === to) return; // No selection
+    
+    const quotedText = editor.state.doc.textBetween(from, to);
+    
+    const commentId = `c${Date.now()}`;
+    const newComment: CommentType = {
+      id: commentId,
+      content: '',
+      createdAt: new Date(),
+      quotedText,
+      suggestedEdit: {
+        original: quotedText,
+        suggested: quotedText  // Start with the same text instead of uppercase
+      }
+    };
+
+    setComments(prev => [...prev, newComment]);
+    editor.chain().setComment(commentId).run();
+    setActiveCommentId(commentId);
+    setIsInsightsOpen(true);
+    
+    // Small delay to ensure the DOM is updated
+    setTimeout(() => {
+      const textarea = document.getElementById(commentId) as HTMLTextAreaElement;
+      if (textarea) {
+        textarea.focus();
+      }
+    }, 50);
+  }, [editor]);
+
   return (
     <div className={cn("w-full h-full relative", className)}>
       <InsightsContext.Provider value={[insights, setInsights]}>
@@ -488,6 +538,7 @@ export default function Editor({
                 editor={editor} 
                 hasSelection={!!editor?.state.selection.content()}
                 onAddComment={handleAddComment}
+                onSuggestEdit={handleSuggestEdit}
               />
               <div className="flex-1 overflow-auto bg-[#FAF9F6] dark:bg-background/10">
                 <div className="mx-auto relative" style={{ width: '794px' }}>
@@ -540,31 +591,88 @@ export default function Editor({
                             <div className="flex flex-col space-y-2">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                  <span className="font-medium text-sm">Comment</span>
+                                  <span className="font-medium text-sm">
+                                    {comment.suggestedEdit ? 'Suggested Edit' : 'Comment'}
+                                  </span>
                                   <span className="text-xs text-muted-foreground">
                                     {new Date(comment.createdAt).toLocaleDateString()}
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6"
-                                    onClick={() => setActiveCommentId(comment.id)}
-                                  >
-                                    <Pencil className="h-3 w-3" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6"
-                                    onClick={() => {
-                                      editor?.chain().focus().unsetComment(comment.id).run();
-                                      setComments(comments.filter(c => c.id !== comment.id));
-                                    }}
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
+                                  {comment.suggestedEdit && (
+                                    <>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6"
+                                        onClick={() => {
+                                          if (!editor) return;
+                                          
+                                          // Find the comment mark
+                                          let foundPos: { from: number; to: number } | null = null;
+                                          editor.state.doc.descendants((node, pos) => {
+                                            const mark = node.marks.find(m => 
+                                              m.type.name === 'comment' && 
+                                              m.attrs.commentId === comment.id
+                                            );
+                                            if (mark) {
+                                              foundPos = { from: pos, to: pos + node.nodeSize };
+                                              return false;
+                                            }
+                                          });
+
+                                          if (foundPos && comment.suggestedEdit) {
+                                            // Apply the suggested edit
+                                            editor
+                                              .chain()
+                                              .focus()
+                                              .setTextSelection(foundPos)
+                                              .insertContent(comment.suggestedEdit.suggested)
+                                              .unsetComment(comment.id)
+                                              .run();
+                                            
+                                            setComments(prev => prev.filter(c => c.id !== comment.id));
+                                          }
+                                        }}
+                                      >
+                                        <Check className="h-3 w-3" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6"
+                                        onClick={() => {
+                                          editor?.chain().focus().unsetComment(comment.id).run();
+                                          setComments(comments.filter(c => c.id !== comment.id));
+                                        }}
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                    </>
+                                  )}
+                                  {!comment.suggestedEdit && (
+                                    <>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6"
+                                        onClick={() => setActiveCommentId(comment.id)}
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6"
+                                        onClick={() => {
+                                          editor?.chain().focus().unsetComment(comment.id).run();
+                                          setComments(comments.filter(c => c.id !== comment.id));
+                                        }}
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                               {comment.quotedText && (
@@ -582,19 +690,17 @@ export default function Editor({
                                       );
                                       if (mark) {
                                         foundPos = { from: pos, to: pos + node.nodeSize };
-                                        return false; // Stop searching once found
+                                        return false;
                                       }
                                     });
 
                                     if (foundPos) {
-                                      // Set selection and focus editor
                                       editor
                                         .chain()
                                         .focus()
                                         .setTextSelection(foundPos)
                                         .run();
 
-                                      // Only scroll if not in view
                                       const selection = window.getSelection();
                                       if (selection && selection.rangeCount > 0) {
                                         const range = selection.getRangeAt(0);
@@ -606,7 +712,20 @@ export default function Editor({
                                     }
                                   }}
                                 >
-                                  "{comment.quotedText}"
+                                  {comment.suggestedEdit ? (
+                                    <div className="suggest-edit-container">
+                                      <div>
+                                        <div className="suggest-edit-label">Current Text</div>
+                                        <div className="suggest-edit-deletion">{comment.suggestedEdit?.original || ''}</div>
+                                      </div>
+                                      <div>
+                                        <div className="suggest-edit-label">New Text</div>
+                                        <div className="suggest-edit-addition">{comment.suggestedEdit?.suggested || ''}</div>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    `"${comment.quotedText}"`
+                                  )}
                                 </div>
                               )}
                               <div className={cn(
@@ -616,26 +735,55 @@ export default function Editor({
                                 {activeCommentId === comment.id ? (
                                   <div className="space-y-2">
                                     <div className="relative">
-                                      <textarea
-                                        id={comment.id}
-                                        value={comment.content}
-                                        onChange={(e) => {
-                                          setComments(prev => prev.map(c => 
-                                            c.id === comment.id 
-                                              ? { ...c, content: e.target.value }
-                                              : c
-                                          ));
-                                        }}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter' && !e.shiftKey) {
-                                            e.preventDefault();
-                                            setActiveCommentId(null);
-                                          }
-                                        }}
-                                        placeholder="Add a comment..."
-                                        className="w-full min-h-[60px] bg-transparent border-none p-0 resize-none focus:outline-none focus:ring-0"
-                                        autoFocus
-                                      />
+                                      {comment.suggestedEdit ? (
+                                        <textarea
+                                          id={comment.id}
+                                          value={comment.suggestedEdit.suggested}
+                                          onChange={(e) => {
+                                            setComments(prev => prev.map(c => 
+                                              c.id === comment.id 
+                                                ? { 
+                                                    ...c, 
+                                                    suggestedEdit: {
+                                                      ...c.suggestedEdit!,
+                                                      suggested: e.target.value
+                                                    }
+                                                  }
+                                                : c
+                                            ));
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                              e.preventDefault();
+                                              setActiveCommentId(null);
+                                            }
+                                          }}
+                                          placeholder="Edit suggestion..."
+                                          className="w-full min-h-[60px] bg-transparent border-none p-0 resize-none focus:outline-none focus:ring-0"
+                                          autoFocus
+                                        />
+                                      ) : (
+                                        <textarea
+                                          id={comment.id}
+                                          value={comment.content}
+                                          onChange={(e) => {
+                                            setComments(prev => prev.map(c => 
+                                              c.id === comment.id 
+                                                ? { ...c, content: e.target.value }
+                                                : c
+                                            ));
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                              e.preventDefault();
+                                              setActiveCommentId(null);
+                                            }
+                                          }}
+                                          placeholder="Add a comment..."
+                                          className="w-full min-h-[60px] bg-transparent border-none p-0 resize-none focus:outline-none focus:ring-0"
+                                          autoFocus
+                                        />
+                                      )}
                                     </div>
                                     <div className="flex justify-end">
                                       <Button
@@ -648,7 +796,7 @@ export default function Editor({
                                     </div>
                                   </div>
                                 ) : (
-                                  comment.content || "No content"
+                                  comment.suggestedEdit ? null : comment.content || "No content"
                                 )}
                               </div>
                             </div>
