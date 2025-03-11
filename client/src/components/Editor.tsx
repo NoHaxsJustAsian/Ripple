@@ -4,7 +4,7 @@ import Highlight from '@tiptap/extension-highlight';
 import TextStyle from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import Underline from '@tiptap/extension-underline';
-import { useEffect, useState, useCallback, useRef, useContext, createContext, useMemo } from 'react';
+import { useEffect, useState, useCallback, useRef, createContext, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ModeToggle } from '@/components/ui/mode-toggle';
@@ -14,8 +14,7 @@ import { AISidePanel } from './AISidePanel';
 import { AIContextMenu } from './AIContextMenu';
 import { EditorToolbar } from './EditorToolbar';
 import { toast } from "sonner";
-import { MultiSelect, OptionType, ActionSelect, ActionItemType } from './ui/multi-select';
-import { updateHighlightedText } from "../utils/highlightUtils";
+import { ActionSelect, ActionItemType } from './ui/multi-select';
 import { EditorView } from 'prosemirror-view';
 import { CommentExtension } from '../extensions/Comment';
 import { SuggestEditExtension } from '../extensions/SuggestEdit';
@@ -81,8 +80,6 @@ export default function Editor({
   const [selectedText, setSelectedText] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
-  const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [analysisInProgress, setAnalysisInProgress] = useState<string | null>(null);
   // Track individual toggle states
   const [showParagraphTopics, setShowParagraphTopics] = useState(false);
   const [showEssayTopics, setShowEssayTopics] = useState(false);
@@ -304,21 +301,21 @@ export default function Editor({
     
     // Save current selection before modifying anything
     const { from: currentFrom, to: currentTo } = editor.state.selection;
-    let hadSelection = currentFrom !== currentTo;
+    const hadSelection = currentFrom !== currentTo;
     
     // For interactions between paragraph and essay topics
     // When showing one type, we want to make sure the other type remains visible if toggled on
     
     if (topicType === 'paragraph') {
       // Show paragraph topics
-      Object.entries(paragraphTopicHighlights).forEach(([paragraphId, { from, to }]) => {
+      Object.entries(paragraphTopicHighlights).forEach(([, { from, to }]) => {
         editor.commands.setTextSelection({ from, to });
         editor.commands.setHighlight({ color: '#93c5fd' });
       });
     } 
     else if (topicType === 'paragraph_hide') {
       // Hide paragraph topics
-      Object.entries(paragraphTopicHighlights).forEach(([paragraphId, { from, to }]) => {
+      Object.entries(paragraphTopicHighlights).forEach(([, { from, to }]) => {
         editor.commands.setTextSelection({ from, to });
         editor.commands.unsetHighlight();
       });
@@ -354,7 +351,7 @@ export default function Editor({
       
       // If paragraph topics are still visible, we need to re-highlight them in case of overlap
       if (showParagraphTopics) {
-        Object.entries(paragraphTopicHighlights).forEach(([paragraphId, { from, to }]) => {
+        Object.entries(paragraphTopicHighlights).forEach(([, { from, to }]) => {
           editor.commands.setTextSelection({ from, to });
           editor.commands.setHighlight({ color: '#93c5fd' });
         });
@@ -525,12 +522,11 @@ export default function Editor({
   const runAnalysis = useCallback(async () => {
     const text = getSelectedText();
     if (!text) {
-      setAnalysisError('No text selected');
+      setAnalysisResult(null);
       return;
     }
 
     setIsAnalyzing(true);
-    setAnalysisError(null);
 
     try {
       const response = await analyzeText({
@@ -540,7 +536,7 @@ export default function Editor({
       setAnalysisResult(response.data);
     } catch (error) {
       console.error('Analysis error:', error);
-      setAnalysisError('Failed to analyze text');
+      setAnalysisResult(null);
     } finally {
       setIsAnalyzing(false);
     }
@@ -589,8 +585,6 @@ export default function Editor({
   const runContextualAnalysis = useCallback(async (targetType: 'coherence' | 'cohesion' | 'focus' | 'all') => {
     if (!editor) return;
     
-    setAnalysisInProgress(targetType);
-    
     try {
       // Get the current selection or current paragraph
       let selectedContent = getSelectedText();
@@ -618,7 +612,6 @@ export default function Editor({
       
       if (!selectedContent) {
         console.error('No content selected or paragraph found');
-        setAnalysisInProgress(null);
         return;
       }
       
@@ -689,8 +682,6 @@ export default function Editor({
       
     } catch (error) {
       console.error('Error running contextual analysis:', error);
-    } finally {
-      setAnalysisInProgress(null);
     }
   }, [editor, getSelectedText, getDocumentContent]);
 
