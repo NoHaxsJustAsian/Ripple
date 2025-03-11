@@ -1,20 +1,12 @@
-import { useState, useEffect } from 'react';
-import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { $getSelection, $isRangeSelection, FORMAT_TEXT_COMMAND } from 'lexical';
+import { Editor } from '@tiptap/react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
+  DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Check, ChevronDown, MessageSquare } from 'lucide-react';
+import { Check, ChevronDown, MessageSquare, Edit } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
 const FONT_SIZES = {
@@ -25,44 +17,23 @@ const FONT_SIZES = {
 };
 
 interface EditorToolbarProps {
-  onStartComment?: () => void;
+  editor: Editor | null;
   hasSelection?: boolean;
+  onAddComment?: () => void;
+  onSuggestEdit?: () => void;
 }
 
-export function EditorToolbar({ onStartComment, hasSelection = false }: EditorToolbarProps) {
-  const [editor] = useLexicalComposerContext();
-  const [fontSize, setFontSize] = useState('11pt');
-  const [isBold, setIsBold] = useState(false);
-  const [isItalic, setIsItalic] = useState(false);
-  const [isUnderline, setIsUnderline] = useState(false);
-
-  useEffect(() => {
-    editor.registerUpdateListener(({ editorState }) => {
-      editorState.read(() => {
-        const selection = $getSelection();
-        if ($isRangeSelection(selection)) {
-          setIsBold(selection.hasFormat('bold'));
-          setIsItalic(selection.hasFormat('italic'));
-          setIsUnderline(selection.hasFormat('underline'));
-        }
-      });
-    });
-  }, [editor]);
-
-  const updateFontSize = (newSize: string) => {
-    editor.update(() => {
-      const selection = $getSelection();
-      if ($isRangeSelection(selection)) {
-        // You would need to implement the font size change command
-        console.log('Changing font size to:', newSize);
-      }
-    });
-    setFontSize(newSize);
+export function EditorToolbar({ editor, hasSelection = false, onAddComment, onSuggestEdit }: EditorToolbarProps) {
+  const getCurrentFontSize = () => {
+    if (!editor) return 'Normal';
+    const attrs = editor.getAttributes('textStyle');
+    const fontSize = attrs.fontSize || '11pt';
+    return Object.entries(FONT_SIZES).find(([_, size]) => size === fontSize)?.[0] || 'Normal';
   };
 
-  // Get the label for the current font size
-  const getCurrentFontSizeLabel = () => {
-    return Object.entries(FONT_SIZES).find(([_, size]) => size === fontSize)?.[0] || 'Normal';
+  const updateFontSize = (size: string) => {
+    if (!editor) return;
+    editor.chain().focus().setMark('textStyle', { fontSize: size }).run();
   };
 
   return (
@@ -75,7 +46,7 @@ export function EditorToolbar({ onStartComment, hasSelection = false }: EditorTo
               size="sm" 
               className="h-8 px-3 text-xs flex items-center space-x-1"
             >
-              <span>{getCurrentFontSizeLabel()}</span>
+              <span>{getCurrentFontSize()}</span>
               <ChevronDown className="h-3.5 w-3.5 ml-1" />
             </Button>
           </DropdownMenuTrigger>
@@ -87,7 +58,7 @@ export function EditorToolbar({ onStartComment, hasSelection = false }: EditorTo
                 className="flex items-center justify-between"
               >
                 <span>{label}</span>
-                {fontSize === size && (
+                {getCurrentFontSize() === label && (
                   <Check className="h-4 w-4" />
                 )}
               </DropdownMenuItem>
@@ -99,31 +70,25 @@ export function EditorToolbar({ onStartComment, hasSelection = false }: EditorTo
 
         <div className="flex items-center space-x-1">
           <Button
-            variant={isBold ? "secondary" : "ghost"}
+            variant={editor?.isActive('bold') ? "secondary" : "ghost"}
             size="sm"
-            onClick={() => {
-              editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'bold');
-            }}
+            onClick={() => editor?.chain().focus().toggleBold().run()}
             className="h-8 w-8 p-0"
           >
             <span className="font-bold">B</span>
           </Button>
           <Button
-            variant={isItalic ? "secondary" : "ghost"}
+            variant={editor?.isActive('italic') ? "secondary" : "ghost"}
             size="sm"
-            onClick={() => {
-              editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'italic');
-            }}
+            onClick={() => editor?.chain().focus().toggleItalic().run()}
             className="h-8 w-8 p-0"
           >
             <span className="italic">I</span>
           </Button>
           <Button
-            variant={isUnderline ? "secondary" : "ghost"}
+            variant={editor?.isActive('underline') ? "secondary" : "ghost"}
             size="sm"
-            onClick={() => {
-              editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'underline');
-            }}
+            onClick={() => editor?.chain().focus().toggleMark('underline').run()}
             className="h-8 w-8 p-0"
           >
             <span className="underline">U</span>
@@ -132,29 +97,27 @@ export function EditorToolbar({ onStartComment, hasSelection = false }: EditorTo
 
         <div className="h-4 w-px bg-border/40" />
 
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onStartComment}
-                  disabled={!hasSelection}
-                  className="h-8 px-3 text-xs flex items-center space-x-1"
-                >
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  <span>Comment</span>
-                </Button>
-              </span>
-            </TooltipTrigger>
-            {!hasSelection && (
-              <TooltipContent>
-                <p>Select text to comment</p>
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </TooltipProvider>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onAddComment}
+          disabled={!hasSelection}
+          className="h-8 w-8 p-0"
+        >
+          <MessageSquare className="h-4 w-4" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onSuggestEdit}
+          disabled={!hasSelection}
+          className="h-8 w-8 p-0"
+        >
+          <Edit className="h-4 w-4" />
+        </Button>
+
+        <div className="h-4 w-px bg-border/40" />
       </div>
     </div>
   );
