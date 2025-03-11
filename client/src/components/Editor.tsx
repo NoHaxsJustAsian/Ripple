@@ -1334,6 +1334,7 @@ export default function Editor({
           isOpen={isAIPanelOpen} 
           onClose={toggleAIPanel} 
           selectedText={selectedText}
+          documentContext={getDocumentContent()}
         />
       </InsightsContext.Provider>
     </div>

@@ -8,21 +8,15 @@ from datetime import datetime
 from typing import Dict, List, Optional, Union, Literal
 
 load_dotenv()
+HOSTNAME = os.getenv('HOSTNAME')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-# Environment configuration
-class Config:
-    HOSTNAME = os.getenv('HOSTNAME')
-    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+# Initialize Flask app
+app = Flask(__name__)
+CORS(app, supports_credentials=True, origins=[HOSTNAME])
 
-    @staticmethod
-    def validate():
-        missing_vars = []
-        if not Config.OPENAI_API_KEY:
-            missing_vars.append('OPENAI_API_KEY')
-        if not Config.HOSTNAME:
-            missing_vars.append('HOSTNAME')
-        if missing_vars:
-            raise ValueError(f"Missing environment variables: {', '.join(missing_vars)}")
+# Initialize OpenAI client
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 # Custom exceptions
 class DocumentProcessingError(Exception):
@@ -210,12 +204,7 @@ class AnalysisPrompts:
         }
     }"""
 
-# Initialize Flask app
-app = Flask(__name__)
-CORS(app, supports_credentials=True, origins=[Config.HOSTNAME] if Config.HOSTNAME else "*")
 
-# Initialize OpenAI client
-client = OpenAI(api_key=Config.OPENAI_API_KEY)
 
 def analyze_text(
     text: str,
@@ -281,6 +270,163 @@ def analyze_text(
 
     except Exception as e:
         raise DocumentProcessingError(f"Failed to analyze document: {str(e)}")
+
+def analyze_text_with_context(
+    content: str,
+    full_context: str,
+    analysis_type: Literal["paragraph", "section", "document", "theme"],
+    target_type: Literal["coherence", "cohesion", "focus", "all"]
+) -> List[Dict]:
+    """
+    Analyze text content with document context using OpenAI's GPT model.
+    
+    Args:
+        content: The specific text content to analyze
+        full_context: The full document for context
+        analysis_type: The type of analysis to perform
+        target_type: The specific aspect to target
+        
+    Returns:
+        List of comments containing analysis and suggestions
+        
+    Raises:
+        DocumentProcessingError: If analysis fails
+    """
+    try:
+        # Select appropriate prompt based on analysis type
+        base_prompt = getattr(AnalysisPrompts, analysis_type.upper())
+        
+        # Create a context-aware prompt
+        context_prompt = f"""You are analyzing a specific {analysis_type} within a larger document.
+        
+First, here is the full document for context:
+---DOCUMENT CONTEXT---
+{full_context}
+---END DOCUMENT CONTEXT---
+
+Now, please analyze this specific {analysis_type}:
+---SELECTION TO ANALYZE---
+{content}
+---END SELECTION---
+
+Focus specifically on {target_type} issues.
+
+{base_prompt}
+
+Important: Your comments MUST refer ONLY to the specific selection, not the full document context.
+For each issue found, provide:
+1. A clear comment explaining the issue
+2. The exact text from the selection that needs attention (this will be highlighted)
+3. A suggestion for improvement
+4. If appropriate, a specific edit suggestion
+
+Format each comment as:
+{{
+  "text": "Clear explanation of the issue",
+  "highlightedText": "The exact text from the selection that has the issue",
+  "highlightStyle": "#COLORCODE",
+  "suggestedEdit": {{
+    "original": "Original text with issue",
+    "suggested": "Improved version"
+  }}
+}}
+
+Use these highlight colors:
+- Coherence issues: "#fef9c3" (yellow)
+- Transition/cohesion issues: "#93c5fd" (blue)
+- Focus/theme issues: "#c4b5fd" (purple)
+
+Return an array of comments in JSON format.
+"""
+
+        # Make OpenAI API call
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": context_prompt
+                }
+            ],
+            max_tokens=2000,
+            temperature=0.3  # Lower temperature for more consistent analysis
+        )
+
+        # Parse the response
+        result = response.choices[0].message.content.strip()
+        
+        try:
+            # Attempt to parse as JSON first
+            comments = json.loads(result)
+            
+            # If single object was returned, wrap in list
+            if isinstance(comments, dict):
+                comments = [comments]
+                
+            return comments
+            
+        except json.JSONDecodeError:
+            # If not JSON, create a simpler structure
+            return [{
+                "text": "Analysis completed but results need formatting. Raw feedback follows.",
+                "highlightedText": content[:100] + ("..." if len(content) > 100 else ""),
+                "highlightStyle": "#fef9c3"
+            }]
+
+    except Exception as e:
+        raise DocumentProcessingError(f"Failed to analyze document: {str(e)}")
+
+def handle_chat_message(message: str, document_context: Optional[str] = None) -> str:
+    """
+    Process a chat message using OpenAI's GPT model and generate a response.
+    
+    Args:
+        message: The user's chat message
+        document_context: Optional full document text for context
+        
+    Returns:
+        String containing the AI response
+        
+    Raises:
+        DocumentProcessingError: If processing fails
+    """
+    try:
+        # Create messages array starting with system prompt
+        messages = [
+            {
+                "role": "system",
+                "content": """You are a helpful writing assistant focused on providing guidance for document 
+                improvement. Answer questions about writing techniques, suggest improvements, 
+                and offer explanations for coherence and cohesion issues."""
+            }
+        ]
+        
+        # Add document context if provided
+        if document_context:
+            messages.append({
+                "role": "system",
+                "content": f"Here is the document the user is working on for context:\n\n{document_context}"
+            })
+        
+        # Add user message
+        messages.append({
+            "role": "user",
+            "content": message
+        })
+        
+        # Make OpenAI API call
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+            max_tokens=1000,
+            temperature=0.7  # Slightly higher temperature for more creative responses
+        )
+        
+        # Extract and return the response text
+        return response.choices[0].message.content.strip()
+        
+    except Exception as e:
+        raise DocumentProcessingError(f"Failed to process chat message: {str(e)}")
 
 @app.route("/api/analyze", methods=["POST"])
 def analyze_document():
@@ -348,12 +494,133 @@ def health_check():
     Health check endpoint to verify API status.
     """
     return jsonify({
-        "status": "healthy",
-        "version": "1.0.0",
-        "timestamp": datetime.utcnow().isoformat()
+        "status": "ok",
+        "version": "1.0.0"
     })
+
+@app.route("/api/analyze-context", methods=["POST"])
+def analyze_with_context():
+    """
+    API endpoint to analyze text content with full document context and return targeted suggestions.
+    
+    Expected JSON body:
+    {
+        "content": string,         // The specific content to analyze
+        "fullContext": string,     // The full document for context
+        "type": "paragraph" | "section" | "document" | "theme",
+        "targetType": "coherence" | "cohesion" | "focus" | "all"
+    }
+    
+    Returns:
+        JSON response with targeted analysis or error message
+    """
+    try:
+        data = request.get_json()
+        if not data or 'content' not in data or 'type' not in data or 'fullContext' not in data or 'targetType' not in data:
+            return jsonify({
+                "error": "Missing required fields",
+                "code": "MISSING_FIELDS"
+            }), 400
+
+        content = data['content'].strip()
+        full_context = data['fullContext'].strip()
+        analysis_type = data['type']
+        target_type = data['targetType']
+
+        if not content:
+            return jsonify({
+                "error": "Empty content",
+                "code": "EMPTY_CONTENT"
+            }), 400
+
+        if analysis_type not in ["paragraph", "section", "document", "theme"]:
+            return jsonify({
+                "error": "Invalid analysis type",
+                "code": "INVALID_TYPE"
+            }), 400
+            
+        if target_type not in ["coherence", "cohesion", "focus", "all"]:
+            return jsonify({
+                "error": "Invalid target type",
+                "code": "INVALID_TARGET_TYPE"
+            }), 400
+
+        # Analyze the text content with context
+        analysis_data = analyze_text_with_context(content, full_context, analysis_type, target_type)
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "comments": analysis_data
+            },
+            "processedAt": datetime.utcnow().isoformat()
+        })
+
+    except DocumentProcessingError as e:
+        return jsonify({
+            "error": str(e),
+            "code": "DOCUMENT_PROCESSING_ERROR"
+        }), 500
+    except Exception as e:
+        return jsonify({
+            "error": "An unexpected error occurred",
+            "code": "INTERNAL_ERROR",
+            "detail": str(e)
+        }), 500
+
+@app.route("/api/chat", methods=["POST"])
+def chat():
+    """
+    API endpoint to handle chat messages and generate responses.
+    
+    Expected JSON body:
+    {
+        "message": string,           // The user's chat message
+        "documentContext"?: string   // Optional full document for context
+    }
+    
+    Returns:
+        JSON response with the AI's reply or error message
+    """
+    try:
+        data = request.get_json()
+        if not data or 'message' not in data:
+            return jsonify({
+                "error": "Missing required field: 'message'",
+                "code": "MISSING_FIELDS"
+            }), 400
+
+        message = data['message'].strip()
+        document_context = data.get('documentContext', '').strip()  # Optional
+
+        if not message:
+            return jsonify({
+                "error": "Empty message",
+                "code": "EMPTY_MESSAGE"
+            }), 400
+
+        # Process the chat message
+        response_message = handle_chat_message(message, document_context if document_context else None)
+
+        # Return in format expected by client ChatResponse interface
+        return jsonify({
+            "success": True,
+            "message": response_message,
+            "processedAt": datetime.utcnow().isoformat()
+        })
+
+    except DocumentProcessingError as e:
+        return jsonify({
+            "error": str(e),
+            "code": "DOCUMENT_PROCESSING_ERROR"
+        }), 500
+    except Exception as e:
+        return jsonify({
+            "error": "An unexpected error occurred",
+            "code": "INTERNAL_ERROR",
+            "detail": str(e)
+        }), 500
 
 if __name__ == "__main__":
     # Validate configuration before starting
-    Config.validate()
     app.run(host='127.0.0.1', port=5000, debug=True)

@@ -10,9 +10,10 @@ interface AISidePanelProps {
   onClose: () => void;
   className?: string;
   selectedText?: string;
+  documentContext?: string;
 }
 
-export function AISidePanel({ isOpen, onClose, className, selectedText = '' }: AISidePanelProps) {
+export function AISidePanel({ isOpen, onClose, className, selectedText = '', documentContext = '' }: AISidePanelProps) {
   // Chat state
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const [input, setInput] = useState('');
@@ -43,7 +44,10 @@ export function AISidePanel({ isOpen, onClose, className, selectedText = '' }: A
       setIsSending(true);
       
       try {
-        const response = await sendChatMessage({ message: userMessage });
+        const response = await sendChatMessage({ 
+          message: userMessage,
+          documentContext: documentContext 
+        });
         setMessages(prev => [...prev, { role: 'assistant', content: response.message }]);
       } catch (error) {
         console.error('Chat error:', error);
