@@ -4,22 +4,23 @@ import Highlight from '@tiptap/extension-highlight';
 import TextStyle from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import Underline from '@tiptap/extension-underline';
-import { useEffect, useState, useCallback, useRef, useContext, createContext } from 'react';
+import { useEffect, useState, useCallback, useRef, useContext, createContext, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ModeToggle } from '@/components/ui/mode-toggle';
 import { cn } from "@/lib/utils";
-import { MessageSquare, LightbulbIcon, Save, FileDown, X, Pencil, Trash2, Check } from 'lucide-react';
+import { MessageSquare, LightbulbIcon, Save, FileDown, X, Pencil, Trash2, Check, Zap, Loader2 } from 'lucide-react';
 import { AISidePanel } from './AISidePanel';
 import { AIContextMenu } from './AIContextMenu';
 import { EditorToolbar } from './EditorToolbar';
 import { toast } from "sonner";
-import DropdownMenuWithCheckboxes from './ui/dropdown-menu-select';
+import { MultiSelect, OptionType, ActionSelect, ActionItemType } from './ui/multi-select';
 import { updateHighlightedText } from "../utils/highlightUtils";
 import { EditorView } from 'prosemirror-view';
 import { CommentExtension } from '../extensions/Comment';
 import { SuggestEditExtension } from '../extensions/SuggestEdit';
 import '@/styles/comment.css';
+import { analyzeText, analyzeTextWithContext } from '@/lib/api';
 
 interface EditorProps {
   className?: string;
@@ -77,6 +78,14 @@ export default function Editor({
   const [essayTopicHighlight, setEssayTopicHighlight] = useState<{from: number, to: number} | null>(null);
   const [paragraphTopicHighlights, setParagraphTopicHighlights] = useState<{[paragraphId: string]: {from: number, to: number}}>({});
   const commentsSectionRef = useRef<HTMLDivElement | null>(null);
+  const [selectedText, setSelectedText] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisInProgress, setAnalysisInProgress] = useState<string | null>(null);
+  // Track individual toggle states
+  const [showParagraphTopics, setShowParagraphTopics] = useState(false);
+  const [showEssayTopics, setShowEssayTopics] = useState(false);
   
   const editor = useEditor({
     extensions: [
@@ -96,13 +105,13 @@ export default function Editor({
           if (commentId) setTimeout(() => focusCommentWithActiveId(commentId));
         },
       }),
+      // Use a unique key to ensure only one instance is created
       SuggestEditExtension.configure({
         HTMLAttributes: {
           class: 'tiptap-suggest-edit',
         },
         onSuggestEdit: (original: string, suggested: string) => {
           console.log('Suggested edit:', { original, suggested });
-          // You can add your own logic here to handle suggested edits
         },
       }),
     ],
@@ -189,75 +198,6 @@ export default function Editor({
     setIsInsightsOpen(true);
   }, [editor]);
 
-  const handleSelectAsParagraphTopic = useCallback(() => {
-    if (!editor) return;
-    
-    const { from, to } = editor.state.selection;
-    if (from === to) return; // No selection
-    
-    const text = editor.state.doc.textBetween(from, to);
-    
-    // Get the paragraph node that contains the selection
-    const resolvedPos = editor.state.doc.resolve(from);
-    const paragraph = resolvedPos.node(1); // Assuming paragraphs are at depth 1
-    
-    if (paragraph) {
-      const paragraphId = paragraph.attrs.id || resolvedPos.before(1).toString();
-      
-      // Remove any existing paragraph topic highlight in this paragraph
-      if (paragraphTopicHighlights[paragraphId]) {
-        const existingHighlight = paragraphTopicHighlights[paragraphId];
-        
-        // Try to remove the existing highlight
-        editor.chain()
-          .setTextSelection({ from: existingHighlight.from, to: existingHighlight.to })
-          .unsetHighlight()
-          .setTextSelection({ from, to }) // Restore original selection
-          .run();
-      }
-      
-      // Apply the new highlight
-      editor.chain()
-        .setHighlight({ color: '#93c5fd' })
-        .setTextSelection(to)
-        .run();
-      
-      // Update the state with the new paragraph topic position
-      setParagraphTopicHighlights(prev => ({ 
-        ...prev, 
-        [paragraphId]: { from, to } 
-      }));
-    }
-  }, [editor, paragraphTopicHighlights]);
-
-  const handleSelectAsEssayTopic = useCallback(() => {
-    if (!editor) return;
-    
-    const { from, to } = editor.state.selection;
-    if (from === to) return; // No selection
-    
-    const text = editor.state.doc.textBetween(from, to);
-    
-    // Remove any existing essay topic highlight
-    if (essayTopicHighlight) {
-      // Try to remove the existing highlight
-      editor.chain()
-        .setTextSelection({ from: essayTopicHighlight.from, to: essayTopicHighlight.to })
-        .unsetHighlight()
-        .setTextSelection({ from, to }) // Restore original selection
-        .run();
-    }
-    
-    // Apply the new highlight
-    editor.chain()
-      .setHighlight({ color: '#c4b5fd' })
-      .setTextSelection(to)
-      .run();
-    
-    // Update the state with the new essay topic position
-    setEssayTopicHighlight({ from, to });
-  }, [editor, essayTopicHighlight]);
-
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
   const [isEditingComment, setIsEditingComment] = useState(false);
 
@@ -341,28 +281,446 @@ export default function Editor({
     }
   }, [editor]);
 
-  const handleSelectionChange = (items: string[]) => {
-    setSelectedItems(items);
-    updateHighlightedText(items, Editor);
-  };
+  const getSelectedText = useCallback(() => {
+    if (!editor) return '';
+    
+    const { from, to } = editor.state.selection;
+    if (from === to) return ''; // No selection
+    
+    return editor.state.doc.textBetween(from, to);
+  }, [editor]);
 
-  const toggleAIPanel = () => {
+  const toggleAIPanel = useCallback(() => {
+    if (!isAIPanelOpen) {
+      const text = getSelectedText();
+      setSelectedText(text);
+    }
     setIsAIPanelOpen(!isAIPanelOpen);
+  }, [isAIPanelOpen, getSelectedText]);
+
+  // Memoize toggleTopicSentencesVisibility to prevent recreation on every render
+  const toggleTopicSentencesVisibility = useCallback((topicType: string) => {
+    if (!editor) return;
+    
+    // Save current selection before modifying anything
+    const { from: currentFrom, to: currentTo } = editor.state.selection;
+    let hadSelection = currentFrom !== currentTo;
+    
+    // For interactions between paragraph and essay topics
+    // When showing one type, we want to make sure the other type remains visible if toggled on
+    
+    if (topicType === 'paragraph') {
+      // Show paragraph topics
+      Object.entries(paragraphTopicHighlights).forEach(([paragraphId, { from, to }]) => {
+        editor.commands.setTextSelection({ from, to });
+        editor.commands.setHighlight({ color: '#93c5fd' });
+      });
+    } 
+    else if (topicType === 'paragraph_hide') {
+      // Hide paragraph topics
+      Object.entries(paragraphTopicHighlights).forEach(([paragraphId, { from, to }]) => {
+        editor.commands.setTextSelection({ from, to });
+        editor.commands.unsetHighlight();
+      });
+      
+      // If essay topics are still visible, we need to re-highlight them in case of overlap
+      if (showEssayTopics && essayTopicHighlight) {
+        editor.commands.setTextSelection({ 
+          from: essayTopicHighlight.from, 
+          to: essayTopicHighlight.to 
+        });
+        editor.commands.setHighlight({ color: '#c4b5fd' });
+      }
+    }
+    else if (topicType === 'document') {
+      // Show essay topic
+      if (essayTopicHighlight) {
+        editor.commands.setTextSelection({ 
+          from: essayTopicHighlight.from, 
+          to: essayTopicHighlight.to 
+        });
+        editor.commands.setHighlight({ color: '#c4b5fd' });
+      }
+    }
+    else if (topicType === 'document_hide') {
+      // Hide essay topic
+      if (essayTopicHighlight) {
+        editor.commands.setTextSelection({ 
+          from: essayTopicHighlight.from, 
+          to: essayTopicHighlight.to 
+        });
+        editor.commands.unsetHighlight();
+      }
+      
+      // If paragraph topics are still visible, we need to re-highlight them in case of overlap
+      if (showParagraphTopics) {
+        Object.entries(paragraphTopicHighlights).forEach(([paragraphId, { from, to }]) => {
+          editor.commands.setTextSelection({ from, to });
+          editor.commands.setHighlight({ color: '#93c5fd' });
+        });
+      }
+    }
+    
+    // Restore the user's original selection
+    if (hadSelection) {
+      editor.commands.setTextSelection({ from: currentFrom, to: currentTo });
+    } else {
+      // If there was no selection, just position the cursor where it was
+      editor.commands.setTextSelection(currentFrom);
+    }
+    
+    // Focus the editor to ensure the cursor/selection is visible
+    editor.commands.focus();
+  }, [editor, paragraphTopicHighlights, essayTopicHighlight, showParagraphTopics, showEssayTopics]);
+
+  // Improved toggle handlers with better user guidance
+  const toggleParagraphTopics = useCallback(() => {
+    const newState = !showParagraphTopics;
+    setShowParagraphTopics(newState);
+    
+    // Show notification based on the toggle state and available topics
+    if (newState) {
+      const topicCount = Object.keys(paragraphTopicHighlights).length;
+      if (topicCount > 0) {
+        toggleTopicSentencesVisibility('paragraph');
+        toast.success(`Showing ${topicCount} paragraph topic${topicCount === 1 ? '' : 's'}`);
+      } else {
+        toast.info("No paragraph topics marked yet. Right-click on text and select 'Select as Paragraph Topic'", {
+          duration: 5000,
+          action: {
+            label: "How to use",
+            onClick: () => {
+              toast.info("Select important sentences in each paragraph, then right-click and choose 'Select as Paragraph Topic'", { duration: 7000 });
+            }
+          }
+        });
+      }
+    } else {
+      toggleTopicSentencesVisibility('paragraph_hide');
+      toast.success("Paragraph topics hidden");
+    }
+  }, [showParagraphTopics, paragraphTopicHighlights, toggleTopicSentencesVisibility]);
+
+  const toggleEssayTopics = useCallback(() => {
+    const newState = !showEssayTopics;
+    setShowEssayTopics(newState);
+    
+    // Show notification based on the toggle state and available topics
+    if (newState) {
+      if (essayTopicHighlight) {
+        toggleTopicSentencesVisibility('document');
+        toast.success("Showing essay topic");
+      } else {
+        toast.info("No essay topic marked yet. Right-click on text and select 'Select as Essay Topic'", {
+          duration: 5000,
+          action: {
+            label: "How to use",
+            onClick: () => {
+              toast.info("Select your main thesis or focus statement, then right-click and choose 'Select as Essay Topic'", { duration: 7000 });
+            }
+          }
+        });
+      }
+    } else {
+      toggleTopicSentencesVisibility('document_hide');
+      toast.success("Essay topic hidden");
+    }
+  }, [showEssayTopics, essayTopicHighlight, toggleTopicSentencesVisibility]);
+
+  // Add useEffect to synchronize highlight visibility only when editor or toggle states change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (editor && showParagraphTopics) {
+      toggleTopicSentencesVisibility('paragraph');
+    }
+  }, [editor, showParagraphTopics]);  // Remove toggleTopicSentencesVisibility from deps array to prevent infinite loops
+
+  // Add useEffect to synchronize essay highlight visibility only when editor or toggle states change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (editor && showEssayTopics) {
+      toggleTopicSentencesVisibility('document');
+    }
+  }, [editor, showEssayTopics]);  // Remove toggleTopicSentencesVisibility from deps array to prevent infinite loops
+
+  // Now add the selection handlers after the toggle state variables
+  const handleSelectAsParagraphTopic = useCallback(() => {
+    if (!editor) return;
+    
+    const { from, to } = editor.state.selection;
+    if (from === to) return; // No selection
+    
+    const text = editor.state.doc.textBetween(from, to);
+    
+    // Get the paragraph node that contains the selection
+    const resolvedPos = editor.state.doc.resolve(from);
+    const paragraph = resolvedPos.node(1); // Assuming paragraphs are at depth 1
+    
+    if (paragraph) {
+      const paragraphId = paragraph.attrs.id || resolvedPos.before(1).toString();
+      
+      // Remove any existing paragraph topic highlight in this paragraph
+      if (paragraphTopicHighlights[paragraphId]) {
+        const existingHighlight = paragraphTopicHighlights[paragraphId];
+        
+        // Try to remove the existing highlight
+        editor.chain()
+          .setTextSelection({ from: existingHighlight.from, to: existingHighlight.to })
+          .unsetHighlight()
+          .setTextSelection({ from, to }) // Restore original selection
+          .run();
+      }
+      
+      // Apply the new highlight if topics are shown
+      if (showParagraphTopics) {
+        editor.chain()
+          .setHighlight({ color: '#93c5fd' })
+          .setTextSelection(to)
+          .run();
+      }
+      
+      // Update the state with the new paragraph topic position
+      setParagraphTopicHighlights(prev => ({ 
+        ...prev, 
+        [paragraphId]: { from, to } 
+      }));
+      
+      toast.success("Paragraph topic set");
+    }
+  }, [editor, paragraphTopicHighlights, showParagraphTopics]);
+
+  const handleSelectAsEssayTopic = useCallback(() => {
+    if (!editor) return;
+    
+    const { from, to } = editor.state.selection;
+    if (from === to) return; // No selection
+    
+    const text = editor.state.doc.textBetween(from, to);
+    
+    // Remove any existing essay topic highlight
+    if (essayTopicHighlight) {
+      // Try to remove the existing highlight
+      editor.chain()
+        .setTextSelection({ from: essayTopicHighlight.from, to: essayTopicHighlight.to })
+        .unsetHighlight()
+        .setTextSelection({ from, to }) // Restore original selection
+        .run();
+    }
+    
+    // Apply the new highlight if topics are shown
+    if (showEssayTopics) {
+      editor.chain()
+        .setHighlight({ color: '#c4b5fd' })
+        .setTextSelection(to)
+        .run();
+    }
+    
+    // Update the state with the new essay topic position
+    setEssayTopicHighlight({ from, to });
+    
+    toast.success("Essay topic set");
+  }, [editor, essayTopicHighlight, showEssayTopics]);
+
+  // Run analysis on the selected text
+  const runAnalysis = useCallback(async () => {
+    const text = getSelectedText();
+    if (!text) {
+      setAnalysisError('No text selected');
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+
+    try {
+      const response = await analyzeText({
+        content: text,
+        type: 'paragraph'
+      });
+      setAnalysisResult(response.data);
+    } catch (error) {
+      console.error('Analysis error:', error);
+      setAnalysisError('Failed to analyze text');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [getSelectedText]);
+
+  // Auto-run analysis when text is selected
+  useEffect(() => {
+    if (!editor) return;
+
+    const handleSelectionUpdate = () => {
+      const text = getSelectedText();
+      if (text && text.length > 10) {  // Only analyze if meaningful selection
+        runAnalysis();
+      } else {
+        setAnalysisResult(null);
+      }
+    };
+
+    // Throttle selection events to prevent too many API calls
+    let timeoutId: NodeJS.Timeout;
+    const throttledSelectionHandler = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(handleSelectionUpdate, 1000); // 1 second delay
+    };
+
+    editor.on('selectionUpdate', throttledSelectionHandler);
+
+    return () => {
+      editor.off('selectionUpdate', throttledSelectionHandler);
+      clearTimeout(timeoutId);
+    };
+  }, [editor, getSelectedText, runAnalysis]);
+
+  // Helper to format coherence score
+  const formatScore = (score: number) => {
+    return `${Math.round(score * 100)}%`;
   };
 
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  // Get the entire document content
+  const getDocumentContent = useCallback(() => {
+    if (!editor) return '';
+    return editor.getHTML();
+  }, [editor]);
 
-  const topic_items = [
-    { id: "1", label: "Paragraph Topics" },
-    { id: "2", label: "Essay Topics" }
-  ];
+  // Function to run contextual analysis
+  const runContextualAnalysis = useCallback(async (targetType: 'coherence' | 'cohesion' | 'focus' | 'all') => {
+    if (!editor) return;
+    
+    setAnalysisInProgress(targetType);
+    
+    try {
+      // Get the current selection or current paragraph
+      let selectedContent = getSelectedText();
+      let analysisType: 'paragraph' | 'section' = 'paragraph';
+      
+      // If no text is selected, try to get the current paragraph
+      if (!selectedContent) {
+        const { from } = editor.state.selection;
+        const resolvedPos = editor.state.doc.resolve(from);
+        const paragraph = resolvedPos.parent;
+        
+        if (paragraph) {
+          selectedContent = paragraph.textContent;
+          // Find the start and end positions of the paragraph
+          const paragraphStart = resolvedPos.start();
+          const paragraphEnd = paragraphStart + paragraph.nodeSize - 2;
+          
+          // Set the selection to the paragraph
+          editor.chain().setTextSelection({
+            from: paragraphStart,
+            to: paragraphEnd
+          }).run();
+        }
+      }
+      
+      if (!selectedContent) {
+        console.error('No content selected or paragraph found');
+        setAnalysisInProgress(null);
+        return;
+      }
+      
+      // Depending on the selection size, determine if it's a paragraph or section
+      if (selectedContent.length > 500) {
+        analysisType = 'section';
+      }
+      
+      // Get full document content for context
+      const fullContent = getDocumentContent();
+      
+      // Call API with context
+      const response = await analyzeTextWithContext({
+        content: selectedContent,
+        fullContext: fullContent,
+        type: analysisType,
+        targetType: targetType
+      });
+      
+      // Process the comments from the response
+      if (response.data.comments && response.data.comments.length > 0) {
+        // Add each comment to the editor
+        response.data.comments.forEach(comment => {
+          // Find the text to highlight
+          const textToFind = comment.highlightedText;
+          let commentPosition = null;
+          
+          // Find the position of the text in the document
+          editor.state.doc.descendants((node, pos) => {
+            const nodeText = node.textContent;
+            if (nodeText.includes(textToFind)) {
+              const startPos = pos + nodeText.indexOf(textToFind);
+              const endPos = startPos + textToFind.length;
+              commentPosition = { from: startPos, to: endPos };
+              return false; // Stop the traversal
+            }
+          });
+          
+          if (commentPosition) {
+            // Add the comment at the found position
+            const commentId = `comment-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+            
+            // Create the comment with or without a suggested edit
+            const newComment: CommentType = {
+              id: commentId,
+              content: comment.text,
+              createdAt: new Date(),
+              quotedText: comment.highlightedText,
+              ...(comment.suggestedEdit ? {
+                suggestedEdit: {
+                  original: comment.suggestedEdit.original,
+                  suggested: comment.suggestedEdit.suggested
+                }
+              } : {})
+            };
+            
+            // Add the comment to the editor
+            editor.chain()
+              .setTextSelection(commentPosition)
+              .setComment(commentId)
+              .run();
+            
+            // Then add the comment to our state separately
+            setComments(prev => [...prev, newComment]);
+          }
+        });
+      }
+      
+    } catch (error) {
+      console.error('Error running contextual analysis:', error);
+    } finally {
+      setAnalysisInProgress(null);
+    }
+  }, [editor, getSelectedText, getDocumentContent]);
 
-  const feedback_items = [
-    { id: "1", label: "Overall Feedback" },
-    { id: "2", label: "Paragraph Feedback" },
-    { id: "3", label: "Sentence Feedback" },
-    { id: "4", label: "Custom Feedback" }
-  ];
+  // Update the feedback items with appropriate structure for ActionSelect
+  const feedback_items = useMemo<ActionItemType[]>(() => [
+    {
+      value: 'coherence',
+      label: 'Check Coherence',
+      icon: <Zap className="h-3.5 w-3.5 text-yellow-500" />,
+      action: () => runContextualAnalysis('coherence')
+    },
+    {
+      value: 'cohesion',
+      label: 'Check Cohesion',
+      icon: <Zap className="h-3.5 w-3.5 text-blue-500" />,
+      action: () => runContextualAnalysis('cohesion')
+    },
+    {
+      value: 'focus',
+      label: 'Check Focus',
+      icon: <Zap className="h-3.5 w-3.5 text-purple-500" />,
+      action: () => runContextualAnalysis('focus')
+    },
+    {
+      value: 'all',
+      label: 'Analyze Everything',
+      icon: <Zap className="h-3.5 w-3.5" />,
+      action: () => runContextualAnalysis('all')
+    }
+  ], [runContextualAnalysis]);
 
   const handleAddInsight = useCallback((content: string, highlightedText: string, highlightStyle?: string) => {
     console.log('Adding insight:', { content, highlightedText, highlightStyle });
@@ -495,30 +853,26 @@ export default function Editor({
     
     const quotedText = editor.state.doc.textBetween(from, to);
     
+    // Show a prompt for the suggested edit
+    const suggestedText = window.prompt('Suggest an edit:', quotedText);
+    if (!suggestedText) return;
+
+    // Add the edit to the comment system - but don't apply mark if we changed the name
     const commentId = `c${Date.now()}`;
     const newComment: CommentType = {
       id: commentId,
-      content: '',
+      content: 'Suggested Edit',
       createdAt: new Date(),
       quotedText,
       suggestedEdit: {
         original: quotedText,
-        suggested: quotedText  // Start with the same text instead of uppercase
+        suggested: suggestedText
       }
     };
 
     setComments(prev => [...prev, newComment]);
-    editor.chain().setComment(commentId).run();
     setActiveCommentId(commentId);
     setIsInsightsOpen(true);
-    
-    // Small delay to ensure the DOM is updated
-    setTimeout(() => {
-      const textarea = document.getElementById(commentId) as HTMLTextAreaElement;
-      if (textarea) {
-        textarea.focus();
-      }
-    }, 50);
   }, [editor]);
 
   return (
@@ -574,17 +928,9 @@ export default function Editor({
                   {/* Right section */}
                   <div className="flex items-center space-x-4">
                     <div className="flex space-x-1 text-sm">
-                      <DropdownMenuWithCheckboxes
-                        label="View Topic Sentences"
-                        items={topic_items}
-                        selectedItems={selectedItems}
-                        onSelectedItemsChange={handleSelectionChange}
-                      />
-                      <DropdownMenuWithCheckboxes
+                      <ActionSelect
                         label="Check for Feedback"
                         items={feedback_items}
-                        selectedItems={selectedItems}
-                        onSelectedItemsChange={handleSelectionChange}
                       />
                     </div>
                     <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
@@ -597,15 +943,118 @@ export default function Editor({
                       <LightbulbIcon className="h-3.5 w-3.5" />
                       <span>Insights</span>
                     </Button>
-                    <Button
-                      variant={isAIPanelOpen ? "secondary" : "ghost"}
-                      size="sm"
-                      onClick={toggleAIPanel}
-                      className="h-7 px-3 text-xs flex items-center space-x-1"
-                    >
-                      <MessageSquare className="h-3.5 w-3.5" />
-                      <span>Chat</span>
-                    </Button>
+                    <div className="flex items-center space-x-2">
+                      <div className="relative">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-3 text-xs flex items-center space-x-1"
+                          disabled={isAnalyzing}
+                          onClick={runAnalysis}
+                        >
+                          {isAnalyzing ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <span>Analyzing...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Zap className="h-3.5 w-3.5" />
+                              <span>Analyze</span>
+                              {analysisResult && (
+                                <span className="ml-1 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full text-[10px]">
+                                  {formatScore(analysisResult.coherence.score)}
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </Button>
+                        
+                        {/* Analysis Results Dropdown */}
+                        {analysisResult && (
+                          <div className="absolute right-0 mt-2 w-80 rounded-md shadow-lg bg-background border border-border/40 z-50 overflow-hidden">
+                            <div className="p-3 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <h3 className="text-sm font-medium">Analysis Results</h3>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-6 w-6 p-0"
+                                  onClick={() => setAnalysisResult(null)}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                              
+                              <div className="space-y-3">
+                                {/* Coherence */}
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <h4 className="text-xs font-medium">Coherence</h4>
+                                    <span className="text-xs px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full">
+                                      {formatScore(analysisResult.coherence.score)}
+                                    </span>
+                                  </div>
+                                  {analysisResult.coherence.issues.length > 0 ? (
+                                    <ul className="text-xs space-y-1 pl-4 list-disc">
+                                      {analysisResult.coherence.issues.map((issue: any, i: number) => (
+                                        <li key={i}>{issue.issue}</li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground">No coherence issues found!</p>
+                                  )}
+                                </div>
+                                
+                                {/* Cohesion */}
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <h4 className="text-xs font-medium">Cohesion</h4>
+                                    <span className="text-xs px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full">
+                                      {formatScore(analysisResult.cohesion.score)}
+                                    </span>
+                                  </div>
+                                  {analysisResult.cohesion.transitions.missing_between.length > 0 ? (
+                                    <ul className="text-xs space-y-1 pl-4 list-disc">
+                                      {analysisResult.cohesion.transitions.missing_between.map((issue: any, i: number) => (
+                                        <li key={i}>Missing transition between sentences</li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground">No cohesion issues found!</p>
+                                  )}
+                                </div>
+                                
+                                {/* Focus */}
+                                <div className="space-y-1">
+                                  <h4 className="text-xs font-medium">Focus</h4>
+                                  <p className="text-xs">Main idea: {analysisResult.focus.mainIdea}</p>
+                                  {analysisResult.focus.unfocused_elements.length > 0 ? (
+                                    <ul className="text-xs space-y-1 pl-4 list-disc">
+                                      {analysisResult.focus.unfocused_elements.map((element: any, i: number) => (
+                                        <li key={i}>{element.issue}</li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground">Text is well-focused!</p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={toggleAIPanel}
+                        className="h-7 px-3 text-xs flex items-center space-x-1"
+                      >
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        <span>Chat</span>
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -614,6 +1063,10 @@ export default function Editor({
                 hasSelection={!!editor?.state.selection.content()}
                 onAddComment={handleAddComment}
                 onSuggestEdit={handleSuggestEdit}
+                showParagraphTopics={showParagraphTopics}
+                showEssayTopics={showEssayTopics}
+                onToggleParagraphTopics={toggleParagraphTopics}
+                onToggleEssayTopics={toggleEssayTopics}
               />
               <div className="flex-1 overflow-auto bg-[#FAF9F6] dark:bg-background/10">
                 <div className="mx-auto relative" style={{ width: '794px' }}>
@@ -886,7 +1339,11 @@ export default function Editor({
           </div>
         </div>
         
-        <AISidePanel isOpen={isAIPanelOpen} onClose={toggleAIPanel} />
+        <AISidePanel 
+          isOpen={isAIPanelOpen} 
+          onClose={toggleAIPanel} 
+          selectedText={selectedText}
+        />
       </InsightsContext.Provider>
     </div>
   );

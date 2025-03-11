@@ -24,7 +24,7 @@ declare module '@tiptap/core' {
 }
 
 export const SuggestEditMark = Mark.create({
-  name: 'suggestEdit',
+  name: 'suggestEditMark',
 
   addAttributes() {
     return {
@@ -91,14 +91,14 @@ export const SuggestEditExtension = Extension.create<SuggestEditOptions>({
           this.options.onSuggestEdit?.(originalText, suggestedText);
 
           return chain()
-            .setMark('suggestEdit', { id, suggestion: suggestedText })
+            .setMark('suggestEditMark', { id, suggestion: suggestedText })
             .run();
         },
       removeSuggestEdit:
         () =>
         ({ chain }) => {
           return chain()
-            .unsetMark('suggestEdit')
+            .unsetMark('suggestEditMark')
             .run();
         },
     };
@@ -107,14 +107,14 @@ export const SuggestEditExtension = Extension.create<SuggestEditOptions>({
   addProseMirrorPlugins() {
     return [
       new Plugin({
-        key: new PluginKey('suggestEdit'),
+        key: new PluginKey('suggestEditPlugin'),
         props: {
           decorations(state) {
             const decorations: Decoration[] = [];
             const doc = state.doc;
 
             doc.descendants((node, pos) => {
-              const suggestEditMark = node.marks.find(mark => mark.type.name === 'suggestEdit');
+              const suggestEditMark = node.marks.find(mark => mark.type.name === 'suggestEditMark');
               if (!suggestEditMark || !node.isText) return;
 
               const originalText = node.text || '';
