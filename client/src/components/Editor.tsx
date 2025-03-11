@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ModeToggle } from '@/components/ui/mode-toggle';
 import { cn } from "@/lib/utils";
-import { MessageSquare, LightbulbIcon, Save, FileDown, X, Pencil, Trash2, Check, Zap, Loader2 } from 'lucide-react';
+import { MessageSquare, LightbulbIcon, Save, FileDown, Pencil, Trash2, Check, Zap, Loader2 } from 'lucide-react';
 import { AISidePanel } from './AISidePanel';
 import { AIContextMenu } from './AIContextMenu';
 import { EditorToolbar } from './EditorToolbar';
@@ -19,7 +19,8 @@ import { EditorView } from 'prosemirror-view';
 import { CommentExtension } from '../extensions/Comment';
 import { SuggestEditExtension } from '../extensions/SuggestEdit';
 import '@/styles/comment.css';
-import { analyzeText, analyzeTextWithContext } from '@/lib/api';
+import { analyzeTextWithContext } from '@/lib/api';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface EditorProps {
   className?: string;
@@ -59,8 +60,7 @@ interface CommentType {
 export const InsightsContext = createContext<[AIInsight[], React.Dispatch<React.SetStateAction<AIInsight[]>>]>([[], () => {}]);
 
 export default function Editor({ 
-  className = '', 
-  placeholder = 'Type @ to insert...',
+  className = '',
   onEditorChange 
 }: EditorProps): JSX.Element {
   const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
@@ -83,6 +83,7 @@ export default function Editor({
   // Track individual toggle states
   const [showParagraphTopics, setShowParagraphTopics] = useState(false);
   const [showEssayTopics, setShowEssayTopics] = useState(false);
+  const [analysisPopoverOpen, setAnalysisPopoverOpen] = useState(false);
   
   const editor = useEditor({
     extensions: [
@@ -519,28 +520,16 @@ export default function Editor({
   }, [editor, essayTopicHighlight, showEssayTopics]);
 
   // Run analysis on the selected text
-  const runAnalysis = useCallback(async () => {
-    const text = getSelectedText();
-    if (!text) {
-      setAnalysisResult(null);
+  const runAnalysis = useCallback(() => {
+    // If there's an analysis result already, just toggle the popover
+    if (analysisResult) {
+      setAnalysisPopoverOpen(!analysisPopoverOpen);
       return;
     }
-
-    setIsAnalyzing(true);
-
-    try {
-      const response = await analyzeText({
-        content: text,
-        type: 'paragraph'
-      });
-      setAnalysisResult(response.data);
-    } catch (error) {
-      console.error('Analysis error:', error);
-      setAnalysisResult(null);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  }, [getSelectedText]);
+    
+    // If no analysis has been run yet, show the popover with instructions
+    setAnalysisPopoverOpen(true);
+  }, [analysisResult, analysisPopoverOpen]);
 
   // Auto-run analysis when text is selected
   useEffect(() => {
@@ -584,6 +573,8 @@ export default function Editor({
   // Function to run contextual analysis
   const runContextualAnalysis = useCallback(async (targetType: 'coherence' | 'cohesion' | 'focus' | 'all') => {
     if (!editor) return;
+    
+    setIsAnalyzing(true);
     
     try {
       // Get the current selection or current paragraph
@@ -630,6 +621,9 @@ export default function Editor({
         type: analysisType,
         targetType: targetType
       });
+      
+      // Set analysis result for the Analysis button
+      setAnalysisResult(response.data);
       
       // Process the comments from the response
       if (response.data.comments && response.data.comments.length > 0) {
@@ -682,6 +676,10 @@ export default function Editor({
       
     } catch (error) {
       console.error('Error running contextual analysis:', error);
+      toast.error("Analysis failed. Please try again.");
+      setAnalysisResult(null);
+    } finally {
+      setIsAnalyzing(false);
     }
   }, [editor, getSelectedText, getDocumentContent]);
 
@@ -934,14 +932,16 @@ export default function Editor({
                       <LightbulbIcon className="h-3.5 w-3.5" />
                       <span>Insights</span>
                     </Button>
-                    <div className="flex items-center space-x-2">
-                      <div className="relative">
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                    
+                    {/* Analysis Button */}
+                    <Popover open={analysisPopoverOpen} onOpenChange={setAnalysisPopoverOpen}>
+                      <PopoverTrigger asChild>
+                        <Button 
+                          variant={analysisResult ? "secondary" : "ghost"} 
+                          size="sm" 
                           className="h-7 px-3 text-xs flex items-center space-x-1"
+                          onClick={isAnalyzing ? undefined : () => setAnalysisPopoverOpen(!analysisPopoverOpen)}
                           disabled={isAnalyzing}
-                          onClick={runAnalysis}
                         >
                           {isAnalyzing ? (
                             <>
@@ -951,8 +951,8 @@ export default function Editor({
                           ) : (
                             <>
                               <Zap className="h-3.5 w-3.5" />
-                              <span>Analyze</span>
-                              {analysisResult && (
+                              <span>Analysis</span>
+                              {analysisResult && analysisResult.coherence && (
                                 <span className="ml-1 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full text-[10px]">
                                   {formatScore(analysisResult.coherence.score)}
                                 </span>
@@ -960,92 +960,108 @@ export default function Editor({
                             </>
                           )}
                         </Button>
-                        
-                        {/* Analysis Results Dropdown */}
-                        {analysisResult && (
-                          <div className="absolute right-0 mt-2 w-80 rounded-md shadow-lg bg-background border border-border/40 z-50 overflow-hidden">
-                            <div className="p-3 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <h3 className="text-sm font-medium">Analysis Results</h3>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-6 w-6 p-0"
-                                  onClick={() => setAnalysisResult(null)}
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </Button>
+                      </PopoverTrigger>
+                      
+                      <PopoverContent className="w-80 p-3" align="end">
+                        {analysisResult ? (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h3 className="text-sm font-medium">Analysis Results</h3>
+                            </div>
+                            
+                            <div className="space-y-3">
+                              {/* Coherence */}
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <h4 className="text-xs font-medium">Coherence</h4>
+                                  <span className="text-xs px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full">
+                                    {analysisResult && analysisResult.coherence ? formatScore(analysisResult.coherence.score) : '0%'}
+                                  </span>
+                                </div>
+                                {analysisResult && analysisResult.coherence && analysisResult.coherence.issues && analysisResult.coherence.issues.length > 0 ? (
+                                  <ul className="text-xs space-y-1 pl-4 list-disc">
+                                    {analysisResult.coherence.issues.map((issue: any, i: number) => (
+                                      <li key={i}>{issue.issue}</li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground">No coherence issues found!</p>
+                                )}
                               </div>
                               
-                              <div className="space-y-3">
-                                {/* Coherence */}
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <h4 className="text-xs font-medium">Coherence</h4>
-                                    <span className="text-xs px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full">
-                                      {formatScore(analysisResult.coherence.score)}
-                                    </span>
-                                  </div>
-                                  {analysisResult.coherence.issues.length > 0 ? (
-                                    <ul className="text-xs space-y-1 pl-4 list-disc">
-                                      {analysisResult.coherence.issues.map((issue: any, i: number) => (
-                                        <li key={i}>{issue.issue}</li>
-                                      ))}
-                                    </ul>
-                                  ) : (
-                                    <p className="text-xs text-muted-foreground">No coherence issues found!</p>
-                                  )}
+                              {/* Cohesion */}
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <h4 className="text-xs font-medium">Cohesion</h4>
+                                  <span className="text-xs px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full">
+                                    {analysisResult && analysisResult.cohesion ? formatScore(analysisResult.cohesion.score) : '0%'}
+                                  </span>
                                 </div>
-                                
-                                {/* Cohesion */}
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <h4 className="text-xs font-medium">Cohesion</h4>
-                                    <span className="text-xs px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full">
-                                      {formatScore(analysisResult.cohesion.score)}
-                                    </span>
-                                  </div>
-                                  {analysisResult.cohesion.transitions.missing_between.length > 0 ? (
-                                    <ul className="text-xs space-y-1 pl-4 list-disc">
-                                      {analysisResult.cohesion.transitions.missing_between.map((issue: any, i: number) => (
-                                        <li key={i}>Missing transition between sentences</li>
-                                      ))}
-                                    </ul>
-                                  ) : (
-                                    <p className="text-xs text-muted-foreground">No cohesion issues found!</p>
-                                  )}
-                                </div>
-                                
-                                {/* Focus */}
-                                <div className="space-y-1">
-                                  <h4 className="text-xs font-medium">Focus</h4>
-                                  <p className="text-xs">Main idea: {analysisResult.focus.mainIdea}</p>
-                                  {analysisResult.focus.unfocused_elements.length > 0 ? (
-                                    <ul className="text-xs space-y-1 pl-4 list-disc">
-                                      {analysisResult.focus.unfocused_elements.map((element: any, i: number) => (
-                                        <li key={i}>{element.issue}</li>
-                                      ))}
-                                    </ul>
-                                  ) : (
-                                    <p className="text-xs text-muted-foreground">Text is well-focused!</p>
-                                  )}
-                                </div>
+                                {analysisResult && analysisResult.cohesion && analysisResult.cohesion.transitions && 
+                                 analysisResult.cohesion.transitions.missing_between && 
+                                 analysisResult.cohesion.transitions.missing_between.length > 0 ? (
+                                  <ul className="text-xs space-y-1 pl-4 list-disc">
+                                    {analysisResult.cohesion.transitions.missing_between.map((issue: any, i: number) => (
+                                      <li key={i}>Missing transition between sentences</li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground">No cohesion issues found!</p>
+                                )}
+                              </div>
+                              
+                              {/* Focus */}
+                              <div className="space-y-1">
+                                <h4 className="text-xs font-medium">Focus</h4>
+                                <p className="text-xs">Main idea: {analysisResult && analysisResult.focus ? analysisResult.focus.mainIdea : 'Not available'}</p>
+                                {analysisResult && analysisResult.focus && analysisResult.focus.unfocused_elements && 
+                                 analysisResult.focus.unfocused_elements.length > 0 ? (
+                                  <ul className="text-xs space-y-1 pl-4 list-disc">
+                                    {analysisResult.focus.unfocused_elements.map((element: any, i: number) => (
+                                      <li key={i}>{element.issue}</li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground">Text is well-focused!</p>
+                                )}
                               </div>
                             </div>
                           </div>
+                        ) : (
+                          <div className="space-y-4 py-2">
+                            <div className="flex items-center justify-between">
+                              <h3 className="text-sm font-medium">Analysis</h3>
+                            </div>
+                            
+                            <div className="text-sm text-muted-foreground">
+                              <p className="mb-2">No analysis results yet.</p>
+                              <p>Select text to analyze or come back later after manually checking for feedback.</p>
+                            </div>
+                            
+                            <div className="flex justify-end">
+                              <Button 
+                                variant="secondary" 
+                                size="sm" 
+                                className="text-xs"
+                                onClick={() => setAnalysisPopoverOpen(false)}
+                              >
+                                Close
+                              </Button>
+                            </div>
+                          </div>
                         )}
-                      </div>
-                      
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={toggleAIPanel}
-                        className="h-7 px-3 text-xs flex items-center space-x-1"
-                      >
-                        <MessageSquare className="h-3.5 w-3.5" />
-                        <span>Chat</span>
-                      </Button>
-                    </div>
+                      </PopoverContent>
+                    </Popover>
+                    
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={toggleAIPanel}
+                      className="h-7 px-3 text-xs flex items-center space-x-1"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      <span>Chat</span>
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -1165,7 +1181,7 @@ export default function Editor({
                                           setComments(comments.filter(c => c.id !== comment.id));
                                         }}
                                       >
-                                        <X className="h-3 w-3" />
+                                        <Trash2 className="h-3 w-3" />
                                       </Button>
                                     </>
                                   )}

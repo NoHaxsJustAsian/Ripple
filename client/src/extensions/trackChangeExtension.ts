@@ -1,9 +1,7 @@
-import { ReplaceStep, Step } from '@tiptap/pm/transform'
-import { TextSelection, Plugin, PluginKey } from '@tiptap/pm/state'
-import { Slice, Fragment } from '@tiptap/pm/model'
-import { Extension, Mark, getMarkRange, getMarksBetween, isMarkActive, mergeAttributes } from '@tiptap/core'
+import { ReplaceStep } from '@tiptap/pm/transform'
+import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { Extension, Mark, getMarkRange, getMarksBetween, mergeAttributes } from '@tiptap/core'
 import type { CommandProps, Editor, MarkRange } from '@tiptap/core'
-import type { Transaction } from '@tiptap/pm/state'
 
 const LOG_ENABLED = true
 
