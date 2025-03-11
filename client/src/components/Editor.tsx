@@ -74,6 +74,8 @@ export default function Editor({
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [comments, setComments] = useState<CommentType[]>([]);
+  const [essayTopicHighlight, setEssayTopicHighlight] = useState<{from: number, to: number} | null>(null);
+  const [paragraphTopicHighlights, setParagraphTopicHighlights] = useState<{[paragraphId: string]: {from: number, to: number}}>({});
   const commentsSectionRef = useRef<HTMLDivElement | null>(null);
   
   const editor = useEditor({
@@ -117,6 +119,25 @@ export default function Editor({
           "[&>div]:max-w-[666px]"
         ),
       },
+      handleKeyDown: (view: EditorView, event: KeyboardEvent) => {
+        // Check if it's a content-modifying key (letter, number, space, delete, etc.)
+        const isContentModifying = (
+          // Single letters, numbers or special chars
+          (event.key.length === 1 && !event.ctrlKey && !event.metaKey) ||
+          // Space, backspace, delete
+          event.key === ' ' || 
+          event.key === 'Backspace' || 
+          event.key === 'Delete'
+        );
+        
+        if (isContentModifying) {
+          // Preemptively remove highlight at the cursor position
+          // This happens before the character is inserted
+          editor?.chain().unsetHighlight().run();
+        }
+        
+        return false; // Let the default handler run
+      },
       handlePaste: (view: EditorView, event: ClipboardEvent) => {
         const clipboardData = event.clipboardData;
         if (!clipboardData) return false;
@@ -131,9 +152,22 @@ export default function Editor({
         }
       },
     },
-    onUpdate: ({ editor }) => {
+    onUpdate: ({ editor, transaction }) => {
       const html = editor.getHTML();
       onEditorChange?.(html);
+      // Clear the selected insight when user types
+      setSelectedInsight(null);
+      
+      // If this update was triggered by the user typing (not by a programmatic change),
+      // we should remove any highlighting at the current cursor position
+      if (transaction.docChanged && transaction.steps.some(step => step.toJSON().stepType === 'replace')) {
+        // Get the current selection position
+        const { from } = editor.state.selection;
+        
+        // Remove highlight at the cursor position
+        // This approach removes highlighting from the current node where typing is happening
+        editor.chain().unsetHighlight().run();
+      }
     },
   });
 
@@ -163,11 +197,38 @@ export default function Editor({
     
     const text = editor.state.doc.textBetween(from, to);
     
-    editor.chain()
-      .setHighlight({ color: '#93c5fd' })
-      .setTextSelection(to)
-      .run();
-  }, [editor]);
+    // Get the paragraph node that contains the selection
+    const resolvedPos = editor.state.doc.resolve(from);
+    const paragraph = resolvedPos.node(1); // Assuming paragraphs are at depth 1
+    
+    if (paragraph) {
+      const paragraphId = paragraph.attrs.id || resolvedPos.before(1).toString();
+      
+      // Remove any existing paragraph topic highlight in this paragraph
+      if (paragraphTopicHighlights[paragraphId]) {
+        const existingHighlight = paragraphTopicHighlights[paragraphId];
+        
+        // Try to remove the existing highlight
+        editor.chain()
+          .setTextSelection({ from: existingHighlight.from, to: existingHighlight.to })
+          .unsetHighlight()
+          .setTextSelection({ from, to }) // Restore original selection
+          .run();
+      }
+      
+      // Apply the new highlight
+      editor.chain()
+        .setHighlight({ color: '#93c5fd' })
+        .setTextSelection(to)
+        .run();
+      
+      // Update the state with the new paragraph topic position
+      setParagraphTopicHighlights(prev => ({ 
+        ...prev, 
+        [paragraphId]: { from, to } 
+      }));
+    }
+  }, [editor, paragraphTopicHighlights]);
 
   const handleSelectAsEssayTopic = useCallback(() => {
     if (!editor) return;
@@ -177,11 +238,25 @@ export default function Editor({
     
     const text = editor.state.doc.textBetween(from, to);
     
+    // Remove any existing essay topic highlight
+    if (essayTopicHighlight) {
+      // Try to remove the existing highlight
+      editor.chain()
+        .setTextSelection({ from: essayTopicHighlight.from, to: essayTopicHighlight.to })
+        .unsetHighlight()
+        .setTextSelection({ from, to }) // Restore original selection
+        .run();
+    }
+    
+    // Apply the new highlight
     editor.chain()
       .setHighlight({ color: '#c4b5fd' })
       .setTextSelection(to)
       .run();
-  }, [editor]);
+    
+    // Update the state with the new essay topic position
+    setEssayTopicHighlight({ from, to });
+  }, [editor, essayTopicHighlight]);
 
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
   const [isEditingComment, setIsEditingComment] = useState(false);
