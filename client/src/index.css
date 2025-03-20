@@ -105,3 +105,13 @@
 .dark .svg-theme {
   filter: invert(100%); /* Inverts the color to white in dark mode */
 }
+
+/* Custom dotted underline */
+.tiptap-underline-dotted {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 2.2px;
+  text-underline-offset: 4.5px; 
+  text-decoration-color: rgb(0, 52, 100);
+  color: rgb(0, 98, 128);
+}

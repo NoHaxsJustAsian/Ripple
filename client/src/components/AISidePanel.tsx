@@ -13,6 +13,7 @@ interface AISidePanelProps {
 export function AISidePanel({ isOpen, onClose, className }: AISidePanelProps) {
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false); // Loading state
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -24,11 +25,42 @@ export function AISidePanel({ isOpen, onClose, className }: AISidePanelProps) {
     }
   }, [isOpen]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (input.trim()) {
-      setMessages([...messages, { role: 'user', content: input.trim() }]);
+      const userMessage: { role: 'user' | 'assistant'; content: string } = { role: 'user', content: input.trim() };
+      setMessages((prev) => [...prev, userMessage]);
       setInput('');
-      // TODO: Add AI response handling
+      setIsLoading(true);
+  
+      try {
+        const response = await fetch('http://127.0.0.1:5000/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            system_message: "You are a helpful assistant.",
+            user_prompt: input.trim(),
+          }),
+        });
+        console.log("Backend response status:", response.status);  // Log the response status
+        if (!response.ok) {
+          throw new Error('Failed to fetch AI response');
+        }
+  
+        const data = await response.json();
+        console.log("Backend response data:", data);  // Log the response data
+        const aiMessage: { role: 'user' | 'assistant'; content: string } = { role: 'assistant', content: data.response };
+        setMessages((prev) => [...prev, aiMessage]);
+      } catch (error) {
+        console.error('Error fetching AI response:', error);
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' },
+        ]);
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -58,10 +90,13 @@ export function AISidePanel({ isOpen, onClose, className }: AISidePanelProps) {
       <div className="flex flex-col h-[calc(100%-3rem)]">
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.map((message, index) => (
-            <Card key={index} className={cn(
-              "w-full",
-              message.role === 'assistant' && "bg-muted"
-            )}>
+            <Card
+              key={index}
+              className={cn(
+                "w-full",
+                message.role === 'assistant' && "bg-muted"
+              )}
+            >
               <CardContent className="p-3">
                 <div className="flex items-start space-x-2">
                   <MessageSquare className="h-4 w-4 mt-0.5" />
@@ -70,6 +105,16 @@ export function AISidePanel({ isOpen, onClose, className }: AISidePanelProps) {
               </CardContent>
             </Card>
           ))}
+          {isLoading && (
+            <Card className="w-full bg-muted">
+              <CardContent className="p-3">
+                <div className="flex items-start space-x-2">
+                  <MessageSquare className="h-4 w-4 mt-0.5" />
+                  <p className="text-sm">Thinking...</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <div className="p-4 border-t border-border/40">
@@ -89,7 +134,7 @@ export function AISidePanel({ isOpen, onClose, className }: AISidePanelProps) {
               <Button
                 size="sm"
                 onClick={handleSubmit}
-                disabled={!input.trim()}
+                disabled={!input.trim() || isLoading}
                 className="h-7 text-xs"
               >
                 Send
@@ -100,4 +145,4 @@ export function AISidePanel({ isOpen, onClose, className }: AISidePanelProps) {
       </div>
     </div>
   );
-} 
+}

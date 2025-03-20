@@ -1,31 +1,24 @@
-import { $getRoot, $getSelection, $isRangeSelection } from 'lexical';
-
-/**
- * Updates highlighted text based on selected topic filters.
- * @param {string[]} items - The selected items from the dropdown.
- * @param {LexicalEditor} editor - The Lexical editor instance.
- */
+// highlightUtils.tsx
 export const updateHighlightedText = (items: string[], editor: any) => {
-  if (!editor) return;
+  if (!editor) {
+    console.error("Editor is not available.");
+    return;
+  }
 
-  editor.update(() => {
-    const root = $getRoot();
-    const selection = $getSelection();
+  const hasParagraphTopic = items.includes("Paragraph Topics");
+  const hasEssayTopic = items.includes("Essay Topics");
 
-    if (!$isRangeSelection(selection)) return;
+  // Toggle paragraph topic highlights
+  if (hasParagraphTopic) {
+    editor.chain().focus().setHighlight({ color: '#fef9c3' }).run();
+  } else {
+    editor.chain().focus().unsetHighlight().run();
+  }
 
-    const nodes = root.getChildren();
-
-    nodes.forEach((node) => {
-      if (node.getTextContent().includes("Topic Sentence")) { 
-        if (items.includes("Paragraph Topics")) {
-          (node as any).setStyle("background-color: #93c5fd"); // Apply blue highlight
-        } else if (items.includes("Essay Topics")) {
-          (node as any).setStyle("background-color: #c4b5fd"); // Apply purple highlight
-        } else {
-          (node as any).setStyle("background-color: transparent"); // Remove highlight
-        }
-      }
-    });
-  });
+  // Toggle essay topic underlines
+  if (hasEssayTopic) {
+    editor.chain().focus().setUnderline().run();
+  } else {
+    editor.chain().focus().unsetUnderline().run();
+  }
 };

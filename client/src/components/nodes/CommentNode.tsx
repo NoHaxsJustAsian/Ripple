@@ -37,15 +37,15 @@ export class CommentNode extends TextNode {
     return isUpdated;
   }
 
-  static importJSON(serializedNode: SerializedCommentNode): CommentNode {
-    const node = $createCommentNode(serializedNode.commentId, serializedNode.text);
-    node.setTextContent(serializedNode.text);
-    node.setFormat(serializedNode.format);
-    node.setDetail(serializedNode.detail);
-    node.setMode(serializedNode.mode);
-    node.setStyle(serializedNode.style);
-    return node;
-  }
+  // static importJSON(serializedNode: SerializedCommentNode): CommentNode {
+  //   const node = $createCommentNode(serializedNode.commentId, serializedNode.text);
+  //   node.setTextContent(serializedNode.text);
+  //   node.setFormat(serializedNode.format);
+  //   node.setDetail(serializedNode.detail);
+  //   node.setMode(serializedNode.mode);
+  //   node.setStyle(serializedNode.style);
+  //   return node;
+  // }
 
   exportJSON(): SerializedCommentNode {
     return {
@@ -61,7 +61,3 @@ export class CommentNode extends TextNode {
     return this.__originalText;
   }
 }
-
-export function $createCommentNode(commentId: string, originalText: string): CommentNode {
-  return new CommentNode(originalText, commentId, originalText, undefined);
-} 

@@ -8,8 +8,9 @@ import { useEffect, useState, useCallback, useRef, useContext, createContext } f
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ModeToggle } from '@/components/ui/mode-toggle';
+import { Mark } from '@tiptap/core';
 import { cn } from "@/lib/utils";
-import { MessageSquare, LightbulbIcon, Save, FileDown, X, Pencil, Trash2, Check } from 'lucide-react';
+import { MessageSquare, LightbulbIcon, Save, FileDown, X, Pencil, Trash2, Check, PlayIcon } from 'lucide-react';
 import { AISidePanel } from './AISidePanel';
 import { AIContextMenu } from './AIContextMenu';
 import { EditorToolbar } from './EditorToolbar';
@@ -20,6 +21,7 @@ import { EditorView } from 'prosemirror-view';
 import { CommentExtension } from '../extensions/Comment';
 import { SuggestEditExtension } from '../extensions/SuggestEdit';
 import '@/styles/comment.css';
+import React from 'react';
 
 interface EditorProps {
   className?: string;
@@ -55,6 +57,16 @@ interface CommentType {
   suggestedEdit?: SuggestedEdit;
 }
 
+const CustomUnderline = Underline.extend({
+  addAttributes() {
+    return {
+      class: {
+        default: 'tiptap-underline-dotted',
+      },
+    };
+  },
+});
+
 // Create a context for insights
 export const InsightsContext = createContext<[AIInsight[], React.Dispatch<React.SetStateAction<AIInsight[]>>]>([[], () => {}]);
 
@@ -76,14 +88,57 @@ export default function Editor({
   const [comments, setComments] = useState<CommentType[]>([]);
   const commentsSectionRef = useRef<HTMLDivElement | null>(null);
   
+  const StyleMark = Mark.create({
+    name: 'styleMark', // Name of the mark
+    addAttributes() {
+      return {
+        style: {
+          default: 'none', // Default style is 'none'
+        },
+        color: {
+          default: 'transparent', // Default color is transparent
+          renderHTML: (attrs) => {
+            const styleToColor = {
+              para: '#fef9c3', // Yellow
+              essay: '#93c5fd', // Blue
+              both: '#86efac', // Green
+              none: 'transparent', // No color
+            };
+            return { style: `background-color: ${styleToColor[attrs.style as 'para' | 'essay' | 'both' | 'none']}` };
+          },
+        },
+      };
+    },
+    parseHTML() {
+      return [
+        {
+          tag: 'span[data-style]',
+          getAttrs: (dom) => ({
+            style: dom.getAttribute('data-style'),
+          }),
+        },
+      ];
+    },
+    renderHTML({ mark }) {
+      return ['span', { 'data-style': mark.attrs.style, style: `background-color: ${mark.attrs.color}` }, 0];
+    },
+  });
+
   const editor = useEditor({
     extensions: [
       StarterKit,
+      CustomUnderline,
       Highlight.configure({
         multicolor: true,
+        HTMLAttributes: {
+          color: null,
+          type: null,
+        },
       }),
       TextStyle,
       Color,
+      StyleMark,
+      TextStyle,
       Underline,
       CommentExtension.configure({
         HTMLAttributes: {
@@ -100,7 +155,6 @@ export default function Editor({
         },
         onSuggestEdit: (original: string, suggested: string) => {
           console.log('Suggested edit:', { original, suggested });
-          // You can add your own logic here to handle suggested edits
         },
       }),
     ],
@@ -134,9 +188,46 @@ export default function Editor({
     onUpdate: ({ editor }) => {
       const html = editor.getHTML();
       onEditorChange?.(html);
+      const text = editor.getText();
+      // Log the text to the console (for debugging)
+      console.log("Text in editor:", text);
+      // analyzeTextForPOS(text);
     },
   });
 
+  async function checkEssay() {
+    const essayText = editor?.getHTML() || ''; // Get the essay content from the editor
+
+    try {
+        const systemMessage = "You are an expert writing assistant.";
+        const userPrompt = `Your task is to provide feedback on the coherence and cohesion of the provided essay. You only need to provide feedback on sentences that lack cohesion and coherence; thus, do not give feedback for every single sentence. Format your suggestions using the following JSON format:"original_sentence": "The original sentence that requires feedback.", "revised_sentence": "The improved version of the sentence.", "suggestion": "Suggestions explaining why the original sentence should be edited to the revised sentence. 
+        
+        Please analyze this essay: ${essayText}`;
+
+        const response = await fetch('http://localhost:5000/api/check-essay', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                system_message: systemMessage, // Optional: You can hardcode this or make it dynamic
+                user_prompt: userPrompt,       // Include the essayText in the user_prompt
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error}`);
+        }
+
+        const data = await response.json();
+        console.log("Analysis result:", data.response); // Log the response from the backend
+    } catch (error) {
+        console.error("Error checking essay:", error);
+    }
+}
+
+  
   const handleToolbarComment = useCallback(() => {
     if (!editor) return;
     
@@ -157,31 +248,15 @@ export default function Editor({
 
   const handleSelectAsParagraphTopic = useCallback(() => {
     if (!editor) return;
-    
-    const { from, to } = editor.state.selection;
-    if (from === to) return; // No selection
-    
-    const text = editor.state.doc.textBetween(from, to);
-    
-    editor.chain()
-      .setHighlight({ color: '#93c5fd' })
-      .setTextSelection(to)
-      .run();
+    highlightTopicSentence('para');
   }, [editor]);
+  
 
   const handleSelectAsEssayTopic = useCallback(() => {
     if (!editor) return;
-    
-    const { from, to } = editor.state.selection;
-    if (from === to) return; // No selection
-    
-    const text = editor.state.doc.textBetween(from, to);
-    
-    editor.chain()
-      .setHighlight({ color: '#c4b5fd' })
-      .setTextSelection(to)
-      .run();
+    highlightTopicSentence('essay');
   }, [editor]);
+  
 
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
   const [isEditingComment, setIsEditingComment] = useState(false);
@@ -268,7 +343,23 @@ export default function Editor({
 
   const handleSelectionChange = (items: string[]) => {
     setSelectedItems(items);
-    updateHighlightedText(items, Editor);
+    updateHighlightedText(items, editor);
+  
+    // Toggle visibility based on selected items
+    if (editor) {
+      const hasParagraphTopic = items.includes("Paragraph Topics");
+      const hasEssayTopic = items.includes("Essay Topics");
+  
+      // Toggle paragraph topic highlights
+      editor.commands.setHighlight({ color: hasParagraphTopic ? '#fef9c3' : 'transparent' });
+  
+      // Toggle essay topic underlines
+      if (hasEssayTopic) {
+        editor.commands.setUnderline();
+      } else {
+        editor.commands.unsetUnderline();
+      }
+    }
   };
 
   const toggleAIPanel = () => {
@@ -276,6 +367,8 @@ export default function Editor({
   };
 
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [selectedTopicItems, setSelectedTopicItems] = React.useState<string[]>([]);
+  const [selectedFeedbackItems, setSelectedFeedbackItems] = React.useState<string[]>([]);
 
   const topic_items = [
     { id: "1", label: "Paragraph Topics" },
@@ -412,6 +505,129 @@ export default function Editor({
     }, 50);
   }, [editor]);
 
+  const analyzeTextForPOS = async (text: string) => {
+    try {
+      const response = await fetch('/analyze-pos', {  
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text }),
+      });
+  
+      const data = await response.json();
+      console.log("POS Tags from Backend:", data.pos_tags);
+    } catch (error) {
+      console.error("Error analyzing text:", error);
+    }
+  };
+
+  const getHighlightedSegments = () => {
+    if (!editor) {
+      console.error("Editor is not available.");
+      return [];
+    }
+  
+    const segments: Array<{
+      text: string; // The highlighted text
+      from: number; // Start position of the highlight
+      to: number;   // End position of the highlight
+      type: 'para' | 'essay'; // Type of highlight
+    }> = [];
+  
+    // Traverse the document
+    editor.state.doc.descendants((node, pos) => {
+      if (node.isText) {
+        // Check for Highlight marks (para)
+        const highlightMark = node.marks.find(mark => mark.type.name === 'highlight');
+        if (highlightMark) {
+          segments.push({
+            text: node.text || '',
+            from: pos,
+            to: pos + node.nodeSize,
+            type: 'para', // Highlight represents 'para'
+          });
+        }
+  
+        // Check for Underline marks (essay)
+        const underlineMark = node.marks.find(mark => mark.type.name === 'underline');
+        if (underlineMark) {
+          segments.push({
+            text: node.text || '',
+            from: pos,
+            to: pos + node.nodeSize,
+            type: 'essay', // Underline represents 'essay'
+          });
+        }
+      }
+    });
+  
+    return segments;
+  };
+
+  const highlightTopicSentence = useCallback(async (styleToToggle: 'para' | 'essay') => {
+    if (!editor) {
+      console.error("Editor is not available.");
+      return;
+    }
+  
+    const { from, to } = editor.state.selection;
+    if (from === to) {
+      console.log("No text selected.");
+      return; // No selection
+    }
+  
+    console.log(`Toggling style: ${styleToToggle} from ${from} to ${to}`);
+  
+    if (styleToToggle === 'para') {
+      // Toggle the 'para' style (yellow highlight)
+      const hasPara = editor.state.doc.rangeHasMark(from, to, editor.schema.marks.highlight);
+  
+      if (hasPara) {
+        // Remove the highlight
+        editor.chain().focus().unsetHighlight().run();
+      } else {
+        // Add the highlight (yellow)
+        editor.chain().focus().setHighlight({ color: '#fef9c3' }).run();
+      }
+    } else if (styleToToggle === 'essay') {
+      // Toggle the 'essay' style (dotted underline)
+      const hasEssay = editor.state.doc.rangeHasMark(from, to, editor.schema.marks.underline);
+  
+      if (hasEssay) {
+        // Remove the underline
+        editor.chain().focus().unsetUnderline().run();
+      } else {
+        // Add the underline (dotted)
+        editor.chain().focus().setUnderline().run();
+      }
+    }
+     // Retrieve the updated list of highlighted segments
+    const highlightedSegments = getHighlightedSegments();
+    console.log("Updated Highlighted Segments:", highlightedSegments);
+
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/highlighted-segments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ segments: highlightedSegments }),
+      });
+  
+      if (!response.ok) {
+        throw new Error('Failed to send highlighted segments to the backend');
+      }
+  
+      const data = await response.json();
+      console.log("Backend response:", data);
+      toast.success("Highlighted segments saved successfully");
+    } catch (error) {
+      console.error("Error sending highlighted segments to the backend:", error);
+      toast.error("Failed to save highlighted segments");
+    }
+  }, [editor]);
+
   const handleSuggestEdit = useCallback(() => {
     if (!editor) return;
     
@@ -444,6 +660,7 @@ export default function Editor({
         textarea.focus();
       }
     }, 50);
+    
   }, [editor]);
 
   return (
@@ -503,7 +720,7 @@ export default function Editor({
                         label="View Topic Sentences"
                         items={topic_items}
                         selectedItems={selectedItems}
-                        onSelectedItemsChange={handleSelectionChange}
+                        onSelectedItemsChange={setSelectedTopicItems}
                       />
                       <DropdownMenuWithCheckboxes
                         label="Check for Feedback"
@@ -511,6 +728,15 @@ export default function Editor({
                         selectedItems={selectedItems}
                         onSelectedItemsChange={handleSelectionChange}
                       />
+                      <Button
+                        variant={isInsightsOpen ? "secondary" : "ghost"}
+                        size="sm"
+                        onClick={checkEssay}
+                        className="h-7 px-3 text-xs flex items-center space-x-1"
+                      >
+                        <PlayIcon className="h-3.5 w-3.5" />
+                        <span>Run Checker</span>
+                      </Button>
                     </div>
                     <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
                     <Button

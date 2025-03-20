@@ -7,7 +7,6 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { Check, ChevronDown, MessageSquare, Edit } from 'lucide-react';
-import { cn } from "@/lib/utils";
 
 const FONT_SIZES = {
   'Small': '9pt',

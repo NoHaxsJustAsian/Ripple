@@ -19,6 +19,10 @@ declare module '@tiptap/core' {
        * Remove a suggested edit
        */
       removeSuggestEdit: () => ReturnType;
+      /**
+       * Get the suggested edit for a specific range
+       */
+      getSuggestedEdit: (from: number, to: number) => ReturnType;
     };
   }
 }
@@ -101,6 +105,20 @@ export const SuggestEditExtension = Extension.create<SuggestEditOptions>({
             .unsetMark('suggestEdit')
             .run();
         },
+      getSuggestedEdit:
+        (from: number, to: number) =>
+        ({ state }) => {
+          const node = state.doc.nodeAt(from);
+          if (!node) return null;
+
+          const suggestEditMark = node.marks.find(mark => mark.type.name === 'suggestEdit');
+          if (!suggestEditMark) return null;
+
+          return {
+            id: suggestEditMark.attrs.id,
+            suggestion: suggestEditMark.attrs.suggestion,
+          };
+        },
     };
   },
 
@@ -154,4 +172,4 @@ export const SuggestEditExtension = Extension.create<SuggestEditOptions>({
       }),
     ];
   },
-}); 
+});
