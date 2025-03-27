@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from openai import OpenAI
+from openai import AzureOpenAI
 from dotenv import load_dotenv
 import os
 import json
@@ -9,14 +9,23 @@ from typing import Dict, List, Optional, Union, Literal
 
 load_dotenv()
 HOSTNAME = os.getenv('HOSTNAME')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+# OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
+# get configuration settings 
+azure_openai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+azure_openai_key = os.getenv("AZURE_OPENAI_KEY")
+azure_deployment = "PROPILOT"
+
+# initialize the Azure OpenAI client...
+client = AzureOpenAI(
+        azure_endpoint = azure_openai_endpoint, 
+        api_key = azure_openai_key,  
+        api_version = "2024-05-01-preview"
+)
 
 # Initialize Flask app
 app = Flask(__name__)
 CORS(app, supports_credentials=True, origins=[HOSTNAME])
-
-# Initialize OpenAI client
-client = OpenAI(api_key=OPENAI_API_KEY)
 
 # Custom exceptions
 class DocumentProcessingError(Exception):
@@ -73,7 +82,7 @@ class AnalysisPrompts:
         }
     }"""
 
-    SECTION = """You are an expert writing assistant analyzing a section of text.
+    CUSTOM = """You are an expert writing assistant analyzing a section of text.
     Focus on section-level coherence and thematic consistency:
     1. Evaluate how paragraphs connect and build upon each other
     2. Check if the section maintains its theme throughout
@@ -121,7 +130,7 @@ class AnalysisPrompts:
         }
     }"""
 
-    DOCUMENT = """You are an expert writing assistant analyzing an entire document.
+    ALL = """You are an expert writing assistant analyzing an entire document.
     Focus on overall document coherence and structure:
     1. Evaluate the logical progression of ideas throughout the document
     2. Assess thematic consistency across all sections
@@ -170,40 +179,6 @@ class AnalysisPrompts:
         }
     }"""
 
-    THEME_CHECK = """You are an expert writing assistant checking for thematic consistency.
-    Focus on how well the content aligns with the specified theme/topic:
-    1. Evaluate relevance to the main theme
-    2. Identify any tangents or deviations
-    3. Suggest ways to better align with the theme
-    
-    For each issue found, you MUST quote the exact text that needs attention.
-    
-    Provide analysis in the following format:
-    {
-        "theme_alignment": {
-            "score": float (0-1),
-            "deviations": [
-                {
-                    "text": string (exact quote of deviating content),
-                    "issue": string (how it deviates from theme),
-                    "suggestion": string (how to align with theme),
-                    "highlight_color": "#fef9c3" // yellow highlight for theme deviations
-                }
-            ]
-        },
-        "relevance": {
-            "score": float (0-1),
-            "irrelevant_elements": [
-                {
-                    "text": string (exact quote of irrelevant content),
-                    "issue": string (why it's not relevant),
-                    "suggestion": string (how to make it relevant),
-                    "highlight_color": "#93c5fd" // blue highlight for relevance issues
-                }
-            ]
-        }
-    }"""
-
 
 
 def analyze_text(
@@ -235,7 +210,7 @@ def analyze_text(
 
         # Make OpenAI API call
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="azure_deployment",
             messages=[
                 {
                     "role": "system",
@@ -327,7 +302,8 @@ Format each comment as:
   "highlightStyle": "#COLORCODE",
   "suggestedEdit": {{
     "original": "Original text with issue",
-    "suggested": "Improved version"
+    "suggested": "Improved version",
+    "explanation": "Brief reason for the change, directly mentioning coherence or cohesion"
   }}
 }}
 
@@ -341,7 +317,7 @@ Return an array of comments in JSON format.
 
         # Make OpenAI API call
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=azure_deployment,
             messages=[
                 {
                     "role": "system",
@@ -416,7 +392,7 @@ def handle_chat_message(message: str, document_context: Optional[str] = None) ->
         
         # Make OpenAI API call
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=azure_deployment,
             messages=messages,
             max_tokens=1000,
             temperature=0.7  # Slightly higher temperature for more creative responses
@@ -507,8 +483,8 @@ def analyze_with_context():
     {
         "content": string,         // The specific content to analyze
         "fullContext": string,     // The full document for context
-        "type": "paragraph" | "section" | "document" | "theme",
-        "targetType": "coherence" | "cohesion" | "focus" | "all"
+        "type": "paragraph" | "sentence" | "all" | "custom",
+        "targetType": "coherence" | "cohesion" | "both"
     }
     
     Returns:
@@ -533,17 +509,17 @@ def analyze_with_context():
                 "code": "EMPTY_CONTENT"
             }), 400
 
-        if analysis_type not in ["paragraph", "section", "document", "theme"]:
-            return jsonify({
-                "error": "Invalid analysis type",
-                "code": "INVALID_TYPE"
-            }), 400
+        # if analysis_type not in ["paragraph", "section", "document", "theme"]:
+        #     return jsonify({
+        #         "error": "Invalid analysis type",
+        #         "code": "INVALID_TYPE"
+        #     }), 400
             
-        if target_type not in ["coherence", "cohesion", "focus", "all"]:
-            return jsonify({
-                "error": "Invalid target type",
-                "code": "INVALID_TARGET_TYPE"
-            }), 400
+        # if target_type not in ["coherence", "cohesion", "focus", "all"]:
+        #     return jsonify({
+        #         "error": "Invalid target type",
+        #         "code": "INVALID_TARGET_TYPE"
+        #     }), 400
 
         # Analyze the text content with context
         analysis_data = analyze_text_with_context(content, full_context, analysis_type, target_type)
