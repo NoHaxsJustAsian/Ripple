@@ -194,6 +194,17 @@ export function EditorToolbar({
               <FileText className="h-3.5 w-3.5 mr-1" />
               <span>Essay Topics</span>
             </Button>
+
+            <Button
+              variant={"secondary"}
+              size="sm"
+              // onClick={onToggleParagraphTopics}
+              className="h-8 px-3 text-xs flex items-center space-x-1"
+              // title="Show paragraph topic sentences"
+            >
+              {/* <List className="h-3.5 w-3.5 mr-1" /> */}
+              <span>Custom Selection</span>
+            </Button>
           </div>
           
           <div className="h-4 w-px bg-border/40" />

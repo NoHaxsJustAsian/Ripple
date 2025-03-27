@@ -169,6 +169,7 @@ export type ActionItemType = {
   value: string;
   label: string;
   icon?: React.ReactNode;
+  className?: string;
   action: () => void;
 };
 
@@ -222,10 +223,10 @@ export function ActionSelect({
         ) : (
           items.map((item) => (
             <DropdownMenuItem
-              key={item.value}
-              onClick={() => handleSelect(item)}
-              className="flex items-center cursor-pointer"
-            >
+                key={item.value}
+                onClick={() => handleSelect(item)}
+                className={`flex items-center cursor-pointer ${item.className}`}
+              >
               {item.icon && <span className="mr-2">{item.icon}</span>}
               {item.label}
             </DropdownMenuItem>

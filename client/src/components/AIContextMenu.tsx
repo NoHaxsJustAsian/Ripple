@@ -10,10 +10,11 @@ import {
 } from "@/components/ui/context-menu";
 import { ContextMenuSeparator } from '@radix-ui/react-context-menu';
 
-interface CommentType {
+export interface CommentType {
   id: string;
   content: string;
   createdAt: Date;
+  createdAtTime: Date;
   quotedText: string;
 }
 

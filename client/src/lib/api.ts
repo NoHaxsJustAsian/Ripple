@@ -5,7 +5,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 // Interface for analysis request
 interface AnalysisRequest {
   content: string;
-  type: 'paragraph' | 'section' | 'document' | 'theme';
+  type: 'paragraph' | 'custom' | 'all';
   theme?: string;
 }
 
@@ -13,8 +13,8 @@ interface AnalysisRequest {
 interface ContextualAnalysisRequest {
   content: string;          // The specific section/paragraph to analyze
   fullContext: string;      // The entire document for context
-  type: 'paragraph' | 'section' | 'document' | 'theme';
-  targetType: 'coherence' | 'cohesion' | 'focus' | 'all';
+  type: 'paragraph' | 'all' | 'custom';
+  targetType: 'coherence' | 'cohesion' | 'both';
 }
 
 // Interface for analysis response
@@ -33,6 +33,7 @@ interface ContextualAnalysisResponse {
       highlightedText: string;
       highlightStyle: string;
       suggestedEdit?: {
+        explanation: string;
         original: string;
         suggested: string;
       };

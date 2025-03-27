@@ -20,7 +20,14 @@ import { CommentExtension } from '../extensions/Comment';
 import { SuggestEditExtension } from '../extensions/SuggestEdit';
 import '@/styles/comment.css';
 import { analyzeTextWithContext } from '@/lib/api';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Filter } from "lucide-react";
 
 interface EditorProps {
   className?: string;
@@ -46,12 +53,14 @@ interface PendingComment {
 interface SuggestedEdit {
   original: string;
   suggested: string;
+  explanation: string;
 }
 
 interface CommentType {
   id: string;
   content: string;
   createdAt: Date;
+  createdAtTime: Date;
   quotedText: string;
   suggestedEdit?: SuggestedEdit;
 }
@@ -84,6 +93,7 @@ export default function Editor({
   const [showParagraphTopics, setShowParagraphTopics] = useState(false);
   const [showEssayTopics, setShowEssayTopics] = useState(false);
   const [analysisPopoverOpen, setAnalysisPopoverOpen] = useState(false);
+  const [isDeletionCollapsed, setIsDeletionCollapsed] = useState(false);
   
   const editor = useEditor({
     extensions: [
@@ -571,48 +581,76 @@ export default function Editor({
   }, [editor]);
 
   // Function to run contextual analysis
-  const runContextualAnalysis = useCallback(async (targetType: 'coherence' | 'cohesion' | 'focus' | 'all') => {
+  const runContextualAnalysis = useCallback(async (analysisType: 'all' | 'paragraph' | 'custom') => {
     if (!editor) return;
     
     setIsAnalyzing(true);
     
     try {
-      // Get the current selection or current paragraph
-      let selectedContent = getSelectedText();
-      let analysisType: 'paragraph' | 'section' = 'paragraph';
+      let selectedContent = '';
+      let targetType: 'coherence' | 'cohesion' | 'both' = 'both';
       
-      // If no text is selected, try to get the current paragraph
-      if (!selectedContent) {
-        const { from } = editor.state.selection;
-        const resolvedPos = editor.state.doc.resolve(from);
-        const paragraph = resolvedPos.parent;
-        
-        if (paragraph) {
-          selectedContent = paragraph.textContent;
-          // Find the start and end positions of the paragraph
-          const paragraphStart = resolvedPos.start();
-          const paragraphEnd = paragraphStart + paragraph.nodeSize - 2;
+      // Handle each analysis type differently
+      switch (analysisType) {
+        case 'all':
+          // Select entire document content
+          editor.chain().focus().selectAll().run();
+          selectedContent = editor.state.doc.textContent;
+          break;
           
-          // Set the selection to the paragraph
-          editor.chain().setTextSelection({
-            from: paragraphStart,
-            to: paragraphEnd
-          }).run();
+        case 'custom':
+          // Use existing selection
+          selectedContent = editor.state.doc.textBetween(
+            editor.state.selection.from,
+            editor.state.selection.to
+          );
+          if (!selectedContent) {
+            toast.warning("Please make a Custom Selection first.");
+            return;
+          }
+          break;
+          
+        case 'paragraph': {
+          // Get current paragraph
+          // const { $from } = editor.state.selection;
+          // let depth = $from.depth;
+          // let paragraphNode = null;
+          
+          // // Find the paragraph node
+          // while (depth > 0) {
+          //   const node = $from.node(depth);
+          //   if (node.type.name === 'paragraph') {
+          //     paragraphNode = node;
+          //     break;
+          //   }
+          //   depth--;
+          // }
+          
+          // if (!paragraphNode) {
+          //   toast.warning("No paragraph found at cursor position");
+          //   return;
+          // }
+          
+          // const startPos = $from.start(depth);
+          // const endPos = startPos + paragraphNode.nodeSize;
+          
+          // editor.chain()
+          //   .setTextSelection({ from: startPos, to: endPos })
+          //   .run();
+            
+          // selectedContent = paragraphNode.textContent;
+          // break;
+          toast.warning("Paragraph analysis is not yet supported.");
         }
       }
       
       if (!selectedContent) {
-        console.error('No content selected or paragraph found');
+        console.error('No content selected for analysis');
         return;
       }
       
-      // Depending on the selection size, determine if it's a paragraph or section
-      if (selectedContent.length > 500) {
-        analysisType = 'section';
-      }
-      
       // Get full document content for context
-      const fullContent = getDocumentContent();
+      const fullContent = editor.state.doc.textContent;
       
       // Call API with context
       const response = await analyzeTextWithContext({
@@ -622,14 +660,13 @@ export default function Editor({
         targetType: targetType
       });
       
-      // Set analysis result for the Analysis button
+      // Process the response
       setAnalysisResult(response.data);
       
-      // Process the comments from the response
-      if (response.data.comments && response.data.comments.length > 0) {
-        // Add each comment to the editor
+      if (response.data.comments?.length > 0) {
+        const newComments: CommentType[] = [];
+        
         response.data.comments.forEach(comment => {
-          // Find the text to highlight
           const textToFind = comment.highlightedText;
           let commentPosition = null;
           
@@ -640,38 +677,38 @@ export default function Editor({
               const startPos = pos + nodeText.indexOf(textToFind);
               const endPos = startPos + textToFind.length;
               commentPosition = { from: startPos, to: endPos };
-              return false; // Stop the traversal
+              return false; // Stop traversal
             }
           });
           
           if (commentPosition) {
-            // Add the comment at the found position
             const commentId = `comment-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
             
-            // Create the comment with or without a suggested edit
             const newComment: CommentType = {
               id: commentId,
               content: comment.text,
               createdAt: new Date(),
+              createdAtTime: new Date(),
               quotedText: comment.highlightedText,
               ...(comment.suggestedEdit ? {
                 suggestedEdit: {
                   original: comment.suggestedEdit.original,
-                  suggested: comment.suggestedEdit.suggested
+                  suggested: comment.suggestedEdit.suggested,
+                  explanation: comment.suggestedEdit.explanation
                 }
               } : {})
             };
             
-            // Add the comment to the editor
             editor.chain()
               .setTextSelection(commentPosition)
               .setComment(commentId)
               .run();
             
-            // Then add the comment to our state separately
-            setComments(prev => [...prev, newComment]);
+            newComments.push(newComment);
           }
         });
+        
+        setComments(prev => [...prev, ...newComments]);
       }
       
     } catch (error) {
@@ -681,33 +718,28 @@ export default function Editor({
     } finally {
       setIsAnalyzing(false);
     }
-  }, [editor, getSelectedText, getDocumentContent]);
+  }, [editor]);
 
   // Update the feedback items with appropriate structure for ActionSelect
   const feedback_items = useMemo<ActionItemType[]>(() => [
     {
-      value: 'coherence',
-      label: 'Check Coherence',
-      icon: <Zap className="h-3.5 w-3.5 text-yellow-500" />,
-      action: () => runContextualAnalysis('coherence')
-    },
-    {
-      value: 'cohesion',
-      label: 'Check Cohesion',
-      icon: <Zap className="h-3.5 w-3.5 text-blue-500" />,
-      action: () => runContextualAnalysis('cohesion')
-    },
-    {
-      value: 'focus',
-      label: 'Check Focus',
-      icon: <Zap className="h-3.5 w-3.5 text-purple-500" />,
-      action: () => runContextualAnalysis('focus')
-    },
-    {
       value: 'all',
       label: 'Analyze Everything',
       icon: <Zap className="h-3.5 w-3.5" />,
+      className: "flex items-center cursor-pointer border-b border-gray-200 border-solid pt-2 pb-2", 
       action: () => runContextualAnalysis('all')
+    },
+    {
+      value: 'paragraph',
+      label: 'Analyze by Paragraph',
+      icon: <Zap className="h-3.5 w-3.5 text-yellow-500" />,
+      action: () => runContextualAnalysis('paragraph')
+    },
+    {
+      value: 'custom',
+      label: 'Analyze Custom Selection',
+      icon: <Zap className="h-3.5 w-3.5 text-purple-500" />,
+      action: () => runContextualAnalysis('custom')
     }
   ], [runContextualAnalysis]);
 
@@ -732,11 +764,6 @@ export default function Editor({
     setPendingComment(null);
     setIsInsightsOpen(true);
   }, []);
-
-  // Log insights whenever they change
-  useEffect(() => {
-    console.log('Current insights:', insights);
-  }, [insights]);
 
   const handleStartComment = useCallback((text: string, highlightStyle: string) => {
     setPendingComment({ text, highlightStyle });
@@ -817,6 +844,7 @@ export default function Editor({
       id: commentId,
       content: '',
       createdAt: new Date(),
+      createdAtTime: new Date(),
       quotedText
     };
 
@@ -852,10 +880,12 @@ export default function Editor({
       id: commentId,
       content: 'Suggested Edit',
       createdAt: new Date(),
+      createdAtTime: new Date(),
       quotedText,
       suggestedEdit: {
         original: quotedText,
-        suggested: suggestedText
+        suggested: suggestedText,
+        explanation: ''
       }
     };
 
@@ -875,7 +905,6 @@ export default function Editor({
                   {/* Left section */}
                   <div className="flex items-center space-x-4">
                     <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 rounded-full bg-stone-200 dark:bg-zinc-700" />
                       <span className="text-sm font-semibold">Ripple</span>
                     </div>
                     <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
@@ -929,129 +958,19 @@ export default function Editor({
                       onClick={() => setIsInsightsOpen(!isInsightsOpen)}
                       className="h-7 px-3 text-xs flex items-center space-x-1"
                     >
-                      <LightbulbIcon className="h-3.5 w-3.5" />
-                      <span>Insights</span>
+                      {isAnalyzing ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Checking...</span>
+                        </>
+                      ) : (
+                        <>
+                          <LightbulbIcon className="h-3.5 w-3.5" />
+                          <span>Suggestions</span>
+                        </>
+                      )
+                      }
                     </Button>
-                    
-                    {/* Analysis Button */}
-                    <Popover open={analysisPopoverOpen} onOpenChange={setAnalysisPopoverOpen}>
-                      <PopoverTrigger asChild>
-                        <Button 
-                          variant={analysisResult ? "secondary" : "ghost"} 
-                          size="sm" 
-                          className="h-7 px-3 text-xs flex items-center space-x-1"
-                          onClick={isAnalyzing ? undefined : () => setAnalysisPopoverOpen(!analysisPopoverOpen)}
-                          disabled={isAnalyzing}
-                        >
-                          {isAnalyzing ? (
-                            <>
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              <span>Analyzing...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Zap className="h-3.5 w-3.5" />
-                              <span>Analysis</span>
-                              {analysisResult && analysisResult.coherence && (
-                                <span className="ml-1 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full text-[10px]">
-                                  {formatScore(analysisResult.coherence.score)}
-                                </span>
-                              )}
-                            </>
-                          )}
-                        </Button>
-                      </PopoverTrigger>
-                      
-                      <PopoverContent className="w-80 p-3" align="end">
-                        {analysisResult ? (
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                              <h3 className="text-sm font-medium">Analysis Results</h3>
-                            </div>
-                            
-                            <div className="space-y-3">
-                              {/* Coherence */}
-                              <div className="space-y-1">
-                                <div className="flex items-center justify-between">
-                                  <h4 className="text-xs font-medium">Coherence</h4>
-                                  <span className="text-xs px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full">
-                                    {analysisResult && analysisResult.coherence ? formatScore(analysisResult.coherence.score) : '0%'}
-                                  </span>
-                                </div>
-                                {analysisResult && analysisResult.coherence && analysisResult.coherence.issues && analysisResult.coherence.issues.length > 0 ? (
-                                  <ul className="text-xs space-y-1 pl-4 list-disc">
-                                    {analysisResult.coherence.issues.map((issue: any, i: number) => (
-                                      <li key={i}>{issue.issue}</li>
-                                    ))}
-                                  </ul>
-                                ) : (
-                                  <p className="text-xs text-muted-foreground">No coherence issues found!</p>
-                                )}
-                              </div>
-                              
-                              {/* Cohesion */}
-                              <div className="space-y-1">
-                                <div className="flex items-center justify-between">
-                                  <h4 className="text-xs font-medium">Cohesion</h4>
-                                  <span className="text-xs px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full">
-                                    {analysisResult && analysisResult.cohesion ? formatScore(analysisResult.cohesion.score) : '0%'}
-                                  </span>
-                                </div>
-                                {analysisResult && analysisResult.cohesion && analysisResult.cohesion.transitions && 
-                                 analysisResult.cohesion.transitions.missing_between && 
-                                 analysisResult.cohesion.transitions.missing_between.length > 0 ? (
-                                  <ul className="text-xs space-y-1 pl-4 list-disc">
-                                    {analysisResult.cohesion.transitions.missing_between.map((issue: any, i: number) => (
-                                      <li key={i}>Missing transition between sentences</li>
-                                    ))}
-                                  </ul>
-                                ) : (
-                                  <p className="text-xs text-muted-foreground">No cohesion issues found!</p>
-                                )}
-                              </div>
-                              
-                              {/* Focus */}
-                              <div className="space-y-1">
-                                <h4 className="text-xs font-medium">Focus</h4>
-                                <p className="text-xs">Main idea: {analysisResult && analysisResult.focus ? analysisResult.focus.mainIdea : 'Not available'}</p>
-                                {analysisResult && analysisResult.focus && analysisResult.focus.unfocused_elements && 
-                                 analysisResult.focus.unfocused_elements.length > 0 ? (
-                                  <ul className="text-xs space-y-1 pl-4 list-disc">
-                                    {analysisResult.focus.unfocused_elements.map((element: any, i: number) => (
-                                      <li key={i}>{element.issue}</li>
-                                    ))}
-                                  </ul>
-                                ) : (
-                                  <p className="text-xs text-muted-foreground">Text is well-focused!</p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-4 py-2">
-                            <div className="flex items-center justify-between">
-                              <h3 className="text-sm font-medium">Analysis</h3>
-                            </div>
-                            
-                            <div className="text-sm text-muted-foreground">
-                              <p className="mb-2">No analysis results yet.</p>
-                              <p>Select text to analyze or come back later after manually checking for feedback.</p>
-                            </div>
-                            
-                            <div className="flex justify-end">
-                              <Button 
-                                variant="secondary" 
-                                size="sm" 
-                                className="text-xs"
-                                onClick={() => setAnalysisPopoverOpen(false)}
-                              >
-                                Close
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </PopoverContent>
-                    </Popover>
                     
                     <Button
                       variant="ghost"
@@ -1091,28 +1010,110 @@ export default function Editor({
                       >
                         <EditorContent editor={editor} />
                       </AIContextMenu>
-                    </div>
+                    </div> 
                   </div>
 
                   {/* Comments Section */}
                   <div 
-                    ref={commentsSectionRef} 
-                    className={cn(
-                      "absolute top-0 right-0 w-[300px] space-y-2 py-12",
-                      "transition-all duration-150 ease-in-out",
-                      isInsightsOpen 
-                        ? "opacity-100 pointer-events-auto translate-x-0" 
-                        : "opacity-0 pointer-events-none translate-x-8"
-                    )}
-                    style={{
-                      right: "-332px"
-                    }}
-                  >
+  ref={commentsSectionRef} 
+  className={cn(
+    "absolute top-0 right-0 w-[300px] space-y-2 py-12",
+    "transition-all duration-150 ease-in-out",
+    isInsightsOpen 
+      ? "opacity-100 pointer-events-auto translate-x-0" 
+      : "opacity-0 pointer-events-none translate-x-8"
+  )}
+  style={{
+    right: "-332px"
+  }}
+>
+  {/* New Filter/Sort GUI */}
+  {comments.length > 0 && (
+    <div className="top-12 z-10 p-2 mb-2 -mx-2">
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">Sort by:</span>
+        <Select
+  onValueChange={(value) => {
+    const sorted = [...comments];
+    if (value === 'newest') {
+      sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    } else if (value === 'oldest') {
+      sorted.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    } else if (value === 'smart') {
+      const textPositions = new Map<string, number>();
+      const docText = editor?.state.doc.textContent || '';
+      
+      comments.forEach(comment => {
+        if (comment.quotedText && !textPositions.has(comment.quotedText)) {
+          const position = docText.indexOf(comment.quotedText);
+          if (position >= 0) {
+            textPositions.set(comment.quotedText, position);
+          }
+        }
+      });
+      
+      // Then sort
+      sorted.sort((a, b) => {
+        // If same quotedText, sort by creation time (or keep original order)
+        if (a.quotedText === b.quotedText) {
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        }
+        
+        // Get positions in document
+        const aPos = textPositions.get(a.quotedText) || 0;
+        const bPos = textPositions.get(b.quotedText) || 0;
+        
+        // Sort by document position
+        return aPos - bPos;
+      });
+    } else { // default
+      const commentPositions = new Map<string, number>();
+      const docText = editor?.state.doc.textContent || '';
+      
+      comments.forEach(comment => {
+        if (comment.quotedText) {
+          const position = docText.indexOf(comment.quotedText);
+          if (position >= 0) {
+            commentPositions.set(comment.id, position);
+          }
+        }
+      });
+      
+      // Sort by document position
+      sorted.sort((a, b) => {
+        const aPos = commentPositions.get(a.id) || 0;
+        const bPos = commentPositions.get(b.id) || 0;
+        return aPos - bPos;
+      });
+    }
+    
+    setComments(sorted);
+  }}
+>
+  <SelectTrigger className="w-[180px] h-8">
+    <SelectValue placeholder="Default" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="default">Default</SelectItem>
+    <SelectItem value="newest">Newest first</SelectItem>
+    <SelectItem value="oldest">Oldest first</SelectItem>
+    <SelectItem value="smart">Smart Sort</SelectItem>
+  </SelectContent>
+</Select>
+{/*         
+        <Button variant="ghost" size="sm" className="h-8">
+          <Filter className="h-3.5 w-3.5 mr-1" />
+          Filters
+        </Button> */}
+      </div>
+    </div>
+  )}
                     {comments.length === 0 ? (
                       <div className="text-center text-muted-foreground pt-8">
                         No comments yet
                       </div>
                     ) : (
+                      
                       comments.map((comment) => (
                         <Card 
                           key={comment.id}
@@ -1122,7 +1123,7 @@ export default function Editor({
                             activeCommentId === comment.id && "ring-2 ring-blue-500"
                           )}
                         >
-                          <CardContent className="p-3">
+                          <CardContent className="p-3 commentCard">
                             <div className="flex flex-col space-y-2">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
@@ -1130,7 +1131,11 @@ export default function Editor({
                                     {comment.suggestedEdit ? 'Suggested Edit' : 'Comment'}
                                   </span>
                                   <span className="text-xs text-muted-foreground">
-                                    {new Date(comment.createdAt).toLocaleDateString()}
+                                  {new Date(comment.createdAt).toLocaleDateString()} {new Date(comment.createdAtTime).toLocaleTimeString('en-US', {
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                    hour12: true
+                                  })}
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-1">
@@ -1248,7 +1253,7 @@ export default function Editor({
                                   }}
                                 >
                                   {comment.suggestedEdit ? (
-                                    <div className="suggest-edit-container">
+                                    <div className="suggest-edit-container" tabIndex={0} >
                                       <div>
                                         <div className="suggest-edit-label">Current Text</div>
                                         <div className="suggest-edit-deletion">{comment.suggestedEdit?.original || ''}</div>
@@ -1256,6 +1261,10 @@ export default function Editor({
                                       <div>
                                         <div className="suggest-edit-label">New Text</div>
                                         <div className="suggest-edit-addition">{comment.suggestedEdit?.suggested || ''}</div>
+                                      </div>
+                                      <div>
+                                        <div className="suggest-edit-label">Explanation</div>
+                                        <div className="suggest-edit-explanation">{comment.suggestedEdit?.explanation || ''}</div>
                                       </div>
                                     </div>
                                   ) : (
