@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ModeToggle } from '@/components/ui/mode-toggle';
 import { cn } from "@/lib/utils";
-import { MessageSquare, LightbulbIcon, Save, FileDown, Pencil, Trash2, Check, Zap, Loader2 } from 'lucide-react';
+import { MessageSquare, LightbulbIcon, Save, FileDown, Pencil, Trash2, Check, Zap, Loader2, AlertTriangle, Filter, HelpCircle } from 'lucide-react';
 import { AISidePanel } from './AISidePanel';
 import { AIContextMenu } from './AIContextMenu';
 import { EditorToolbar } from './EditorToolbar';
@@ -27,7 +27,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Filter } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { HelpSplashScreen } from './HelpSplashScreen';
 
 interface EditorProps {
   className?: string;
@@ -42,6 +43,7 @@ interface AIInsight {
   highlightedText?: string;
   highlightStyle?: string;
   isHighlighted?: boolean;
+  feedbackType?: 'sentence' | 'paragraph' | 'general';
 }
 
 interface PendingComment {
@@ -63,6 +65,8 @@ interface CommentType {
   createdAtTime: Date;
   quotedText: string;
   suggestedEdit?: SuggestedEdit;
+  isAIFeedback?: boolean;
+  feedbackType?: 'sentence' | 'paragraph' | 'general';
 }
 
 // Create a context for insights
@@ -74,6 +78,8 @@ export default function Editor({
 }: EditorProps): JSX.Element {
   const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
   const [isInsightsOpen, setIsInsightsOpen] = useState(true);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isFirstVisit, setIsFirstVisit] = useState(false);
   const [documentTitle, setDocumentTitle] = useState('Untitled document');
   const [isSaving, setIsSaving] = useState(false);
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
@@ -690,6 +696,8 @@ export default function Editor({
               createdAt: new Date(),
               createdAtTime: new Date(),
               quotedText: comment.highlightedText,
+              isAIFeedback: true,
+              feedbackType: 'general', // Default to general feedback
               ...(comment.suggestedEdit ? {
                 suggestedEdit: {
                   original: comment.suggestedEdit.original,
@@ -845,7 +853,8 @@ export default function Editor({
       content: '',
       createdAt: new Date(),
       createdAtTime: new Date(),
-      quotedText
+      quotedText,
+      isAIFeedback: false
     };
 
     setComments(prev => [...prev, newComment]);
@@ -893,6 +902,20 @@ export default function Editor({
     setActiveCommentId(commentId);
     setIsInsightsOpen(true);
   }, [editor]);
+
+  // Check if this is the user's first visit
+  useEffect(() => {
+    const hasVisitedBefore = localStorage.getItem('ripple-has-visited');
+    if (!hasVisitedBefore) {
+      // Show help panel after a short delay for first-time visitors
+      setTimeout(() => {
+        setIsHelpOpen(true);
+        setIsFirstVisit(true);
+        // Set flag for future visits
+        localStorage.setItem('ripple-has-visited', 'true');
+      }, 1000);
+    }
+  }, []);
 
   return (
     <div className={cn("w-full h-full relative", className)}>
@@ -975,6 +998,16 @@ export default function Editor({
                     <Button
                       variant="ghost"
                       size="sm"
+                      onClick={() => setIsHelpOpen(true)}
+                      className="h-7 px-3 text-xs flex items-center space-x-1"
+                    >
+                      <HelpCircle className="h-3.5 w-3.5" />
+                      <span>Help</span>
+                    </Button>
+                    
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={toggleAIPanel}
                       className="h-7 px-3 text-xs flex items-center space-x-1"
                     >
@@ -1017,21 +1050,40 @@ export default function Editor({
                   <div 
   ref={commentsSectionRef} 
   className={cn(
-    "absolute top-0 right-0 w-[300px] space-y-2 py-12",
-    "transition-all duration-150 ease-in-out",
-    isInsightsOpen 
-      ? "opacity-100 pointer-events-auto translate-x-0" 
-      : "opacity-0 pointer-events-none translate-x-8"
+                      "fixed right-0 h-[calc(100vh-8rem)] bg-background border-l border-border/40",
+                      "transition-all duration-300 ease-in-out transform",
+                      isInsightsOpen ? "translate-x-0" : "translate-x-full"
   )}
   style={{
-    right: "-332px"
-  }}
->
-  {/* New Filter/Sort GUI */}
-  {comments.length > 0 && (
-    <div className="top-12 z-10 p-2 mb-2 -mx-2">
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">Sort by:</span>
+                      zIndex: 40,
+                      top: "8rem" // This accounts for the navbar and toolbar height
+                    }}
+                  >
+                    {/* Toggle Button */}
+                    <button
+                      onClick={() => setIsInsightsOpen(!isInsightsOpen)}
+                      className={cn(
+                        "absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full",
+                        "bg-background border border-border/40 border-r-0",
+                        "px-2 py-3 rounded-l-md",
+                        "transition-colors hover:bg-accent"
+                      )}
+                    >
+                      <div className="flex flex-col items-center gap-2">
+                        <AlertTriangle className="h-5 w-5 text-amber-500" />
+                        <div className="rotate-180 [writing-mode:vertical-lr]">
+                          <span className="text-xs font-medium">Filter Feedback</span>
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Panel Content */}
+                    <div className="h-full overflow-y-auto">
+                      {/* Filter Tabs */}
+                      <div className="sticky top-0 z-10 bg-background p-4 pb-2">
+                        <div className="flex items-center justify-between mb-4">
+                          <span className="text-base">Filter Feedback</span>
+                          <div>
         <Select
   onValueChange={(value) => {
     const sorted = [...comments];
@@ -1052,21 +1104,17 @@ export default function Editor({
         }
       });
       
-      // Then sort
       sorted.sort((a, b) => {
-        // If same quotedText, sort by creation time (or keep original order)
         if (a.quotedText === b.quotedText) {
           return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         }
         
-        // Get positions in document
         const aPos = textPositions.get(a.quotedText) || 0;
         const bPos = textPositions.get(b.quotedText) || 0;
         
-        // Sort by document position
         return aPos - bPos;
       });
-    } else { // default
+                                } else {
       const commentPositions = new Map<string, number>();
       const docText = editor?.state.doc.textContent || '';
       
@@ -1079,7 +1127,6 @@ export default function Editor({
         }
       });
       
-      // Sort by document position
       sorted.sort((a, b) => {
         const aPos = commentPositions.get(a.id) || 0;
         const bPos = commentPositions.get(b.id) || 0;
@@ -1090,138 +1137,90 @@ export default function Editor({
     setComments(sorted);
   }}
 >
-  <SelectTrigger className="w-[180px] h-8">
-    <SelectValue placeholder="Default" />
+                              <SelectTrigger className="h-8 text-xs w-24">
+                                <SelectValue placeholder="Sort" />
   </SelectTrigger>
   <SelectContent>
     <SelectItem value="default">Default</SelectItem>
-    <SelectItem value="newest">Newest first</SelectItem>
-    <SelectItem value="oldest">Oldest first</SelectItem>
-    <SelectItem value="smart">Smart Sort</SelectItem>
+                                <SelectItem value="newest">Newest</SelectItem>
+                                <SelectItem value="oldest">Oldest</SelectItem>
+                                <SelectItem value="smart">Smart</SelectItem>
   </SelectContent>
 </Select>
-{/*         
-        <Button variant="ghost" size="sm" className="h-8">
-          <Filter className="h-3.5 w-3.5 mr-1" />
-          Filters
-        </Button> */}
       </div>
     </div>
-  )}
+                        <div className="flex space-x-2">
+                          <button 
+                            className={cn(
+                              "px-4 py-2 rounded-md transition-colors text-sm",
+                              "bg-muted/40 hover:bg-muted"
+                            )}
+                          >
+                            Sentence
+                          </button>
+                          <button 
+                            className={cn(
+                              "px-4 py-2 rounded-md transition-colors text-sm",
+                              "bg-muted/40 hover:bg-muted"
+                            )}
+                          >
+                            Paragraph
+                          </button>
+                          <button 
+                            className={cn(
+                              "px-4 py-2 rounded-md transition-colors text-sm",
+                              "bg-background text-white",
+                              "bg-zinc-800 dark:bg-zinc-800"
+                            )}
+                          >
+                            <Check className="h-4 w-4 mr-1 inline-block" />
+                            General
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Comments List */}
+                      <div className="p-4 pt-0 space-y-3">
                     {comments.length === 0 ? (
                       <div className="text-center text-muted-foreground pt-8">
                         No comments yet
                       </div>
                     ) : (
-                      
-                      comments.map((comment) => (
-                        <Card 
+                          comments.map((comment) => {
+                            // Determine card style based on feedback type
+                            const cardStyle = comment.isAIFeedback
+                              ? comment.feedbackType === 'sentence'
+                                ? "shadow-[0_0_15px_rgba(245,158,11,0.15)]" // Amber glow for sentence feedback
+                                : comment.feedbackType === 'paragraph'
+                                  ? "shadow-[0_0_15px_rgba(59,130,246,0.15)]" // Blue glow for paragraph feedback
+                                  : "shadow-[0_0_15px_rgba(168,85,247,0.15)]" // Purple glow for general feedback
+                              : ""; // User comments have no special style
+                              
+                            return (
+                              <div 
                           key={comment.id}
                           className={cn(
-                            "bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
-                            "border border-border/40 shadow-sm transition-all duration-200",
-                            activeCommentId === comment.id && "ring-2 ring-blue-500"
-                          )}
-                        >
-                          <CardContent className="p-3 commentCard">
-                            <div className="flex flex-col space-y-2">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium text-sm">
-                                    {comment.suggestedEdit ? 'Suggested Edit' : 'Comment'}
-                                  </span>
-                                  <span className="text-xs text-muted-foreground">
-                                  {new Date(comment.createdAt).toLocaleDateString()} {new Date(comment.createdAtTime).toLocaleTimeString('en-US', {
-                                    hour: 'numeric',
-                                    minute: '2-digit',
-                                    hour12: true
-                                  })}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  {comment.suggestedEdit && (
-                                    <>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6"
-                                        onClick={() => {
-                                          if (!editor) return;
-                                          
-                                          // Find the comment mark
-                                          let foundPos: { from: number; to: number } | null = null;
-                                          editor.state.doc.descendants((node, pos) => {
-                                            const mark = node.marks.find(m => 
-                                              m.type.name === 'comment' && 
-                                              m.attrs.commentId === comment.id
-                                            );
-                                            if (mark) {
-                                              foundPos = { from: pos, to: pos + node.nodeSize };
-                                              return false;
-                                            }
-                                          });
-
-                                          if (foundPos && comment.suggestedEdit) {
-                                            // Apply the suggested edit
-                                            editor
-                                              .chain()
-                                              .focus()
-                                              .setTextSelection(foundPos)
-                                              .insertContent(comment.suggestedEdit.suggested)
-                                              .unsetComment(comment.id)
-                                              .run();
-                                            
-                                            setComments(prev => prev.filter(c => c.id !== comment.id));
-                                          }
-                                        }}
-                                      >
-                                        <Check className="h-3 w-3" />
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6"
-                                        onClick={() => {
-                                          editor?.chain().focus().unsetComment(comment.id).run();
-                                          setComments(comments.filter(c => c.id !== comment.id));
-                                        }}
-                                      >
-                                        <Trash2 className="h-3 w-3" />
-                                      </Button>
-                                    </>
-                                  )}
-                                  {!comment.suggestedEdit && (
-                                    <>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6"
-                                        onClick={() => setActiveCommentId(comment.id)}
-                                      >
-                                        <Pencil className="h-3 w-3" />
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6"
-                                        onClick={() => {
-                                          editor?.chain().focus().unsetComment(comment.id).run();
-                                          setComments(comments.filter(c => c.id !== comment.id));
-                                        }}
-                                      >
-                                        <Trash2 className="h-3 w-3" />
-                                      </Button>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
+                                  "bg-white dark:bg-background border border-border/40 rounded-md p-4 transition-all duration-200",
+                                  activeCommentId === comment.id && "ring-2 ring-blue-500",
+                                  cardStyle
+                                )}
+                              >
+                                <div className="flex flex-col space-y-3">
+                                  {comment.isAIFeedback ? (
+                                    // AI Feedback style with warning triangle and accept/ignore buttons
+                                    <div className="flex items-start gap-3">
+                                      <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                                      <div className="flex-1">
+                                        <h3 className="text-base font-medium">
+                                          {comment.suggestedEdit ? 'Suggested Edit' : comment.content || 'Comment'}
+                                        </h3>
+                                        
                               {comment.quotedText && (
                                 <div 
-                                  className="text-sm text-muted-foreground bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70"
+                                            className="text-sm text-muted-foreground bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70 mt-3"
                                   onClick={() => {
                                     if (!editor) return;
                                     
-                                    // Find the comment mark
                                     let foundPos: { from: number; to: number } | null = null;
                                     editor.state.doc.descendants((node, pos) => {
                                       const mark = node.marks.find(m => 
@@ -1272,12 +1271,9 @@ export default function Editor({
                                   )}
                                 </div>
                               )}
-                              <div className={cn(
-                                "text-sm",
-                                activeCommentId === comment.id && "bg-muted rounded-md p-2"
-                              )}>
-                                {activeCommentId === comment.id ? (
-                                  <div className="space-y-2">
+                                        
+                                        {activeCommentId === comment.id && (
+                                          <div className="mt-3 space-y-2 bg-muted rounded-md p-2">
                                     <div className="relative">
                                       {comment.suggestedEdit ? (
                                         <textarea
@@ -1337,17 +1333,206 @@ export default function Editor({
                                       >
                                         Save <span className="opacity-60">⏎</span>
                                       </Button>
+                                            </div>
+                                          </div>
+                                        )}
+                                        
+                                        <div className="flex items-center justify-between mt-3">
+                                          <div className="flex items-center gap-2">
+                                            <Checkbox id={`do-not-show-${comment.id}`} />
+                                            <label htmlFor={`do-not-show-${comment.id}`} className="text-sm text-muted-foreground">
+                                              Do not show this feedback again
+                                            </label>
+                                          </div>
+                                          
+                                          <div className="flex items-center gap-2">
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="h-8 px-3"
+                                              onClick={() => {
+                                                editor?.chain().focus().unsetComment(comment.id).run();
+                                                setComments(comments.filter(c => c.id !== comment.id));
+                                              }}
+                                            >
+                                              Ignore
+                                            </Button>
+                                            
+                                            <Button
+                                              variant="default"
+                                              size="sm"
+                                              className="h-8 px-3"
+                                              onClick={() => {
+                                                if (!editor || !comment.suggestedEdit) {
+                                                  // Just mark as accepted if there's no edit to apply
+                                                  editor?.chain().focus().unsetComment(comment.id).run();
+                                                  setComments(prev => prev.filter(c => c.id !== comment.id));
+                                                  return;
+                                                }
+                                                
+                                                // Find the comment mark
+                                                let foundPos: { from: number; to: number } | null = null;
+                                                editor.state.doc.descendants((node, pos) => {
+                                                  const mark = node.marks.find(m => 
+                                                    m.type.name === 'comment' && 
+                                                    m.attrs.commentId === comment.id
+                                                  );
+                                                  if (mark) {
+                                                    foundPos = { from: pos, to: pos + node.nodeSize };
+                                                    return false;
+                                                  }
+                                                });
+
+                                                if (foundPos && comment.suggestedEdit) {
+                                                  // Apply the suggested edit
+                                                  editor
+                                                    .chain()
+                                                    .focus()
+                                                    .setTextSelection(foundPos)
+                                                    .insertContent(comment.suggestedEdit.suggested)
+                                                    .unsetComment(comment.id)
+                                                    .run();
+                                                  
+                                                  setComments(prev => prev.filter(c => c.id !== comment.id));
+                                                }
+                                              }}
+                                            >
+                                              Accept
+                                            </Button>
+                                          </div>
+                                        </div>
                                     </div>
                                   </div>
                                 ) : (
-                                  comment.suggestedEdit ? null : comment.content || "No content"
-                                )}
+                                    // User Comment style - simpler without warning icon or accept/ignore buttons
+                                    <div className="flex items-start gap-3">
+                                      <MessageSquare className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                                      <div className="flex-1">
+                                        <div className="flex items-center justify-between">
+                                          <h3 className="text-base font-medium">Comment</h3>
+                                          <span className="text-xs text-muted-foreground">
+                                            {new Date(comment.createdAt).toLocaleDateString()} {new Date(comment.createdAtTime).toLocaleTimeString('en-US', {
+                                              hour: 'numeric',
+                                              minute: '2-digit',
+                                              hour12: true
+                                            })}
+                                          </span>
+                                        </div>
+                                        
+                                        {comment.quotedText && (
+                                          <div 
+                                            className="text-sm text-muted-foreground bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70 mt-3"
+                                            onClick={() => {
+                                              if (!editor) return;
+                                              
+                                              let foundPos: { from: number; to: number } | null = null;
+                                              editor.state.doc.descendants((node, pos) => {
+                                                const mark = node.marks.find(m => 
+                                                  m.type.name === 'comment' && 
+                                                  m.attrs.commentId === comment.id
+                                                );
+                                                if (mark) {
+                                                  foundPos = { from: pos, to: pos + node.nodeSize };
+                                                  return false;
+                                                }
+                                              });
+
+                                              if (foundPos) {
+                                                editor
+                                                  .chain()
+                                                  .focus()
+                                                  .setTextSelection(foundPos)
+                                                  .run();
+
+                                                const selection = window.getSelection();
+                                                if (selection && selection.rangeCount > 0) {
+                                                  const range = selection.getRangeAt(0);
+                                                  const rect = range.getBoundingClientRect();
+                                                  if (rect.top < 0 || rect.bottom > window.innerHeight) {
+                                                    editor.commands.scrollIntoView();
+                                                  }
+                                                }
+                                              }
+                                            }}
+                                          >
+                                            {`"${comment.quotedText}"`}
+                                          </div>
+                                        )}
+                                        
+                                        {activeCommentId === comment.id ? (
+                                          <div className="mt-3 space-y-2 bg-muted rounded-md p-2">
+                                            <div className="relative">
+                                              <textarea
+                                                id={comment.id}
+                                                value={comment.content}
+                                                onChange={(e) => {
+                                                  setComments(prev => prev.map(c => 
+                                                    c.id === comment.id 
+                                                      ? { ...c, content: e.target.value }
+                                                      : c
+                                                  ));
+                                                }}
+                                                onKeyDown={(e) => {
+                                                  if (e.key === 'Enter' && !e.shiftKey) {
+                                                    e.preventDefault();
+                                                    setActiveCommentId(null);
+                                                  }
+                                                }}
+                                                placeholder="Add a comment..."
+                                                className="w-full min-h-[60px] bg-transparent border-none p-0 resize-none focus:outline-none focus:ring-0"
+                                                autoFocus
+                                              />
                               </div>
+                                            <div className="flex justify-end">
+                                              <Button
+                                                size="sm"
+                                                className="h-7 text-xs flex items-center gap-1.5"
+                                                onClick={() => setActiveCommentId(null)}
+                                              >
+                                                Save <span className="opacity-60">⏎</span>
+                                              </Button>
                             </div>
-                          </CardContent>
-                        </Card>
-                      ))
-                    )}
+                                          </div>
+                                        ) : (
+                                          <div className="mt-3 text-sm">{comment.content || "No content"}</div>
+                                        )}
+                                        
+                                        <div className="flex justify-end mt-3">
+                                          <div className="flex items-center gap-2">
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-8 px-3"
+                                              onClick={() => setActiveCommentId(comment.id)}
+                                            >
+                                              <Pencil className="h-3.5 w-3.5 mr-1" />
+                                              Edit
+                                            </Button>
+                                            
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-8 px-3"
+                                              onClick={() => {
+                                                editor?.chain().focus().unsetComment(comment.id).run();
+                                                setComments(comments.filter(c => c.id !== comment.id));
+                                              }}
+                                            >
+                                              <Trash2 className="h-3.5 w-3.5 mr-1" />
+                                              Delete
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1361,6 +1546,40 @@ export default function Editor({
           selectedText={selectedText}
           documentContext={getDocumentContent()}
         />
+        
+        <HelpSplashScreen
+          isOpen={isHelpOpen}
+          onClose={() => setIsHelpOpen(false)}
+        />
+
+        {isFirstVisit && (
+          <div className={cn(
+            "fixed bottom-4 right-4 p-4 bg-card rounded-lg shadow-lg max-w-xs",
+            "border border-border/40 z-50 animate-in slide-in-from-bottom-10",
+            !isHelpOpen && "flex items-center gap-3"
+          )}>
+            {!isHelpOpen ? (
+              <>
+                <div className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full p-2">
+                  <HelpCircle className="h-5 w-5" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-medium text-sm">Welcome to Ripple!</h4>
+                  <p className="text-muted-foreground text-xs mt-1">
+                    Check out our help section to learn how to use all Ripple features.
+                  </p>
+                </div>
+                <Button 
+                  size="sm" 
+                  className="shrink-0"
+                  onClick={() => setIsHelpOpen(true)}
+                >
+                  Learn More
+                </Button>
+              </>
+            ) : null}
+          </div>
+        )}
       </InsightsContext.Provider>
     </div>
   );
