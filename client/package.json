@@ -2,7 +2,7 @@
   "name": "genschedule",
   "private": true,
   "version": "0.0.0",
-  "homepage": "https://www.genschedule.com",
+  "homepage": "https://nohaxsjustasian.github.io/Ripple",
   "type": "module",
   "scripts": {
     "dev": "vite",
