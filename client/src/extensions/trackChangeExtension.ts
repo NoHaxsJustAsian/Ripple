@@ -93,12 +93,19 @@ export const DeletionMark = Mark.create({
 })
 
 // For IME input handling (this code is kept in case you ever want to adjust IME behavior)
+// @ts-ignore
 const IME_STATUS_NORMAL = 0
+// @ts-ignore
 const IME_STATUS_START = 1
+// @ts-ignore
 const IME_STATUS_CONTINUE = 2
+// @ts-ignore
 const IME_STATUS_FINISHED = 3
+// @ts-ignore
 type IME_STATUS_TYPE = 0 | 1 | 2 | 3
+// @ts-ignore
 let composingStatus: IME_STATUS_TYPE = 0
+// @ts-ignore
 let isStartInput = false
 
 // Get the current extension instance.
@@ -106,7 +113,7 @@ const getSelfExt = (editor: Editor) =>
   editor.extensionManager.extensions.find(item => item.type === 'extension' && item.name === EXTENSION_NAME) as Extension
 
 // Get current minute timestamp.
-const getMinuteTime = () => Math.round(new Date().getTime() / 1000 / 60) * 1000 * 60
+// const getMinuteTime = () => Math.round(new Date().getTime() / 1000 / 60) * 1000 * 60
 
 /**
  * Process accept or reject commands on track changes.
@@ -159,7 +166,7 @@ const changeTrack = (opType: TRACK_COMMAND_TYPE, param: CommandProps) => {
   // Sort ranges from end to start to avoid position shifts
   markRanges.sort((a, b) => b.from - a.from)
 
-  let offset = 0
+  // let offset = 0
   const removeInsertionMark = editor.state.doc.type.schema.marks.insertion.create()
   const removeDeletionMark = editor.state.doc.type.schema.marks.deletion.create()
 

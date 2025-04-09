@@ -38,7 +38,7 @@ export const CommentExtension = Mark.create<CommentOptions, CommentStorage>({
   addOptions() {
     return {
       HTMLAttributes: {},
-      onCommentActivated: (commentId: string | null) => {},
+      onCommentActivated: () => { },
     };
   },
 

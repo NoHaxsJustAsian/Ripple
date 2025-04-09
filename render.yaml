@@ -1,0 +1,16 @@
+blueprint:
+  services:
+    - type: web
+      name: ripple-backend
+      runtime: python
+      branch: main
+      buildCommand: |
+        pip install -r server/requirements.txt
+        cd client && npm install && npm run build
+      startCommand: gunicorn server.app:app
+      staticPublishPath: ./client/dist
+      envVars:
+        - key: HOSTNAME
+          value: https://nohaxsjustasian.github.io/Ripple
+        - key: FLASK_ENV
+          value: production

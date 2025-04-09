@@ -1,4 +1,3 @@
-import React from "react";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import Editor from "@/components/Editor";

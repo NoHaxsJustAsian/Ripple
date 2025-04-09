@@ -1,13 +1,12 @@
 import * as React from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, X, Check } from "lucide-react";
+import { ChevronDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,8 +17,6 @@ import {
   Command,
   CommandEmpty,
   CommandGroup,
-  CommandInput,
-  CommandItem,
   CommandList,
 } from "@/components/ui/command";
 
@@ -46,9 +43,9 @@ export function MultiSelect({
   options,
   selected,
   onChange,
-  placeholder = "Select options",
+  // placeholder = "Select options",
   className,
-  badgeClassName,
+  // badgeClassName,
   disabled = false,
   label,
   emptyText = "No options found",
@@ -61,9 +58,9 @@ export function MultiSelect({
     setOpen(isOpen);
   };
 
-  const handleUnselect = (value: string) => {
-    onChange(selected.filter((item) => item !== value));
-  };
+  // const handleUnselect = (value: string) => {
+  //   onChange(selected.filter((item) => item !== value));
+  // };
 
   const handleSelect = (value: string) => {
     console.log("Selecting value:", value);
@@ -78,10 +75,10 @@ export function MultiSelect({
   };
 
   // Convert selected values to labels for display
-  const selectedLabels = selected.map((value) => {
-    const option = options.find((opt) => opt.value === value);
-    return option?.label || value;
-  });
+  // const selectedLabels = selected.map((value) => {
+  //   const option = options.find((opt) => opt.value === value);
+  //   return option?.label || value;
+  // });
 
   // Is anything selected?
   const anySelected = selected.length > 0;
@@ -183,7 +180,7 @@ interface ActionSelectProps {
 
 export function ActionSelect({
   items,
-  activeItem = null,
+  // activeItem = null,
   className,
   label,
   emptyText = "No options found",

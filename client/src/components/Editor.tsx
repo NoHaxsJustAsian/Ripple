@@ -6,10 +6,9 @@ import { Color } from '@tiptap/extension-color';
 import Underline from '@tiptap/extension-underline';
 import { useEffect, useState, useCallback, useRef, createContext, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { ModeToggle } from '@/components/ui/mode-toggle';
 import { cn } from "@/lib/utils";
-import { MessageSquare, LightbulbIcon, Save, FileDown, Pencil, Trash2, Check, Zap, Loader2, AlertTriangle, Filter, HelpCircle } from 'lucide-react';
+import { MessageSquare, LightbulbIcon, Save, FileDown, Pencil, Trash2, Check, Zap, Loader2, AlertTriangle, HelpCircle } from 'lucide-react';
 import { AISidePanel } from './AISidePanel';
 import { AIContextMenu } from './AIContextMenu';
 import { EditorToolbar } from './EditorToolbar';
@@ -83,8 +82,8 @@ export default function Editor({
   const [documentTitle, setDocumentTitle] = useState('Untitled document');
   const [isSaving, setIsSaving] = useState(false);
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-  const [showCommentInput, setShowCommentInput] = useState(false);
-  const [pendingComment, setPendingComment] = useState<PendingComment | null>(null);
+  const [showCommentInput] = useState(false);
+  const [pendingComment] = useState<PendingComment | null>(null);
   const [selectedInsight, setSelectedInsight] = useState<number | null>(null);
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
@@ -99,7 +98,6 @@ export default function Editor({
   const [showParagraphTopics, setShowParagraphTopics] = useState(false);
   const [showEssayTopics, setShowEssayTopics] = useState(false);
   const [analysisPopoverOpen, setAnalysisPopoverOpen] = useState(false);
-  const [isDeletionCollapsed, setIsDeletionCollapsed] = useState(false);
   
   const editor = useEditor({
     extensions: [
@@ -142,7 +140,7 @@ export default function Editor({
           "[&>div]:max-w-[666px]"
         ),
       },
-      handleKeyDown: (view: EditorView, event: KeyboardEvent) => {
+      handleKeyDown: (_view: EditorView, event: KeyboardEvent) => {
         // Check if it's a content-modifying key (letter, number, space, delete, etc.)
         const isContentModifying = (
           // Single letters, numbers or special chars
@@ -161,7 +159,7 @@ export default function Editor({
         
         return false; // Let the default handler run
       },
-      handlePaste: (view: EditorView, event: ClipboardEvent) => {
+      handlePaste: (_view: EditorView, event: ClipboardEvent) => {
         const clipboardData = event.clipboardData;
         if (!clipboardData) return false;
         
@@ -185,7 +183,7 @@ export default function Editor({
       // we should remove any highlighting at the current cursor position
       if (transaction.docChanged && transaction.steps.some(step => step.toJSON().stepType === 'replace')) {
         // Get the current selection position
-        const { from } = editor.state.selection;
+        // const { from } = editor.state.selection;
         
         // Remove highlight at the cursor position
         // This approach removes highlighting from the current node where typing is happening
@@ -194,26 +192,26 @@ export default function Editor({
     },
   });
 
-  const handleToolbarComment = useCallback(() => {
-    if (!editor) return;
+  // const handleToolbarComment = useCallback(() => {
+  //   if (!editor) return;
     
-    const { from, to } = editor.state.selection;
-    if (from === to) return; // No selection
+  //   const { from, to } = editor.state.selection;
+  //   if (from === to) return; // No selection
     
-    const text = editor.state.doc.textBetween(from, to);
+  //   const text = editor.state.doc.textBetween(from, to);
     
-    editor.chain()
-      .setHighlight({ color: '#fef9c3' })
-      .setTextSelection(to)
-      .run();
+  //   editor.chain()
+  //     .setHighlight({ color: '#fef9c3' })
+  //     .setTextSelection(to)
+  //     .run();
 
-    setPendingComment({ text, highlightStyle: "#fef9c3" });
-    setShowCommentInput(true);
-    setIsInsightsOpen(true);
-  }, [editor]);
+  //   setPendingComment({ text, highlightStyle: "#fef9c3" });
+  //   setShowCommentInput(true);
+  //   setIsInsightsOpen(true);
+  // }, [editor]);
 
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
-  const [isEditingComment, setIsEditingComment] = useState(false);
+  // const [, setIsEditingComment] = useState(false);
 
   useEffect(() => {
     if (showCommentInput && commentInputRef.current) {
@@ -464,7 +462,7 @@ export default function Editor({
     const { from, to } = editor.state.selection;
     if (from === to) return; // No selection
     
-    const text = editor.state.doc.textBetween(from, to);
+    // const text = editor.state.doc.textBetween(from, to);
     
     // Get the paragraph node that contains the selection
     const resolvedPos = editor.state.doc.resolve(from);
@@ -509,7 +507,7 @@ export default function Editor({
     const { from, to } = editor.state.selection;
     if (from === to) return; // No selection
     
-    const text = editor.state.doc.textBetween(from, to);
+    // const text = editor.state.doc.textBetween(from, to);
     
     // Remove any existing essay topic highlight
     if (essayTopicHighlight) {
@@ -576,9 +574,9 @@ export default function Editor({
   }, [editor, getSelectedText, runAnalysis]);
 
   // Helper to format coherence score
-  const formatScore = (score: number) => {
-    return `${Math.round(score * 100)}%`;
-  };
+  // const formatScore = (score: number) => {
+  //   return `${Math.round(score * 100)}%`;
+  // };
 
   // Get the entire document content
   const getDocumentContent = useCallback(() => {
@@ -751,51 +749,51 @@ export default function Editor({
     }
   ], [runContextualAnalysis]);
 
-  const handleAddInsight = useCallback((content: string, highlightedText: string, highlightStyle?: string) => {
-    console.log('Adding insight:', { content, highlightedText, highlightStyle });
-    const newId = Date.now();
-    const newInsight: AIInsight = {
-      id: newId,
-      content,
-      type: 'comment',
-      highlightedText,
-      highlightStyle,
-      isHighlighted: true
-    };
-    setInsights(prev => {
-      const newInsights = [...prev, newInsight];
-      console.log('New insights state:', newInsights);
-      return newInsights;
-    });
-    setSelectedInsight(newId);
-    setShowCommentInput(false);
-    setPendingComment(null);
-    setIsInsightsOpen(true);
-  }, []);
+  // const handleAddInsight = useCallback((content: string, highlightedText: string, highlightStyle?: string) => {
+  //   console.log('Adding insight:', { content, highlightedText, highlightStyle });
+  //   const newId = Date.now();
+  //   const newInsight: AIInsight = {
+  //     id: newId,
+  //     content,
+  //     type: 'comment',
+  //     highlightedText,
+  //     highlightStyle,
+  //     isHighlighted: true
+  //   };
+  //   setInsights(prev => {
+  //     const newInsights = [...prev, newInsight];
+  //     console.log('New insights state:', newInsights);
+  //     return newInsights;
+  //   });
+  //   setSelectedInsight(newId);
+  //   setShowCommentInput(false);
+  //   setPendingComment(null);
+  //   setIsInsightsOpen(true);
+  // }, []);
 
-  const handleStartComment = useCallback((text: string, highlightStyle: string) => {
-    setPendingComment({ text, highlightStyle });
-    setShowCommentInput(true);
-    setIsInsightsOpen(true);
-  }, []);
+  // const handleStartComment = useCallback((text: string, highlightStyle: string) => {
+  //   setPendingComment({ text, highlightStyle });
+  //   setShowCommentInput(true);
+  //   setIsInsightsOpen(true);
+  // }, []);
 
-  const handleStartEdit = useCallback((insight: AIInsight) => {
-    setPendingComment({ 
-      text: insight.highlightedText || '', 
-      highlightStyle: insight.highlightStyle || '',
-      editingId: insight.id 
-    });
-    setShowCommentInput(true);
-    setIsEditingComment(true);
-    setSelectedInsight(insight.id);
-  }, []);
+  // const handleStartEdit = useCallback((insight: AIInsight) => {
+  //   setPendingComment({ 
+  //     text: insight.highlightedText || '', 
+  //     highlightStyle: insight.highlightStyle || '',
+  //     editingId: insight.id 
+  //   });
+  //   setShowCommentInput(true);
+  //   setIsEditingComment(true);
+  //   setSelectedInsight(insight.id);
+  // }, []);
 
-  const handleFinishEdit = useCallback(() => {
-    setShowCommentInput(false);
-    setPendingComment(null);
-    setIsEditingComment(false);
-    setSelectedInsight(null);
-  }, []);
+  // const handleFinishEdit = useCallback(() => {
+  //   setShowCommentInput(false);
+  //   setPendingComment(null);
+  //   setIsEditingComment(false);
+  //   setSelectedInsight(null);
+  // }, []);
 
   // Update highlights when selection changes
   useEffect(() => {
@@ -809,18 +807,18 @@ export default function Editor({
     }
   }, [selectedInsight]);
 
-  const handleEditComment = useCallback((insightId: number, newContent: string) => {
-    setInsights(prev => prev.map(insight => 
-      insight.id === insightId 
-        ? { ...insight, content: newContent }
-        : insight
-    ));
-  }, []);
+  // const handleEditComment = useCallback((insightId: number, newContent: string) => {
+  //   setInsights(prev => prev.map(insight => 
+  //     insight.id === insightId 
+  //       ? { ...insight, content: newContent }
+  //       : insight
+  //   ));
+  // }, []);
 
-  const handleDeleteInsight = useCallback((insightId: number) => {
-    setInsights(prev => prev.filter(insight => insight.id !== insightId));
-    setSelectedInsight(null);
-  }, []);
+  // const handleDeleteInsight = useCallback((insightId: number) => {
+  //   setInsights(prev => prev.filter(insight => insight.id !== insightId));
+  //   setSelectedInsight(null);
+  // }, []);
 
   const focusCommentWithActiveId = (id: string) => {
     if (!commentsSectionRef.current) return;

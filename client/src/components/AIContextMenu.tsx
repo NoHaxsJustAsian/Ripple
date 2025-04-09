@@ -42,21 +42,21 @@ export function AIContextMenu({
   onAddComment
 }: AIContextMenuProps) {
   const [showInlinePrompt, setShowInlinePrompt] = useState(false);
-  const [promptPosition, setPromptPosition] = useState({ x: 0, y: 0 });
+  const [promptPosition] = useState({ x: 0, y: 0 });
 
-  const handleAIAction = () => {
-    if (!editor) return;
-    const { from, to } = editor.state.selection;
-    if (from === to) return; // No selection
+  // const handleAIAction = () => {
+  //   if (!editor) return;
+  //   const { from, to } = editor.state.selection;
+  //   if (from === to) return; // No selection
 
-    const mouseEvent = window.event as MouseEvent;
-    
-    setPromptPosition({
-      x: Math.max(20, Math.min(mouseEvent.clientX, window.innerWidth - 420)),
-      y: Math.max(20, mouseEvent.clientY - 20)
-    });
-    setShowInlinePrompt(true);
-  };
+  //   const mouseEvent = window.event as MouseEvent;
+
+  //   setPromptPosition({
+  //     x: Math.max(20, Math.min(mouseEvent.clientX, window.innerWidth - 420)),
+  //     y: Math.max(20, mouseEvent.clientY - 20)
+  //   });
+  //   setShowInlinePrompt(true);
+  // };
 
   const handleCopy = () => {
     if (!editor) return;
@@ -177,36 +177,36 @@ export function AIContextMenu({
     };
   }, [editor, activeCommentId]);
 
-  const handleClickQuotedText = (commentId: string) => {
-    if (!editor) return;
-    
-    // Find the mark with this comment ID
-    let foundPos: { from: number; to: number } | null = null;
-    editor.state.doc.descendants((node, pos) => {
-      const mark = node.marks.find(m => 
-        m.type.name === 'comment' && 
-        m.attrs.commentId === commentId
-      );
-      if (mark) {
-        foundPos = { from: pos, to: pos + node.nodeSize };
-        return false; // Stop searching
-      }
-    });
+  // const handleClickQuotedText = (commentId: string) => {
+  //   if (!editor) return;
 
-    if (foundPos) {
-      // Set selection without scrolling
-      editor.commands.setTextSelection(foundPos);
-      // Only scroll if not in view
-      const selection = window.getSelection();
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-        if (rect.top < 0 || rect.bottom > window.innerHeight) {
-          editor.commands.scrollIntoView();
-        }
-      }
-    }
-  };
+  //   // Find the mark with this comment ID
+  //   let foundPos: { from: number; to: number } | null = null;
+  //   editor.state.doc.descendants((node, pos) => {
+  //     const mark = node.marks.find(m =>
+  //       m.type.name === 'comment' &&
+  //       m.attrs.commentId === commentId
+  //     );
+  //     if (mark) {
+  //       foundPos = { from: pos, to: pos + node.nodeSize };
+  //       return false; // Stop searching
+  //     }
+  //   });
+
+  //   if (foundPos) {
+  //     // Set selection without scrolling
+  //     editor.commands.setTextSelection(foundPos);
+  //     // Only scroll if not in view
+  //     const selection = window.getSelection();
+  //     if (selection && selection.rangeCount > 0) {
+  //       const range = selection.getRangeAt(0);
+  //       const rect = range.getBoundingClientRect();
+  //       if (rect.top < 0 || rect.bottom > window.innerHeight) {
+  //         editor.commands.scrollIntoView();
+  //       }
+  //     }
+  //   }
+  // };
 
   const handleContextMenu = (e: React.MouseEvent) => {
     if (!editor) return;
