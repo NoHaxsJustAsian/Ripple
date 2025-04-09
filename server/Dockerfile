@@ -1,21 +1,23 @@
-# Use an official Python runtime as a parent image
+# Dockerfile (place this in your repository ROOT)
 FROM --platform=linux/amd64 python:3.12-slim
 
-# Set the working directory in the container
+# Set working directory
 WORKDIR /app
 
-# Copy the current directory contents into the container at /app
-COPY . /app
+# First copy ONLY requirements.txt for efficient layer caching
+COPY server/requirements.txt .
 
-# Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --upgrade openai
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --upgrade openai
 
-# Make port 5000 available to the world outside this container
+# Copy the rest of the server files
+COPY server/ .
+
+# Environment variables
+ENV FLASK_APP=app.py \
+    FLASK_ENV=production
+
+# Expose and run
 EXPOSE 5000
-
-# Define environment variable
-ENV FLASK_APP=server/app.py
-
-# Run app.py when the container launches
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "120", "app:app"]docker build -t {image_name}:{tag} {path_to_dockerfile}
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "120", "app:app"]
