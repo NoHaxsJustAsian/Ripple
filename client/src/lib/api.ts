@@ -13,8 +13,8 @@ interface AnalysisRequest {
 interface ContextualAnalysisRequest {
   content: string;          // The specific section/paragraph to analyze
   fullContext: string;      // The entire document for context
-  type: 'paragraph' | 'all' | 'custom';
-  targetType: 'coherence' | 'cohesion' | 'both';
+  type: 'paragraph' | 'section' | 'document' | 'theme';
+  targetType: 'coherence' | 'cohesion' | 'focus' | 'all';
 }
 
 // Interface for analysis response
@@ -86,6 +86,9 @@ export async function analyzeText(data: AnalysisRequest): Promise<AnalysisRespon
  */
 export async function analyzeTextWithContext(data: ContextualAnalysisRequest): Promise<ContextualAnalysisResponse> {
   try {
+    // Debug: Log the exact data being sent
+    console.log('Sending analysis request:', JSON.stringify(data, null, 2));
+    
     // Make a real API call to the analyze-context endpoint
     const response = await fetch(`${API_BASE_URL}/api/analyze-context`, {
       method: 'POST',
@@ -97,6 +100,7 @@ export async function analyzeTextWithContext(data: ContextualAnalysisRequest): P
 
     if (!response.ok) {
       const errorData = await response.json();
+      console.error('Server response error:', errorData);
       throw new Error(errorData.error || 'Failed to analyze text with context');
     }
 
