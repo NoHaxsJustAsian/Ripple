@@ -37,6 +37,8 @@ export interface CommentType {
   suggestedEdit?: SuggestedEdit;
   isAIFeedback?: boolean;
   feedbackType?: 'sentence' | 'paragraph' | 'general';
+  title?: string;
+  issueType?: 'grammar' | 'clarity' | 'coherence' | 'cohesion' | 'style' | 'structure' | string;
 }
 
 export interface AnalysisResult {

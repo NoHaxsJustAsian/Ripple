@@ -84,13 +84,14 @@ export function CommentsList({
     <div 
       ref={commentsSectionRef} 
       className={cn(
-        "fixed right-0 h-[calc(100vh-8rem)] bg-background border-l border-border/40",
+        "fixed right-0 h-[calc(100vh-7rem)] bg-background border-l border-border/40",
         "transition-all duration-300 ease-in-out transform",
-        isOpen ? "translate-x-0" : "translate-x-full"
+        isOpen ? "translate-x-0" : "translate-x-full",
+        "w-[360px]"
       )}
       style={{
         zIndex: 40,
-        top: "8rem" // This accounts for the navbar and toolbar height
+        top: "7rem"
       }}
     >
       {/* Toggle Button */}
