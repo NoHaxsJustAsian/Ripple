@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
-from .config import Config
+from config import Config
 import os
 
 def create_app():
