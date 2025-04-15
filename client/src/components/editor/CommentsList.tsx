@@ -170,17 +170,28 @@ export function CommentsList({
               No comments yet
             </div>
           ) : (
-            comments.map((comment) => (
-              <CommentItem
-                key={comment.id}
-                comment={comment}
-                editor={editor}
-                activeCommentId={activeCommentId}
-                setActiveCommentId={setActiveCommentId}
-                setComments={setComments}
-                comments={comments}
-              />
-            ))
+            <>
+              {console.log("Rendering comments:", comments)}
+              {comments.map((comment) => {
+                console.log(`Comment ID ${comment.id}:`, {
+                  hasEdit: !!comment.suggestedEdit,
+                  issueType: comment.issueType,
+                  feedbackType: comment.feedbackType,
+                  isAI: comment.isAIFeedback
+                });
+                return (
+                  <CommentItem
+                    key={comment.id}
+                    comment={comment}
+                    editor={editor}
+                    activeCommentId={activeCommentId}
+                    setActiveCommentId={setActiveCommentId}
+                    setComments={setComments}
+                    comments={comments}
+                  />
+                );
+              })}
+            </>
           )}
         </div>
       </div>

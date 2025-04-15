@@ -57,7 +57,8 @@ export function EditorContainer({
   const [isSaving, setIsSaving] = useState(false);
   const [usingLocalStorage, setUsingLocalStorage] = useState(true);
   const [documentId, setDocumentId] = useState('');
-
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -171,10 +172,10 @@ export function EditorContainer({
         const savedLocal = localStorage.getItem('ripple-doc');
         if (savedLocal && editor) {
           const { title, content, comments: savedComments = [] } = JSON.parse(savedLocal);
-          setDocumentTitle(title);
-          setComments(savedComments);
-          editor.commands.setContent(content);
-        }
+      setDocumentTitle(title);
+      setComments(savedComments);
+      editor.commands.setContent(content);
+    }
         
         // Then try to load most recent file from database if user is logged in
         if (user && fileService && editor) {
@@ -462,7 +463,9 @@ export function EditorContainer({
       quotedText,
       isAIFeedback: false,
       from,
-      to
+      to,
+      issueType: 'suggestion',
+      feedbackType: 'clarity'
     };
 
     setComments(prev => [...prev, newComment]);
@@ -501,6 +504,8 @@ export function EditorContainer({
       quotedText,
       from,
       to,
+      issueType: 'suggestion',
+      feedbackType: 'clarity',
       suggestedEdit: {
         original: quotedText,
         suggested: suggestedText,
@@ -642,17 +647,38 @@ export function EditorContainer({
               from: comment.from || 0,
               to: comment.to || 0,
               isAIFeedback: comment.isAIFeedback || false,
-              resolved: comment.resolved || false
+              resolved: comment.resolved || false,
+              // Add default values for issue type and feedback type
+              issueType: comment.issueType || 'suggestion',
+              feedbackType: comment.feedbackType || 'clarity'
             };
             
             // Handle suggested edits separately to ensure they're properly structured
             if (comment.suggestedEdit) {
               console.log("Found suggested edit:", comment.suggestedEdit);
+              
+              // For suggested edits, set content to 'Suggested Edit' as default if not present
+              appComment.content = appComment.content || 'Suggested Edit';
+              
+              // If the suggestedEdit doesn't have the original text but quotedText exists, use that
+              if (!comment.suggestedEdit.original && comment.quotedText) {
+                comment.suggestedEdit.original = comment.quotedText;
+              }
+              
               appComment.suggestedEdit = {
                 original: comment.suggestedEdit.original || '',
                 suggested: comment.suggestedEdit.suggested || '',
                 explanation: comment.suggestedEdit.explanation || ''
               };
+              
+              // For suggested edits, use specific types if they exist, otherwise defaults
+              appComment.issueType = comment.issueType || 'grammar';
+              appComment.feedbackType = comment.feedbackType || 'clarity';
+              
+              // Flag as AI feedback if not explicitly set
+              if (appComment.isAIFeedback === undefined) {
+                appComment.isAIFeedback = true;
+              }
             }
             
             console.log("Converted to app comment:", appComment);
@@ -666,7 +692,36 @@ export function EditorContainer({
           
           // Apply comment marks in the editor
           loadedComments.forEach(comment => {
-            if (comment.from && comment.to && comment.from < comment.to) {
+            // Only try to find and mark the text if we have quoted text but no valid from/to positions
+            if (comment.quotedText && comment.quotedText.trim() !== '' && 
+                (!comment.from || !comment.to || comment.from === 0 || comment.to === 0)) {
+              try {
+                // Find the quoted text in the document
+                const docText = editor.state.doc.textContent;
+                const quotedText = comment.quotedText.trim();
+                const quotedTextPos = docText.indexOf(quotedText);
+                
+                if (quotedTextPos !== -1) {
+                  // Update comment with found positions
+                  comment.from = quotedTextPos;
+                  comment.to = quotedTextPos + quotedText.length;
+                  
+                  console.log(`Found quoted text "${quotedText}" at positions ${comment.from}-${comment.to}`);
+                  
+                  // Apply the comment mark
+                  editor.chain()
+                    .setTextSelection({ from: comment.from, to: comment.to })
+                    .setComment(comment.id)
+                    .run();
+                } else {
+                  console.warn(`Could not find quoted text: "${quotedText}" in document`);
+                }
+              } catch (error) {
+                console.error('Error finding and marking text:', error, comment);
+              }
+            } 
+            // If we have valid from/to, apply directly
+            else if (comment.from && comment.to && comment.from < comment.to) {
               try {
                 editor.chain()
                   .setTextSelection({ from: comment.from, to: comment.to })
@@ -718,6 +773,64 @@ export function EditorContainer({
   }, [editor, eventBatcher, setDocumentTitle, setCurrentFileId, 
       essayTopicHighlight, paragraphTopicHighlights, setComments,
       setEssayTopicHighlight, setParagraphTopicHighlights]);
+
+  // Function to update the positions of comments when the document changes
+  const updateCommentPositions = useCallback(() => {
+    if (!editor) return;
+    
+    // Update all comment positions
+    setComments(prevComments => {
+      return prevComments.map(comment => {
+        // Find the comment mark in the document
+        let foundPos: { from: number; to: number } | null = null;
+        editor.state.doc.descendants((node, pos) => {
+          const mark = node.marks.find(m => 
+            m.type.name === 'comment' && 
+            m.attrs.commentId === comment.id
+          );
+          if (mark) {
+            foundPos = { from: pos, to: pos + node.nodeSize };
+            return false;
+          }
+        });
+
+        // If found, update the positions
+        if (foundPos) {
+          return {
+            ...comment,
+            from: foundPos.from,
+            to: foundPos.to,
+            quotedText: editor.state.doc.textBetween(foundPos.from, foundPos.to)
+          };
+        }
+        
+        return comment;
+      });
+    });
+  }, [editor, setComments]);
+
+  // Add an event handler for document changes
+  useEffect(() => {
+    if (!editor) return;
+    
+    const handleDocChange = () => {
+      // Debounce the update to avoid excessive recalculations
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+      
+      updateTimeoutRef.current = setTimeout(updateCommentPositions, 500);
+    };
+    
+    editor.on('update', handleDocChange);
+    
+    return () => {
+      editor.off('update', handleDocChange);
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+    };
+  }, [editor, updateCommentPositions]);
 
   return (
     <div className={cn("w-full h-full relative", className)}>

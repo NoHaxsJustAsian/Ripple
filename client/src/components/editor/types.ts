@@ -41,8 +41,9 @@ export interface CommentType {
   author?: string;
   userId?: string;
   isAIFeedback?: boolean;
-  feedbackType?: 'style' | 'grammar' | 'clarity' | 'idea';
-  issueType?: 'error' | 'warning' | 'suggestion';
+  title?: string;
+  feedbackType?: 'style' | 'grammar' | 'clarity' | 'idea' | 'sentence' | 'paragraph' | 'general';
+  issueType?: 'error' | 'warning' | 'suggestion' | 'grammar' | 'clarity' | 'coherence' | 'cohesion' | 'style' | 'structure' | 'flow';
   suggestedEdit?: {
     original: string;
     suggested: string;

@@ -87,16 +87,20 @@ export function EditorHeader({
             text: typeof comment.content === 'string' ? comment.content : '',
             from: typeof comment.from === 'number' ? comment.from : 0,
             to: typeof comment.to === 'number' ? comment.to : 0,
+            quotedText: comment.quotedText || '',
             createdAt: typeof comment.createdAt === 'object' && comment.createdAt instanceof Date 
               ? comment.createdAt.toISOString() 
               : (typeof comment.createdAt === 'string' ? comment.createdAt : new Date().toISOString()),
-            resolved: !!comment.resolved
+            resolved: !!comment.resolved,
+            issueType: comment.issueType || (comment.suggestedEdit ? 'grammar' : 'suggestion'),
+            feedbackType: comment.feedbackType || 'clarity',
+            isAIFeedback: comment.suggestedEdit ? true : !!comment.isAIFeedback
           };
           
           // Handle suggested edits if they exist
           if (comment.suggestedEdit) {
             supabaseComment.suggestedEdit = {
-              original: comment.suggestedEdit.original || '',
+              original: comment.suggestedEdit.original || comment.quotedText || '',
               suggested: comment.suggestedEdit.suggested || '',
               explanation: comment.suggestedEdit.explanation || ''
             };
@@ -179,16 +183,20 @@ export function EditorHeader({
             text: typeof comment.content === 'string' ? comment.content : '',
             from: typeof comment.from === 'number' ? comment.from : 0,
             to: typeof comment.to === 'number' ? comment.to : 0,
+            quotedText: comment.quotedText || '',
             createdAt: typeof comment.createdAt === 'object' && comment.createdAt instanceof Date 
               ? comment.createdAt.toISOString() 
               : (typeof comment.createdAt === 'string' ? comment.createdAt : new Date().toISOString()),
-            resolved: !!comment.resolved
+            resolved: !!comment.resolved,
+            issueType: comment.issueType || (comment.suggestedEdit ? 'grammar' : 'suggestion'),
+            feedbackType: comment.feedbackType || 'clarity',
+            isAIFeedback: comment.suggestedEdit ? true : !!comment.isAIFeedback
           };
           
           // Handle suggested edits if they exist
           if (comment.suggestedEdit) {
             supabaseComment.suggestedEdit = {
-              original: comment.suggestedEdit.original || '',
+              original: comment.suggestedEdit.original || comment.quotedText || '',
               suggested: comment.suggestedEdit.suggested || '',
               explanation: comment.suggestedEdit.explanation || ''
             };

@@ -26,11 +26,15 @@ export function CommentItem({
   
   // Debug logging
   console.log("Comment item rendered with issue type:", comment.issueType);
+  console.log("Has suggestedEdit:", !!comment.suggestedEdit);
   console.log("Full comment object:", comment);
+
+  // Check if this is a suggested edit
+  const isSuggestedEdit = comment.suggestedEdit !== undefined;
 
   // Ensure there's a default issueType if it's undefined
   const issueType = comment.issueType || 
-    (comment.suggestedEdit ? 'grammar' : 'clarity'); // Default to grammar for edits, clarity for comments
+    (isSuggestedEdit ? 'grammar' : 'clarity'); // Default to grammar for edits, clarity for comments
   
   // Determine card style based on feedback type
   const cardStyle = comment.isAIFeedback
@@ -38,7 +42,9 @@ export function CommentItem({
       ? "shadow-[0_0_15px_rgba(245,158,11,0.15)]" // Amber glow for sentence feedback
       : comment.feedbackType === 'paragraph'
         ? "shadow-[0_0_15px_rgba(59,130,246,0.15)]" // Blue glow for paragraph feedback
-        : "shadow-[0_0_15px_rgba(168,85,247,0.15)]" // Purple glow for general feedback
+        : comment.feedbackType === 'general' || !comment.feedbackType
+          ? "shadow-[0_0_15px_rgba(168,85,247,0.15)]" // Purple glow for general feedback
+          : "shadow-[0_0_15px_rgba(168,85,247,0.15)]" // Default to purple glow
     : ""; // User comments have no special style
   
   const scrollToCommentInEditor = () => {
@@ -130,7 +136,7 @@ export function CommentItem({
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <h3 className="text-base font-medium break-words">
-                  {comment.suggestedEdit ? comment.title || 'Suggested Edit' : comment.content || 'Comment'}
+                  {isSuggestedEdit ? comment.title || 'Suggested Edit' : comment.content || 'Comment'}
                 </h3>
                 
                 {/* Move badge next to the title for prominence */}
@@ -155,7 +161,10 @@ export function CommentItem({
                 {issueType === 'flow' && (
                   <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-orange-200 text-orange-800 dark:bg-orange-900 dark:text-orange-300 border border-orange-300 shadow-sm">Flow</span>
                 )}
-                {issueType && !['grammar', 'clarity', 'coherence', 'cohesion', 'style', 'structure', 'flow'].includes(issueType) && (
+                {issueType === 'suggestion' && (
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-300 border border-teal-200 shadow-sm">Suggestion</span>
+                )}
+                {issueType && !['grammar', 'clarity', 'coherence', 'cohesion', 'style', 'structure', 'flow', 'suggestion'].includes(issueType) && (
                   <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 shadow-sm">{issueType}</span>
                 )}
               </div>
@@ -174,12 +183,13 @@ export function CommentItem({
                   className="text-sm text-muted-foreground bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70 mt-3 break-words"
                   onClick={scrollToCommentInEditor}
                 >
-                  {comment.suggestedEdit ? (
+                  {isSuggestedEdit ? (
                     <div className="suggest-edit-container overflow-hidden" tabIndex={0} >
                       <div className="relative">
                         <details className="mt-1" open>
                           <summary className="suggest-edit-label cursor-pointer">Current Text</summary>
                           <div className="flex flex-wrap gap-1.5 mb-2">
+                            {/* Badge display based on issueType */}
                             {issueType === 'grammar' && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300">Grammar</span>
                             )}
@@ -201,11 +211,14 @@ export function CommentItem({
                             {issueType === 'flow' && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-200 text-orange-800 dark:bg-orange-900 dark:text-orange-300">Flow</span>
                             )}
-                            {issueType && !['grammar', 'clarity', 'coherence', 'cohesion', 'style', 'structure', 'flow'].includes(issueType) && (
+                            {issueType === 'suggestion' && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-300">Suggestion</span>
+                            )}
+                            {issueType && !['grammar', 'clarity', 'coherence', 'cohesion', 'style', 'structure', 'flow', 'suggestion'].includes(issueType) && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300">{issueType}</span>
                             )}
                           </div>
-                          <div className="suggest-edit-deletion break-words mt-1">{comment.suggestedEdit?.original || ''}</div>
+                          <div className="suggest-edit-deletion break-words mt-1">{comment.suggestedEdit?.original || comment.quotedText || ''}</div>
                         </details>
                       </div>
                       <div>
@@ -332,11 +345,11 @@ export function CommentItem({
               <div className="flex items-center justify-between">
                 <h3 className="text-base font-medium">Comment</h3>
                 <span className="text-xs text-muted-foreground">
-                  {new Date(comment.createdAt).toLocaleDateString()} {new Date(comment.createdAtTime).toLocaleTimeString('en-US', {
+                  {new Date(comment.createdAt).toLocaleDateString()} {comment.createdAtTime ? new Date(comment.createdAtTime).toLocaleTimeString('en-US', {
                     hour: 'numeric',
                     minute: '2-digit',
                     hour12: true
-                  })}
+                  }) : ''}
                 </span>
               </div>
               
