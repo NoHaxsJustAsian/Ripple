@@ -574,7 +574,7 @@ export function EditorContainer({
       }));
 
       await supabase
-        .from("documents")
+        .from("files")
         .update({
           content,
           comments: jsonComments,
