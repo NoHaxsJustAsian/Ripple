@@ -2,9 +2,11 @@ import { ThemeProvider } from "@/components/ui/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import Editor from "@/components/Editor";
 import { Login } from "@/components/Login";
+import Hero from "@/components/Hero";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { useEffect, useState } from "react";
 import { EventBatcher } from "@/lib/event-logger";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 
 const editorEventBatcher = new EventBatcher("", 20, 2000);
 
@@ -33,14 +35,30 @@ function AppContent() {
 
   // Show login if no user
   if (!user) {
-    return <Login />;
+    return (
+      <Router>
+        <Routes>
+          <Route path="/" element={<Hero />} />
+          <Route path="/auth" element={<Login />} />
+          <Route path="*" element={<Navigate to="/auth" replace />} />
+        </Routes>
+      </Router>
+    );
   }
 
   // Show editor when authenticated and ready
   return (
-    <div className="min-h-screen bg-background">
-      {isReady && <Editor eventBatcher={editorEventBatcher} />}
-    </div>
+    <Router>
+      <Routes>
+        <Route path="/" element={<Hero />} />
+        <Route path="/editor" element={
+          <div className="min-h-screen bg-background">
+            {isReady && <Editor eventBatcher={editorEventBatcher} />}
+          </div>
+        } />
+        <Route path="*" element={<Navigate to="/editor" replace />} />
+      </Routes>
+    </Router>
   );
 }
 

@@ -5,6 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
+import { Link } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 
 export function Login() {
   const [prolificId, setProlificId] = useState('');
@@ -53,6 +55,12 @@ export function Login() {
     <div className="flex items-center justify-center min-h-screen bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
+          <div className="flex items-center justify-between mb-2">
+            <Link to="/" className="flex items-center text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              <span className="text-sm">Back to home</span>
+            </Link>
+          </div>
           <CardTitle className="text-xl">Welcome to Coherence</CardTitle>
           <CardDescription>
             Please enter your Prolific ID to continue.
