@@ -9,14 +9,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { ContextMenuSeparator } from '@radix-ui/react-context-menu';
-
-export interface CommentType {
-  id: string;
-  content: string;
-  createdAt: Date;
-  createdAtTime: Date;
-  quotedText: string;
-}
+import { CommentType } from './editor/types';
 
 interface AIContextMenuProps {
   children: React.ReactNode;

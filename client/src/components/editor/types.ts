@@ -1,19 +1,19 @@
+import { EventBatcher } from "@/lib/event-logger";
+
 // Editor component related types
 
 export interface EditorProps {
   className?: string;
   placeholder?: string;
   onEditorChange?: (content: string) => void;
+  eventBatcher?: EventBatcher;
 }
 
 export interface AIInsight {
   id: number;
-  content: string;
-  type: 'comment' | 'improvement';
-  highlightedText?: string;
-  highlightStyle?: string;
-  isHighlighted?: boolean;
-  feedbackType?: 'sentence' | 'paragraph' | 'general';
+  title: string;
+  text: string;
+  type: 'suggestion' | 'highlight' | 'analysis';
 }
 
 export interface PendingComment {
@@ -30,15 +30,25 @@ export interface SuggestedEdit {
 
 export interface CommentType {
   id: string;
-  content: string;
-  createdAt: Date;
-  createdAtTime: Date;
-  quotedText: string;
-  suggestedEdit?: SuggestedEdit;
+  text?: string;
+  content?: string;
+  from?: number;
+  to?: number;
+  createdAt: Date | string;
+  createdAtTime?: Date;
+  resolved?: boolean;
+  quotedText?: string;
+  author?: string;
+  userId?: string;
   isAIFeedback?: boolean;
-  feedbackType?: 'sentence' | 'paragraph' | 'general';
   title?: string;
-  issueType?: 'grammar' | 'clarity' | 'coherence' | 'cohesion' | 'style' | 'structure' | string;
+  feedbackType?: 'style' | 'grammar' | 'clarity' | 'idea' | 'sentence' | 'paragraph' | 'general';
+  issueType?: 'error' | 'warning' | 'suggestion' | 'grammar' | 'clarity' | 'coherence' | 'cohesion' | 'style' | 'structure' | 'flow';
+  suggestedEdit?: {
+    original: string;
+    suggested: string;
+    explanation: string;
+  };
 }
 
 export interface AnalysisResult {
