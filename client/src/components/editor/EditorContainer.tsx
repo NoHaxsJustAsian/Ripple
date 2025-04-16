@@ -691,7 +691,7 @@ export function EditorContainer({
           setComments(loadedComments);
           
           // Apply comment marks in the editor
-          loadedComments.forEach(comment => {
+          loadedComments.forEach((comment: CommentType) => {
             // Only try to find and mark the text if we have quoted text but no valid from/to positions
             if (comment.quotedText && comment.quotedText.trim() !== '' && 
                 (!comment.from || !comment.to || comment.from === 0 || comment.to === 0)) {
@@ -780,7 +780,7 @@ export function EditorContainer({
     
     // Update all comment positions
     setComments(prevComments => {
-      return prevComments.map(comment => {
+      return prevComments.map((comment: CommentType) => {
         // Find the comment mark in the document
         let foundPos: { from: number; to: number } | null = null;
         editor.state.doc.descendants((node, pos) => {
