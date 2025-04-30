@@ -29,6 +29,7 @@ interface ContextualAnalysisResponse {
   success: boolean;
   data: {
     comments: {
+      issueType: string | undefined;
       text: string;
       highlightedText: string;
       highlightStyle: string;

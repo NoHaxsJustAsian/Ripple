@@ -1,10 +1,9 @@
-import { useState } from 'react';
 import { Editor } from '@tiptap/react';
 import { Button } from '@/components/ui/button';
 import { cn } from "@/lib/utils";
-import { MessageSquare, Pencil, Trash2, Check, AlertTriangle } from 'lucide-react';
-import { Checkbox } from "@/components/ui/checkbox";
+import { MessageSquare, Pencil, Trash2, Check, X } from 'lucide-react';
 import { CommentType } from './types';
+
 
 interface CommentItemProps {
   comment: CommentType;
@@ -25,21 +24,19 @@ export function CommentItem({
 }: CommentItemProps) {
   
   // Debug logging
-  console.log("Comment item rendered with issue type:", comment.issueType);
+  console.log("ISSUE TYPE: Comment item rendered with issue type:", comment.issueType);
   console.log("Full comment object:", comment);
+
 
   // Ensure there's a default issueType if it's undefined
   const issueType = comment.issueType || 
-    (comment.suggestedEdit ? 'grammar' : 'clarity'); // Default to grammar for edits, clarity for comments
+    (comment.suggestedEdit ? 'general' : 'clarity'); // Default to grammar for edits, clarity for comments
+  // Add this after your const issueType declaration
+  console.log("FINAL ISSUE TYPE used for rendering:", issueType);
   
   // Determine card style based on feedback type
   const cardStyle = comment.isAIFeedback
-    ? comment.feedbackType === 'sentence'
-      ? "shadow-[0_0_15px_rgba(245,158,11,0.15)]" // Amber glow for sentence feedback
-      : comment.feedbackType === 'paragraph'
-        ? "shadow-[0_0_15px_rgba(59,130,246,0.15)]" // Blue glow for paragraph feedback
-        : "shadow-[0_0_15px_rgba(168,85,247,0.15)]" // Purple glow for general feedback
-    : ""; // User comments have no special style
+    ? comment.feedbackType === 'general' : "shadow-[0_0_15px_rgba(168,85,247,0.15)]"; // User comments have no special style
   
   const scrollToCommentInEditor = () => {
     if (!editor) return;
@@ -126,36 +123,25 @@ export function CommentItem({
         {comment.isAIFeedback ? (
           // AI Feedback style with warning triangle and accept/ignore buttons
           <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+            {/* <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" /> */}
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <h3 className="text-base font-medium break-words">
-                  {comment.suggestedEdit ? comment.title || 'Suggested Edit' : comment.content || 'Comment'}
+                  {/* {comment.suggestedEdit ? comment.title || 'Suggested Edit' : comment.content || 'Comment'} */}
+                  {comment.content}
                 </h3>
                 
                 {/* Move badge next to the title for prominence */}
-                {issueType === 'grammar' && (
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300 border border-purple-200 shadow-sm">Grammar</span>
-                )}
                 {issueType === 'clarity' && (
                   <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 border border-blue-200 shadow-sm">Clarity</span>
                 )}
                 {issueType === 'coherence' && (
                   <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 border border-yellow-200 shadow-sm">Coherence</span>
                 )}
-                {issueType === 'cohesion' && (
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-200 text-blue-800 dark:bg-blue-900 dark:text-blue-300 border border-blue-300 shadow-sm">Cohesion</span>
-                )}
-                {issueType === 'style' && (
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 border border-green-200 shadow-sm">Style</span>
-                )}
-                {issueType === 'structure' && (
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-purple-200 text-purple-800 dark:bg-purple-900 dark:text-purple-300 border border-purple-300 shadow-sm">Structure</span>
-                )}
                 {issueType === 'flow' && (
                   <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-orange-200 text-orange-800 dark:bg-orange-900 dark:text-orange-300 border border-orange-300 shadow-sm">Flow</span>
                 )}
-                {issueType && !['grammar', 'clarity', 'coherence', 'cohesion', 'style', 'structure', 'flow'].includes(issueType) && (
+                {issueType && !['clarity', 'coherence', 'flow'].includes(issueType) && (
                   <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 shadow-sm">{issueType}</span>
                 )}
               </div>
@@ -171,7 +157,7 @@ export function CommentItem({
               
               {comment.quotedText && (
                 <div 
-                  className="text-sm text-muted-foreground bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70 mt-3 break-words"
+                  className="text-sm text-muted-foreground bg-muted/50 p-0 rounded-md cursor-pointer hover:bg-muted/70 mt-3 break-words"
                   onClick={scrollToCommentInEditor}
                 >
                   {comment.suggestedEdit ? (
@@ -179,7 +165,7 @@ export function CommentItem({
                       <div className="relative">
                         <details className="mt-1" open>
                           <summary className="suggest-edit-label cursor-pointer">Current Text</summary>
-                          <div className="flex flex-wrap gap-1.5 mb-2">
+                          {/* <div className="flex flex-wrap gap-1.5 mb-2">
                             {issueType === 'grammar' && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300">Grammar</span>
                             )}
@@ -204,7 +190,7 @@ export function CommentItem({
                             {issueType && !['grammar', 'clarity', 'coherence', 'cohesion', 'style', 'structure', 'flow'].includes(issueType) && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300">{issueType}</span>
                             )}
-                          </div>
+                          </div> */}
                           <div className="suggest-edit-deletion break-words mt-1">{comment.suggestedEdit?.original || ''}</div>
                         </details>
                       </div>
@@ -290,27 +276,29 @@ export function CommentItem({
                 </div>
               )}
               
-              <div className="flex items-center justify-center mt-3 space-x-3">
+              <div className="flex items-center justify-left mt-3 space-x-3">
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   className="h-8 px-6"
                   onClick={handleIgnore}
                 >
+                  <X className="h-3.5 w-3.5 mr-2" />
                   Ignore
                 </Button>
                 
                 <Button
                   variant="default"
                   size="sm"
-                  className="h-8 px-6"
+                  className="h-8 px-6 pr-5 pl-3"
                   onClick={handleAcceptSuggestion}
                 >
+                  <Check className="h-3.5 w-3.5 mr-2" />
                   Accept
                 </Button>
               </div>
               
-              <div className="flex items-center justify-center gap-2 mt-3">
+              {/* <div className="flex items-center justify-center gap-2 mt-3">
                 <Checkbox id={`do-not-show-${comment.id}`} />
                 <label htmlFor={`do-not-show-${comment.id}`} className="text-sm text-muted-foreground">
                   Do not show this feedback again
@@ -321,7 +309,7 @@ export function CommentItem({
                     <span className="inline-flex items-center justify-center w-4 h-4 text-xs rounded-full text-blue-800 bg-blue-100 dark:text-blue-300 dark:bg-blue-900">?</span>
                   </div>
                 )}
-              </div>
+              </div> */}
             </div>
           </div>
         ) : (

@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ModeToggle } from '@/components/ui/mode-toggle';
-import { Save, FileDown, LightbulbIcon, MessageSquare, HelpCircle, Loader2 } from 'lucide-react';
+import { Save, FileDown, MessageSquare, HelpCircle, FileCheck2 } from 'lucide-react';
 import { toast } from "sonner";
 import { AnalysisTools } from './AnalysisTools';
 import { CommentType } from './types';
@@ -16,6 +16,7 @@ interface EditorHeaderProps {
   isInsightsOpen: boolean;
   setIsInsightsOpen: (open: boolean) => void;
   setIsHelpOpen: (open: boolean) => void;
+  isHelpOpen: boolean;
   setComments: React.Dispatch<React.SetStateAction<CommentType[]>>;
 }
 
@@ -28,6 +29,7 @@ export function EditorHeader({
   isInsightsOpen,
   setIsInsightsOpen,
   setIsHelpOpen,
+  isHelpOpen,
   setComments
 }: EditorHeaderProps) {
   const [isSaving, setIsSaving] = useState(false);
@@ -53,6 +55,7 @@ export function EditorHeader({
       setIsSaving(false);
     }
   }, [editor, documentTitle, comments]);
+
 
   const handleSaveAs = useCallback(async () => {
     if (!editor) return;
@@ -138,14 +141,14 @@ export function EditorHeader({
             onClick={() => setIsInsightsOpen(!isInsightsOpen)}
             className="h-7 px-3 text-xs flex items-center space-x-1"
           >
-            <LightbulbIcon className="h-3.5 w-3.5" />
-            <span>Suggestions</span>
+            <FileCheck2 className="h-3.5 w-3.5" />
+            <span>Toggle Suggestions</span>
           </Button>
           
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setIsHelpOpen(true)}
+            onClick={() => setIsHelpOpen(!isHelpOpen)}
             className="h-7 px-3 text-xs flex items-center space-x-1"
           >
             <HelpCircle className="h-3.5 w-3.5" />

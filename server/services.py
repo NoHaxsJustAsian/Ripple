@@ -10,11 +10,11 @@ client = AzureOpenAI(
     api_version=Config.API_VERSION
 )
 
-def analyze_text(content: str, analysis_type: str, theme: Optional[str] = None) -> dict:
+def analyze_text(content: str, theme: Optional[str] = None) -> dict:
     """Your existing analysis logic"""
     pass
 
-def analyze_text_with_context(content: str, full_context: str, analysis_type: str, target_type: str) -> dict:
+def analyze_text_with_context(content: str, full_context: str, target_type: str) -> dict:
     """Your existing contextual analysis logic"""
     pass
 

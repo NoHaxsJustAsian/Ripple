@@ -1,11 +1,12 @@
 import { useRef } from 'react';
 import { Editor } from '@tiptap/react';
-import { Button } from '@/components/ui/button';
 import { cn } from "@/lib/utils";
-import { AlertTriangle } from 'lucide-react';
+import { ArrowRightToLine, FileCheck } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MultiSelect } from '@/components/ui/multi-select';
 import { CommentType } from './types';
 import { CommentItem } from './CommentItem';
+import { useState } from 'react';
 
 interface CommentsListProps {
   isOpen: boolean;
@@ -80,6 +81,17 @@ export function CommentsList({
     setComments(sorted);
   };
 
+
+  const filterOptions = [
+    { value: 'flow', label: 'Flow' },
+    { value: 'focus', label: 'Focus' },
+    { value: 'clarity', label: 'Clarity' }
+  ];
+
+  const [selectedFilters, setSelectedFilters] = useState<string[]>(
+    filterOptions.map(option => option.value)
+  );
+
   return (
     <div 
       ref={commentsSectionRef} 
@@ -91,34 +103,40 @@ export function CommentsList({
       )}
       style={{
         zIndex: 40,
-        top: "7rem"
+        top: "6rem"
       }}
     >
       {/* Toggle Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full",
+          "absolute left-0 top-1/4 -translate-y-1/2 -translate-x-full",
           "bg-background border border-border/40 border-r-0",
           "px-2 py-3 rounded-l-md",
           "transition-colors hover:bg-accent"
         )}
       >
         <div className="flex flex-col items-center gap-2">
-          <AlertTriangle className="h-5 w-5 text-amber-500" />
-          <div className="rotate-180 [writing-mode:vertical-lr]">
-            <span className="text-xs font-medium">Filter Feedback</span>
-          </div>
+          {isOpen ? (
+            <ArrowRightToLine className="mr-2 h-4.0 w-4.0" strokeWidth={1.5} />
+          ) : (
+            <FileCheck className="mr-2 h-4.0 w-4.0" strokeWidth={1.5} />
+          )}
         </div>
       </button>
 
       {/* Panel Content */}
       <div className="h-full overflow-y-auto">
         {/* Filter Tabs */}
-        <div className="sticky top-0 z-10 bg-background p-4 pb-2">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-base">Filter Feedback</span>
-            <div>
+        <div className="flex items-center justify-around mb-4  pt-6">
+          <div className="flex items-center">
+            <div className="flex items-center gap-1 p-1">
+              <label
+                htmlFor="comment-sort"
+                className="text-xs font-medium text-muted-foreground whitespace-nowrap"
+              >
+                Sort by:
+              </label>
               <Select
                 onValueChange={sortComments}
               >
@@ -134,32 +152,45 @@ export function CommentsList({
               </Select>
             </div>
           </div>
-          <div className="flex space-x-2">
-            <button 
+          {/* <div className="flex space-x-2">
+            <button
               className={cn(
                 "px-4 py-2 rounded-md transition-colors text-sm",
                 "bg-muted/40 hover:bg-muted"
               )}
             >
-              Sentence
+              Focus
             </button>
-            <button 
+            <button
               className={cn(
                 "px-4 py-2 rounded-md transition-colors text-sm",
                 "bg-muted/40 hover:bg-muted"
               )}
             >
-              Paragraph
+              Flow
             </button>
-            <button 
+            <button
               className={cn(
                 "px-4 py-2 rounded-md transition-colors text-sm",
                 "bg-background text-white",
                 "bg-zinc-800 dark:bg-zinc-800"
               )}
             >
-              General
+              Clarity
             </button>
+          </div> */}
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="comment-sort"
+              className="text-xs font-medium text-muted-foreground whitespace-nowrap"
+            >
+              Filter by:
+            </label>
+            <MultiSelect
+              options={filterOptions}
+              selected={selectedFilters}
+              onChange={setSelectedFilters}
+            />
           </div>
         </div>
 

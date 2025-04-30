@@ -1,6 +1,6 @@
 import { useState, Dispatch, SetStateAction, useEffect } from 'react';
 import { Editor } from '@tiptap/react';
-import { Wand2, Copy, Clipboard, TextSelect, RectangleEllipsis } from 'lucide-react';
+import { Copy, Clipboard, RectangleEllipsis, FileText, MessageSquare } from 'lucide-react';
 import { InlineAIPrompt } from './InlineAIPrompt';
 import {
   ContextMenu,
@@ -242,7 +242,7 @@ export function AIContextMenu({
               onSelect={onAddComment}
               className="flex items-center"
             >
-              <TextSelect className="mr-2 h-4 w-4" />
+              <MessageSquare className="mr-2 h-4 w-4" />
               <span>Add Comment</span>
             </ContextMenuItem>
             <ContextMenuSeparator />
@@ -251,14 +251,14 @@ export function AIContextMenu({
               className="flex items-center"
             >
               <RectangleEllipsis className="mr-2 h-4 w-4" />
-              <span>Select as Paragraph Topic</span>
+              <span>Set as Paragraph Topic</span>
             </ContextMenuItem>
             <ContextMenuItem 
               onSelect={onSelectAsEssayTopic}
               className="flex items-center"
             >
-              <Wand2 className="mr-2 h-4 w-4" />
-              <span>Select as Essay Topic</span>
+              <FileText className="mr-2 h-4 w-4" />
+              <span>Set as Essay Topic</span>
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>

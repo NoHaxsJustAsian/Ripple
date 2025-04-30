@@ -98,7 +98,7 @@ def analyze_with_context():
                 "code": "EMPTY_CONTENT"
             }), 400
 
-        analysis_data = analyze_text_with_context(content, full_context, analysis_type, target_type)
+        analysis_data = analyze_text_with_context(content, full_context, target_type)
 
         return jsonify({
             "success": True,

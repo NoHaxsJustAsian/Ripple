@@ -4,7 +4,7 @@ import Highlight from '@tiptap/extension-highlight';
 import TextStyle from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import Underline from '@tiptap/extension-underline';
-import { useEffect, useState, useCallback, useRef, createContext, useMemo } from 'react';
+import { useEffect, useState, useCallback, createContext } from 'react';
 import { cn } from "@/lib/utils";
 import { EditorView } from 'prosemirror-view';
 import { HelpCircle } from 'lucide-react';
@@ -501,6 +501,7 @@ export function EditorContainer({
                 isInsightsOpen={isInsightsOpen}
                 setIsInsightsOpen={setIsInsightsOpen}
                 setIsHelpOpen={setIsHelpOpen}
+                isHelpOpen={isHelpOpen} 
                 setComments={setComments}
               />
               <EditorToolbar 
@@ -513,7 +514,7 @@ export function EditorContainer({
                 onToggleParagraphTopics={toggleParagraphTopics}
                 onToggleEssayTopics={toggleEssayTopics}
               />
-              <div className="flex-1 overflow-auto bg-[#FAF9F6] dark:bg-background/10">
+              <div className="flex-1 overflow-auto bg-[#FAF9F6] dark:bg-background/10 ">
                 <div className="mx-auto relative" style={{ width: '794px' }}>
                   <div className="py-12">
                     <div className="relative bg-[#FFFDF7] dark:bg-card shadow-sm">
@@ -557,7 +558,7 @@ export function EditorContainer({
         
         <HelpSplashScreen
           isOpen={isHelpOpen}
-          onClose={() => setIsHelpOpen(false)}
+          onClose={() => setIsHelpOpen(!isHelpOpen)}
         />
 
         {isFirstVisit && !isHelpOpen && (
@@ -573,7 +574,7 @@ export function EditorContainer({
             </div>
             <button 
               className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 py-2"
-              onClick={() => setIsHelpOpen(true)}
+              onClick={() => setIsHelpOpen(!isHelpOpen)}
             >
               Learn More
             </button>

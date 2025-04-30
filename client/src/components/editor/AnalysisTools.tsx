@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Editor } from '@tiptap/react';
-import { Zap, Loader2 } from 'lucide-react';
+import { Loader2, Clock, Highlighter, File } from 'lucide-react';
 import { toast } from "sonner";
 import { ActionSelect, ActionItemType } from '../ui/multi-select';
 import { analyzeTextWithContext } from '@/lib/api';
@@ -19,6 +19,17 @@ export function AnalysisTools({
 }: AnalysisToolsProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [lastAnalysisTime, setLastAnalysisTime] = useState<Date | null>(null);
+
+  const formatAnalysisTime = (date: Date | null) => {
+    if (!date) return '';
+
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
   
   // Function to run contextual analysis
   const runContextualAnalysis = useCallback(async (analysisType: 'all' | 'paragraph' | 'custom') => {
@@ -67,9 +78,9 @@ export function AnalysisTools({
       // Map client analysis type to server expected type
       let serverAnalysisType: string;
       switch(analysisType) {
-        case 'paragraph':
-          serverAnalysisType = 'paragraph';
-          break;
+        // case 'paragraph':
+        //   serverAnalysisType = 'paragraph';
+        //   break;
         case 'custom':
           serverAnalysisType = 'section';
           break;
@@ -89,6 +100,8 @@ export function AnalysisTools({
       
       // Process the response
       setAnalysisResult(response.data);
+      // Set the last analysis time
+      setLastAnalysisTime(new Date());
       
       if (response.data.comments?.length > 0) {
         const newComments: CommentType[] = [];
@@ -118,7 +131,7 @@ export function AnalysisTools({
               createdAtTime: new Date(),
               quotedText: comment.highlightedText,
               isAIFeedback: true,
-              feedbackType: 'general', // Default to general feedback
+              issueType: comment.issueType || 'general',
               ...(comment.suggestedEdit ? {
                 suggestedEdit: {
                   original: comment.suggestedEdit.original,
@@ -154,38 +167,51 @@ export function AnalysisTools({
   const feedback_items: ActionItemType[] = [
     {
       value: 'all',
-      label: 'Analyze Everything',
-      icon: <Zap className="h-3.5 w-3.5" />,
+      label: 'Check everything',
+      icon: <File className="h-3.5 w-3.5 text-blue-500" />,
       className: "flex items-center cursor-pointer border-b border-gray-200 border-solid pt-2 pb-2", 
+      description: 'Get comprehensive feedback for the entire document',
       action: () => runContextualAnalysis('all')
     },
-    {
-      value: 'paragraph',
-      label: 'Analyze by Paragraph',
-      icon: <Zap className="h-3.5 w-3.5 text-yellow-500" />,
-      action: () => runContextualAnalysis('paragraph')
-    },
+    // {
+    //   value: 'paragraph',
+    //   label: 'Analyze by Paragraph',
+    //   icon: <Zap className="h-3.5 w-3.5 text-yellow-500" />,
+    //   action: () => runContextualAnalysis('paragraph')
+    // },
     {
       value: 'custom',
-      label: 'Analyze Custom Selection',
-      icon: <Zap className="h-3.5 w-3.5 text-purple-500" />,
+      label: 'Check custom selection',
+      description: 'Get feedback for the selected text',
+      icon: <Highlighter className="h-3.5 w-3.5 text-purple-500" />,
       action: () => runContextualAnalysis('custom')
     }
   ];
 
   return (
-    <div className="flex space-x-1 text-sm">
-      {isAnalyzing ? (
-        <div className="flex items-center space-x-1">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          <span>Checking...</span>
-        </div>
-      ) : (
-        <ActionSelect
-          label="Check for Feedback"
-          items={feedback_items}
-        />
+    <div className="flex items-center space-x-3">
+      {lastAnalysisTime && (
+        <>
+          <div className="text-xs text-muted-foreground flex items-center">
+            <Clock className="h-3 w-3 mr-1.5" />
+            <span>Feedback last updated at {formatAnalysisTime(lastAnalysisTime)}</span>
+          </div>
+          <div className="w-[1px] h-5 bg-border/40 dark:bg-zinc-800 rounded-full" />
+        </>
       )}
+      <div className="flex space-x-1 text-sm">
+        {isAnalyzing ? (
+          <div className="flex items-center space-x-1">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <span>Checking...</span>
+          </div>
+        ) : (
+          <ActionSelect
+            label="Check for Feedback"
+            items={feedback_items}
+          />
+        )}
+      </div>
     </div>
   );
 } 

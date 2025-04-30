@@ -13,7 +13,7 @@ export interface AIInsight {
   highlightedText?: string;
   highlightStyle?: string;
   isHighlighted?: boolean;
-  feedbackType?: 'sentence' | 'paragraph' | 'general';
+  feedbackType?: 'general';
 }
 
 export interface PendingComment {
@@ -36,9 +36,9 @@ export interface CommentType {
   quotedText: string;
   suggestedEdit?: SuggestedEdit;
   isAIFeedback?: boolean;
-  feedbackType?: 'sentence' | 'paragraph' | 'general';
+  feedbackType?: 'general';
   title?: string;
-  issueType?: 'grammar' | 'clarity' | 'coherence' | 'cohesion' | 'style' | 'structure' | string;
+  issueType?: 'flow' | 'clarity' | 'coherence' | string;
 }
 
 export interface AnalysisResult {

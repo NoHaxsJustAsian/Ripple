@@ -55,19 +55,42 @@ details.mt-1 summary::-webkit-details-marker {
   display: none;
 }
 
+/* Base styles for the summary element */
+details.mt-1 summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 0;
+  user-select: none;
+  list-style: none;
+  /* Critical: removes the default list style dot/arrow */
+}
+
+/* These two rules are essential for removing the default arrow in all browsers */
+details.mt-1 summary::-webkit-details-marker {
+  display: none;
+}
+
+details.mt-1 summary {
+  list-style-type: none;
+}
+
+/* Remove the existing left-side arrow */
 details.mt-1 summary::before {
+  content: none;
+  }
+  
+  details.mt-1 summary::after {
   content: "▶";
   display: inline-block;
   font-size: 0.6rem;
-  margin-right: 0.375rem;
-  transform: translateY(-1px);
+  margin-left: 0.375rem;
   transition: transform 0.2s;
 }
 
-details.mt-1[open] summary::before {
+details.mt-1[open] summary::after {
   transform: rotate(90deg) translateX(-1px);
 }
-
 .suggest-edit-deletion {
   display: block;
   background-color: rgb(254, 226, 226);
@@ -93,6 +116,7 @@ details.mt-1[open] summary::before {
   word-break: break-word;
   overflow-wrap: break-word;
 } 
+
 .suggest-edit-explanation {
   display: block;
   /* background-color: rgb(209, 250, 229); */

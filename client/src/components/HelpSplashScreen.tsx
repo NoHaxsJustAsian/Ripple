@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { X, Play, Info, PenTool, Lightbulb, MessageSquare, Award } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { Button } from './ui/button';
@@ -21,6 +21,35 @@ export function HelpSplashScreen({ isOpen, onClose }: HelpSplashScreenProps) {
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
   const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
   
+  const [isVisible, setIsVisible] = useState(false);
+  const [position, setPosition] = useState("-translate-x-full");
+
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsVisible(true);
+      const timer = setTimeout(() => {
+        setPosition("translate-x-0");
+      }, 50);
+
+      return () => clearTimeout(timer);
+    } else {
+      // First animate out
+      setPosition("-translate-x-full");
+
+      // Then remove from DOM after animation completes
+      const timer = setTimeout(() => {
+        setIsVisible(false);
+      }, 300); // Match to your transition duration
+
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
+  // Don't render if not visible
+  if (!isVisible) return null;
+
+
   const videoTiles: VideoTile[] = [
     {
       id: 'getting-started',
@@ -83,19 +112,18 @@ export function HelpSplashScreen({ isOpen, onClose }: HelpSplashScreenProps) {
     }
   };
 
-  if (!isOpen) return null;
-
   return (
     <div 
       className={cn(
         "fixed left-0 top-0 h-screen bg-background border-r border-border/40",
         "transition-all duration-300 ease-in-out",
-        "z-50 w-[440px] shadow-lg overflow-hidden"
+        "z-50 w-[440px] shadow-lg overflow-hidden",
+        position
       )}
     >
       {/* Header */}
       <div className="border-b border-border/40 p-3 flex justify-between items-center bg-muted/30">
-        <h2 className="text-lg font-semibold">Ripple Tutorials</h2>
+        <h2 className="text-lg font-semibold">How to Use Ripple</h2>
         <Button variant="ghost" size="icon" onClick={onClose}>
           <X className="h-4 w-4" />
         </Button>

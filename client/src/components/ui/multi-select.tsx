@@ -104,7 +104,21 @@ export function MultiSelect({
         >
           <span className="flex items-center">
             {label}
-            {anySelected && (
+            {
+              selected.length === options.length
+                ? "All"
+                : selected.length === 0
+                  ? "None"
+                  : selected.length <= 2
+                    // Show all labels if 1-2 items selected
+                    ? selected.map(value =>
+                      options.find(opt => opt.value === value)?.label || value
+                    ).join(", ")
+                    // Show first 2 labels + count if 3+ items
+                    : selected.slice(0, 2).map(value =>
+                      options.find(opt => opt.value === value)?.label || value
+                    ).join(", ") + ` +${selected.length - 2}`
+                    && (
               <span className="ml-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
                 {selected.length}
               </span>
@@ -138,6 +152,7 @@ export function MultiSelect({
                       }}
                     >
                       <div className="mr-2 flex h-4 w-4 items-center justify-center">
+
                         <Check
                           className={cn(
                             "h-4 w-4",
@@ -165,6 +180,7 @@ export function MultiSelect({
 export type ActionItemType = {
   value: string;
   label: string;
+  description?: string;
   icon?: React.ReactNode;
   className?: string;
   action: () => void;
@@ -176,6 +192,7 @@ interface ActionSelectProps {
   className?: string;
   label?: React.ReactNode;
   emptyText?: string;
+  description?: string;
 }
 
 export function ActionSelect({
@@ -203,7 +220,7 @@ export function ActionSelect({
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <Button
-          variant="outline" 
+          variant="outline"
           size="sm"
           className={cn(
             "h-8 px-3 text-xs flex items-center justify-between pointer-events-auto",
@@ -214,18 +231,25 @@ export function ActionSelect({
           <ChevronDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-52">
+      <DropdownMenuContent align="start" className="w-64">
         {items.length === 0 ? (
           <div className="text-sm py-2 px-3 text-muted-foreground">{emptyText}</div>
         ) : (
           items.map((item) => (
             <DropdownMenuItem
-                key={item.value}
-                onClick={() => handleSelect(item)}
-                className={`flex items-center cursor-pointer ${item.className}`}
-              >
-              {item.icon && <span className="mr-2">{item.icon}</span>}
-              {item.label}
+              key={item.value}
+              onClick={() => handleSelect(item)}
+              className={`flex flex-col items-start py-2 cursor-pointer ${item.className}`}
+            >
+              <div className="flex items-center w-full">
+                {item.icon && <span className="mr-2">{item.icon}</span>}
+                <span className="font-medium">{item.label}</span>
+              </div>
+              {item.description && (
+                <p className="text-xs text-muted-foreground mt-1 ml-6">
+                  {item.description}
+                </p>
+              )}
             </DropdownMenuItem>
           ))
         )}

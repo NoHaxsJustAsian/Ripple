@@ -6,7 +6,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { Check, ChevronDown, MessageSquare, Edit, List, FileText } from 'lucide-react';
+import { Check, ChevronDown, MessageSquare, FileText, RectangleEllipsis } from 'lucide-react';
 // impor/ { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -32,7 +32,6 @@ export function EditorToolbar({
   editor, 
   hasSelection = false, 
   onAddComment, 
-  onSuggestEdit,
   showParagraphTopics = false,
   showEssayTopics = false,
   onToggleParagraphTopics,
@@ -152,7 +151,7 @@ export function EditorToolbar({
             </TooltipContent>
           </Tooltip>
 
-          <Tooltip>
+          {/* <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
@@ -167,7 +166,7 @@ export function EditorToolbar({
             <TooltipContent side="bottom">
               <p>Suggest Edit</p>
             </TooltipContent>
-          </Tooltip>
+          </Tooltip> */}
 
           <div className="h-4 w-px bg-border/40" />
 
@@ -180,7 +179,7 @@ export function EditorToolbar({
               className="h-8 px-3 text-xs flex items-center space-x-1"
               title="Show paragraph topic sentences"
             >
-              <List className="h-3.5 w-3.5 mr-1" />
+              <RectangleEllipsis className="h-3.5 w-3.5 mr-1" />
               <span>Paragraph Topics</span>
             </Button>
             
@@ -193,17 +192,6 @@ export function EditorToolbar({
             >
               <FileText className="h-3.5 w-3.5 mr-1" />
               <span>Essay Topics</span>
-            </Button>
-
-            <Button
-              variant={"secondary"}
-              size="sm"
-              // onClick={onToggleParagraphTopics}
-              className="h-8 px-3 text-xs flex items-center space-x-1"
-              // title="Show paragraph topic sentences"
-            >
-              {/* <List className="h-3.5 w-3.5 mr-1" /> */}
-              <span>Custom Selection</span>
             </Button>
           </div>
           
