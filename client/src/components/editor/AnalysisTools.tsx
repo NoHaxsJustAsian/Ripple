@@ -30,17 +30,17 @@ export function AnalysisTools({
       hour12: true
     });
   };
-  
+
   // Function to run contextual analysis
   const runContextualAnalysis = useCallback(async (analysisType: 'all' | 'paragraph' | 'custom') => {
     if (!editor) return;
-    
+
     setIsAnalyzing(true);
-    
+
     try {
       let selectedContent = '';
-      let targetType: 'coherence' | 'cohesion' | 'focus' | 'all' = 'all';
-      
+      let targetType: 'flow' | 'clarity' | 'focus' | 'all' = 'all';
+
       // Handle each analysis type differently
       switch (analysisType) {
         case 'all':
@@ -48,7 +48,7 @@ export function AnalysisTools({
           editor.chain().focus().selectAll().run();
           selectedContent = editor.state.doc.textContent;
           break;
-          
+
         case 'custom':
           // Use existing selection
           selectedContent = editor.state.doc.textBetween(
@@ -60,56 +60,40 @@ export function AnalysisTools({
             return;
           }
           break;
-          
+
         case 'paragraph': {
           toast.warning("Paragraph analysis is not yet supported.");
           return;
         }
       }
-      
+
       if (!selectedContent) {
         console.error('No content selected for analysis');
         return;
       }
-      
+
       // Get full document content for context
       const fullContent = editor.state.doc.textContent;
-      
-      // Map client analysis type to server expected type
-      let serverAnalysisType: string;
-      switch(analysisType) {
-        // case 'paragraph':
-        //   serverAnalysisType = 'paragraph';
-        //   break;
-        case 'custom':
-          serverAnalysisType = 'section';
-          break;
-        case 'all':
-        default:
-          serverAnalysisType = 'document';
-          break;
-      }
-      
-      // Call API with context
+
+      // Call API with context - removed 'type' parameter
       const response = await analyzeTextWithContext({
         content: selectedContent,
         fullContext: fullContent,
-        type: serverAnalysisType as 'paragraph' | 'section' | 'document' | 'theme',
         targetType: targetType
       });
-      
+
       // Process the response
       setAnalysisResult(response.data);
       // Set the last analysis time
       setLastAnalysisTime(new Date());
-      
+
       if (response.data.comments?.length > 0) {
         const newComments: CommentType[] = [];
-        
+
         response.data.comments.forEach(comment => {
           const textToFind = comment.highlightedText;
           let commentPosition = null;
-          
+
           // Find the position of the text in the document
           editor.state.doc.descendants((node, pos) => {
             const nodeText = node.textContent;
@@ -120,10 +104,10 @@ export function AnalysisTools({
               return false; // Stop traversal
             }
           });
-          
+
           if (commentPosition) {
             const commentId = `comment-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-            
+
             const newComment: CommentType = {
               id: commentId,
               content: comment.text,
@@ -140,20 +124,20 @@ export function AnalysisTools({
                 }
               } : {})
             };
-            
+
             editor.chain()
               .setTextSelection(commentPosition)
               .setComment(commentId)
               .run();
-            
+
             newComments.push(newComment);
           }
         });
-        
+
         setComments(prev => [...prev, ...newComments]);
         setIsInsightsOpen(true);
       }
-      
+
     } catch (error) {
       console.error('Error running contextual analysis:', error);
       toast.error("Analysis failed. Please try again.");
@@ -169,7 +153,7 @@ export function AnalysisTools({
       value: 'all',
       label: 'Check everything',
       icon: <File className="h-3.5 w-3.5 text-blue-500" />,
-      className: "flex items-center cursor-pointer border-b border-gray-200 border-solid pt-2 pb-2", 
+      className: "flex items-center cursor-pointer border-b border-gray-200 border-solid pt-2 pb-2",
       description: 'Get comprehensive feedback for the entire document',
       action: () => runContextualAnalysis('all')
     },
@@ -214,4 +198,4 @@ export function AnalysisTools({
       </div>
     </div>
   );
-} 
+}

@@ -23,7 +23,6 @@ The server uses a monolithic file structure with all functionality in app.py:
 3. Install dependencies:
    ```
    pip install -r requirements.txt
-   python -m spacy download en_core_web_sm
    ```
 
 ## Running the Server
@@ -49,5 +48,4 @@ The server will run on http://127.0.0.1:5000 by default.
 
 - Flask - Web framework
 - OpenAI - GPT model access
-- spaCy - NLP processing
 - NLTK - Natural language toolkit 

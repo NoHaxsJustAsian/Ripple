@@ -7,7 +7,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # Download spaCy model if needed
-python -m spacy download en_core_web_sm
+# python -m spacy download en_core_web_sm
 
 # Run the Flask app
 python app.py 

@@ -26,19 +26,43 @@ export interface SuggestedEdit {
   original: string;
   suggested: string;
   explanation: string;
+  references?: Reference[];
 }
 
+export interface Reference {
+  text: string;
+  referenceText: string;
+  source?: 'quote' | 'implicit' | 'api';
+  position?: { from: number, to: number };
+}
+
+// Update to types.ts
 export interface CommentType {
   id: string;
-  content: string;
-  createdAt: Date;
-  createdAtTime: Date;
-  quotedText: string;
-  suggestedEdit?: SuggestedEdit;
-  isAIFeedback?: boolean;
-  feedbackType?: 'general';
-  title?: string;
-  issueType?: 'flow' | 'clarity' | 'coherence' | string;
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+  updatedAt: string;
+  quotedText?: string;
+  issueType?: string;
+  suggestedEdit?: {
+    original: string;
+    suggested: string;
+    explanation: string;
+  };
+  isPinned?: boolean;
+  completionInfo?: Array<{
+    action: 'active' | 'dismissed' | 'replaced';
+    timestamp: string;
+  }>;
+  feedbackHistory?: Array<{
+    timestamp: string;
+    original: string;
+    currentText: string;
+    suggested: string;
+    explanation: string;
+    issueType?: string;
+  }>;
 }
 
 export interface AnalysisResult {

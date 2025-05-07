@@ -155,7 +155,7 @@ export function EditorHeader({
             <span>Help</span>
           </Button>
           
-          <Button
+          {/* <Button
             variant="ghost"
             size="sm"
             onClick={toggleAIPanel}
@@ -163,7 +163,7 @@ export function EditorHeader({
           >
             <MessageSquare className="h-3.5 w-3.5" />
             <span>Chat</span>
-          </Button>
+          </Button> */}
         </div>
       </div>
     </div>

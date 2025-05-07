@@ -21,11 +21,11 @@ import { CommentsList } from './CommentsList';
 import { AIInsight, CommentType, EditorProps } from './types';
 
 // Create a context for insights
-export const InsightsContext = createContext<[AIInsight[], React.Dispatch<React.SetStateAction<AIInsight[]>>]>([[], () => {}]);
+export const InsightsContext = createContext<[AIInsight[], React.Dispatch<React.SetStateAction<AIInsight[]>>]>([[], () => { }]);
 
-export function EditorContainer({ 
+export function EditorContainer({
   className = '',
-  onEditorChange 
+  onEditorChange
 }: EditorProps): JSX.Element {
   const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
   const [isInsightsOpen, setIsInsightsOpen] = useState(true);
@@ -37,12 +37,16 @@ export function EditorContainer({
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [comments, setComments] = useState<CommentType[]>([]);
-  const [essayTopicHighlight, setEssayTopicHighlight] = useState<{from: number, to: number} | null>(null);
-  const [paragraphTopicHighlights, setParagraphTopicHighlights] = useState<{[paragraphId: string]: {from: number, to: number}}>({});
+  const [essayTopicHighlight, setEssayTopicHighlight] = useState<{ from: number, to: number } | null>(null);
+  const [paragraphTopicHighlights, setParagraphTopicHighlights] = useState<{ [paragraphId: string]: { from: number, to: number } }>({});
   const [selectedText, setSelectedText] = useState('');
   const [showParagraphTopics, setShowParagraphTopics] = useState(false);
   const [showEssayTopics, setShowEssayTopics] = useState(false);
-  
+
+  // Add new state variables to store the actual text content
+  const [paragraphTopicTexts, setParagraphTopicTexts] = useState<{ [paragraphId: string]: string }>({});
+  const [essayTopicText, setEssayTopicText] = useState<string>('');
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -88,22 +92,22 @@ export function EditorContainer({
           // Single letters, numbers or special chars
           (event.key.length === 1 && !event.ctrlKey && !event.metaKey) ||
           // Space, backspace, delete
-          event.key === ' ' || 
-          event.key === 'Backspace' || 
+          event.key === ' ' ||
+          event.key === 'Backspace' ||
           event.key === 'Delete'
         );
-        
+
         if (isContentModifying) {
           // Preemptively remove highlight at the cursor position
           editor?.chain().unsetHighlight().run();
         }
-        
+
         return false; // Let the default handler run
       },
       handlePaste: (_view: EditorView, event: ClipboardEvent) => {
         const clipboardData = event.clipboardData;
         if (!clipboardData) return false;
-        
+
         const text = clipboardData.getData('text');
         try {
           JSON.parse(text);
@@ -119,7 +123,7 @@ export function EditorContainer({
       onEditorChange?.(html);
       // Clear the selected insight when user types
       setSelectedInsight(null);
-      
+
       // If this update was triggered by the user typing (not by a programmatic change),
       // we should remove any highlighting at the current cursor position
       if (transaction.docChanged && transaction.steps.some(step => step.toJSON().stepType === 'replace')) {
@@ -145,19 +149,32 @@ export function EditorContainer({
   useEffect(() => {
     const saved = localStorage.getItem('ripple-doc');
     if (saved && editor) {
-      const { title, content, comments: savedComments = [] } = JSON.parse(saved);
+      const {
+        title,
+        content,
+        comments: savedComments = [],
+        paragraphTopicHighlights: savedParagraphTopicHighlights = {},
+        essayTopicHighlight: savedEssayTopicHighlight = null,
+        paragraphTopicTexts: savedParagraphTopicTexts = {},
+        essayTopicText: savedEssayTopicText = ''
+      } = JSON.parse(saved);
+
       setDocumentTitle(title);
       setComments(savedComments);
+      setParagraphTopicHighlights(savedParagraphTopicHighlights);
+      setEssayTopicHighlight(savedEssayTopicHighlight);
+      setParagraphTopicTexts(savedParagraphTopicTexts);
+      setEssayTopicText(savedEssayTopicText);
       editor.commands.setContent(content);
     }
   }, [editor]);
 
   const getSelectedText = useCallback(() => {
     if (!editor) return '';
-    
+
     const { from, to } = editor.state.selection;
     if (from === to) return ''; // No selection
-    
+
     return editor.state.doc.textBetween(from, to);
   }, [editor]);
 
@@ -172,30 +189,30 @@ export function EditorContainer({
   // Memoize toggleTopicSentencesVisibility to prevent recreation on every render
   const toggleTopicSentencesVisibility = useCallback((topicType: string) => {
     if (!editor) return;
-    
+
     // Save current selection before modifying anything
     const { from: currentFrom, to: currentTo } = editor.state.selection;
     const hadSelection = currentFrom !== currentTo;
-    
+
     if (topicType === 'paragraph') {
       // Show paragraph topics
       Object.entries(paragraphTopicHighlights).forEach(([, { from, to }]) => {
         editor.commands.setTextSelection({ from, to });
         editor.commands.setHighlight({ color: '#93c5fd' });
       });
-    } 
+    }
     else if (topicType === 'paragraph_hide') {
       // Hide paragraph topics
       Object.entries(paragraphTopicHighlights).forEach(([, { from, to }]) => {
         editor.commands.setTextSelection({ from, to });
         editor.commands.unsetHighlight();
       });
-      
+
       // If essay topics are still visible, we need to re-highlight them in case of overlap
       if (showEssayTopics && essayTopicHighlight) {
-        editor.commands.setTextSelection({ 
-          from: essayTopicHighlight.from, 
-          to: essayTopicHighlight.to 
+        editor.commands.setTextSelection({
+          from: essayTopicHighlight.from,
+          to: essayTopicHighlight.to
         });
         editor.commands.setHighlight({ color: '#c4b5fd' });
       }
@@ -203,9 +220,9 @@ export function EditorContainer({
     else if (topicType === 'document') {
       // Show essay topic
       if (essayTopicHighlight) {
-        editor.commands.setTextSelection({ 
-          from: essayTopicHighlight.from, 
-          to: essayTopicHighlight.to 
+        editor.commands.setTextSelection({
+          from: essayTopicHighlight.from,
+          to: essayTopicHighlight.to
         });
         editor.commands.setHighlight({ color: '#c4b5fd' });
       }
@@ -213,13 +230,13 @@ export function EditorContainer({
     else if (topicType === 'document_hide') {
       // Hide essay topic
       if (essayTopicHighlight) {
-        editor.commands.setTextSelection({ 
-          from: essayTopicHighlight.from, 
-          to: essayTopicHighlight.to 
+        editor.commands.setTextSelection({
+          from: essayTopicHighlight.from,
+          to: essayTopicHighlight.to
         });
         editor.commands.unsetHighlight();
       }
-      
+
       // If paragraph topics are still visible, we need to re-highlight them in case of overlap
       if (showParagraphTopics) {
         Object.entries(paragraphTopicHighlights).forEach(([, { from, to }]) => {
@@ -228,7 +245,7 @@ export function EditorContainer({
         });
       }
     }
-    
+
     // Restore the user's original selection
     if (hadSelection) {
       editor.commands.setTextSelection({ from: currentFrom, to: currentTo });
@@ -236,7 +253,7 @@ export function EditorContainer({
       // If there was no selection, just position the cursor where it was
       editor.commands.setTextSelection(currentFrom);
     }
-    
+
     // Focus the editor to ensure the cursor/selection is visible
     editor.commands.focus();
   }, [editor, paragraphTopicHighlights, essayTopicHighlight, showParagraphTopics, showEssayTopics]);
@@ -245,7 +262,7 @@ export function EditorContainer({
   const toggleParagraphTopics = useCallback(() => {
     const newState = !showParagraphTopics;
     setShowParagraphTopics(newState);
-    
+
     // Show notification based on the toggle state and available topics
     if (newState) {
       const topicCount = Object.keys(paragraphTopicHighlights).length;
@@ -272,7 +289,7 @@ export function EditorContainer({
   const toggleEssayTopics = useCallback(() => {
     const newState = !showEssayTopics;
     setShowEssayTopics(newState);
-    
+
     // Show notification based on the toggle state and available topics
     if (newState) {
       if (essayTopicHighlight) {
@@ -314,21 +331,30 @@ export function EditorContainer({
   // Now add the selection handlers after the toggle state variables
   const handleSelectAsParagraphTopic = useCallback(() => {
     if (!editor) return;
-    
+
     const { from, to } = editor.state.selection;
     if (from === to) return; // No selection
-    
+
     // Get the paragraph node that contains the selection
     const resolvedPos = editor.state.doc.resolve(from);
     const paragraph = resolvedPos.node(1); // Assuming paragraphs are at depth 1
-    
+
     if (paragraph) {
       const paragraphId = paragraph.attrs.id || resolvedPos.before(1).toString();
-      
+
+      // Extract the actual text content
+      const selectedText = editor.state.doc.textBetween(from, to);
+
+      console.log("Paragraph Topic Selected:", {
+        paragraphId,
+        position: { from, to },
+        text: selectedText
+      });
+
       // Remove any existing paragraph topic highlight in this paragraph
       if (paragraphTopicHighlights[paragraphId]) {
         const existingHighlight = paragraphTopicHighlights[paragraphId];
-        
+
         // Try to remove the existing highlight
         editor.chain()
           .setTextSelection({ from: existingHighlight.from, to: existingHighlight.to })
@@ -336,7 +362,7 @@ export function EditorContainer({
           .setTextSelection({ from, to }) // Restore original selection
           .run();
       }
-      
+
       // Apply the new highlight if topics are shown
       if (showParagraphTopics) {
         editor.chain()
@@ -344,23 +370,45 @@ export function EditorContainer({
           .setTextSelection(to)
           .run();
       }
-      
+
       // Update the state with the new paragraph topic position
-      setParagraphTopicHighlights(prev => ({ 
-        ...prev, 
-        [paragraphId]: { from, to } 
+      setParagraphTopicHighlights(prev => ({
+        ...prev,
+        [paragraphId]: { from, to }
       }));
-      
+
+      // Store the actual text content
+      setParagraphTopicTexts(prev => ({
+        ...prev,
+        [paragraphId]: selectedText
+      }));
+
+      // Log the updated state values
+      setTimeout(() => {
+        console.log("Updated paragraph topic states:", {
+          highlights: paragraphTopicHighlights,
+          texts: paragraphTopicTexts
+        });
+      }, 0);
+
       toast.success("Paragraph topic set");
     }
-  }, [editor, paragraphTopicHighlights, showParagraphTopics]);
+  }, [editor, paragraphTopicHighlights, paragraphTopicTexts, showParagraphTopics]);
 
   const handleSelectAsEssayTopic = useCallback(() => {
     if (!editor) return;
-    
+
     const { from, to } = editor.state.selection;
     if (from === to) return; // No selection
-    
+
+    // Extract the actual text content
+    const selectedText = editor.state.doc.textBetween(from, to);
+
+    console.log("Essay Topic Selected:", {
+      position: { from, to },
+      text: selectedText
+    });
+
     // Remove any existing essay topic highlight
     if (essayTopicHighlight) {
       // Try to remove the existing highlight
@@ -370,7 +418,7 @@ export function EditorContainer({
         .setTextSelection({ from, to }) // Restore original selection
         .run();
     }
-    
+
     // Apply the new highlight if topics are shown
     if (showEssayTopics) {
       editor.chain()
@@ -378,12 +426,23 @@ export function EditorContainer({
         .setTextSelection(to)
         .run();
     }
-    
+
     // Update the state with the new essay topic position
     setEssayTopicHighlight({ from, to });
-    
+
+    // Store the actual text content
+    setEssayTopicText(selectedText);
+
+    // Log the updated state values
+    setTimeout(() => {
+      console.log("Updated essay topic states:", {
+        highlight: essayTopicHighlight,
+        text: essayTopicText
+      });
+    }, 0);
+
     toast.success("Essay topic set");
-  }, [editor, essayTopicHighlight, showEssayTopics]);
+  }, [editor, essayTopicHighlight, essayTopicText, showEssayTopics]);
 
   // Get the entire document content
   const getDocumentContent = useCallback(() => {
@@ -411,7 +470,7 @@ export function EditorContainer({
     editor.chain().setComment(commentId).run();
     setActiveCommentId(commentId);
     setIsInsightsOpen(true);
-    
+
     // Small delay to ensure the DOM is updated
     setTimeout(() => {
       const textarea = document.getElementById(commentId) as HTMLTextAreaElement;
@@ -423,12 +482,12 @@ export function EditorContainer({
 
   const handleSuggestEdit = useCallback(() => {
     if (!editor) return;
-    
+
     const { from, to } = editor.state.selection;
     if (from === to) return; // No selection
-    
+
     const quotedText = editor.state.doc.textBetween(from, to);
-    
+
     // Show a prompt for the suggested edit
     const suggestedText = window.prompt('Suggest an edit:', quotedText);
     if (!suggestedText) return;
@@ -472,10 +531,22 @@ export function EditorContainer({
     if (!editor) return;
 
     try {
+      // Log what we're saving
+      console.log("Saving document with topics:", {
+        paragraphTopicHighlights,
+        paragraphTopicTexts,
+        essayTopicHighlight,
+        essayTopicText
+      });
+
       localStorage.setItem('ripple-doc', JSON.stringify({
         title: documentTitle,
         content: editor.getHTML(),
         comments,
+        paragraphTopicHighlights,
+        essayTopicHighlight,
+        paragraphTopicTexts,
+        essayTopicText,
         lastSaved: new Date().toISOString()
       }));
 
@@ -484,15 +555,15 @@ export function EditorContainer({
       console.error('Error saving document:', error);
       toast.error("Failed to save document");
     }
-  }, [editor, documentTitle, comments]);
+  }, [editor, documentTitle, comments, paragraphTopicHighlights, paragraphTopicTexts, essayTopicHighlight, essayTopicText]);
 
   return (
     <div className={cn("w-full h-full relative", className)}>
       <InsightsContext.Provider value={[insights, setInsights]}>
         <div className="h-full flex flex-col">
-          <div className="sticky top-4 z-30">
-            <div className="mx-4 rounded-lg overflow-hidden border border-border/40">
-              <EditorHeader 
+          <div className="relative z-30">
+            <div className="rounded-lg overflow-hidden border border-border/40">
+              <EditorHeader
                 editor={editor}
                 documentTitle={documentTitle}
                 setDocumentTitle={setDocumentTitle}
@@ -501,11 +572,11 @@ export function EditorContainer({
                 isInsightsOpen={isInsightsOpen}
                 setIsInsightsOpen={setIsInsightsOpen}
                 setIsHelpOpen={setIsHelpOpen}
-                isHelpOpen={isHelpOpen} 
+                isHelpOpen={isHelpOpen}
                 setComments={setComments}
               />
-              <EditorToolbar 
-                editor={editor} 
+              <EditorToolbar
+                editor={editor}
                 hasSelection={!!editor?.state.selection.content()}
                 onAddComment={handleAddComment}
                 onSuggestEdit={handleSuggestEdit}
@@ -518,7 +589,7 @@ export function EditorContainer({
                 <div className="mx-auto relative" style={{ width: '794px' }}>
                   <div className="py-12">
                     <div className="relative bg-[#FFFDF7] dark:bg-card shadow-sm">
-                      <AIContextMenu 
+                      <AIContextMenu
                         editor={editor}
                         onSelectAsParagraphTopic={handleSelectAsParagraphTopic}
                         onSelectAsEssayTopic={handleSelectAsEssayTopic}
@@ -530,7 +601,7 @@ export function EditorContainer({
                       >
                         <EditorContent editor={editor} />
                       </AIContextMenu>
-                    </div> 
+                    </div>
                   </div>
 
                   {/* Comments sidebar */}
@@ -548,14 +619,14 @@ export function EditorContainer({
             </div>
           </div>
         </div>
-        
-        <AISidePanel 
-          isOpen={isAIPanelOpen} 
-          onClose={toggleAIPanel} 
+
+        <AISidePanel
+          isOpen={isAIPanelOpen}
+          onClose={toggleAIPanel}
           selectedText={selectedText}
           documentContext={getDocumentContent()}
         />
-        
+
         <HelpSplashScreen
           isOpen={isHelpOpen}
           onClose={() => setIsHelpOpen(!isHelpOpen)}
@@ -572,7 +643,7 @@ export function EditorContainer({
                 Check out our help section to learn how to use all Ripple features.
               </p>
             </div>
-            <button 
+            <button
               className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 py-2"
               onClick={() => setIsHelpOpen(!isHelpOpen)}
             >
@@ -583,4 +654,4 @@ export function EditorContainer({
       </InsightsContext.Provider>
     </div>
   );
-} 
+}
