@@ -930,10 +930,6 @@ export function EditorContainer({
                 setIsHelpOpen={setIsHelpOpen}
                 isHelpOpen={isHelpOpen}
                 setComments={setComments}
-                eventBatcher={eventBatcher}
-                currentFileId={currentFileId}
-                setCurrentFileId={setCurrentFileId}
-                onLoadFile={handleLoadFile}
               />
               <EditorToolbar
                 editor={editor}

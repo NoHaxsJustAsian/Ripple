@@ -15,9 +15,8 @@ declare module './types' {
     isPinned?: boolean;
     // Array for tracking completion status and history
     completionInfo?: Array<{
-      action: 'accepted' | 'ignored';
+      action: 'active' | 'dismissed' | 'replaced';
       timestamp: string;
-      reason?: string;  // Optional reason for accepting/ignoring
     }>;
     feedbackHistory?: Array<{
       timestamp: string;
@@ -131,7 +130,7 @@ export function CommentsList({
 
         // Call the API to refresh the feedback
         const response = await refreshFeedback({
-          originalText: originalText,
+          originalText: originalText || '',
           currentText: currentText,
           originalFeedback: originalFeedback,
           issueType: commentToRefresh.issueType
@@ -530,7 +529,7 @@ export function CommentsList({
 
     // Get the latest action
     const latestAction = comment.completionInfo[comment.completionInfo.length - 1].action;
-    return latestAction === 'accepted' ? 'replaced' : 'dismissed';
+    return latestAction === 'replaced' ? 'replaced' : 'dismissed';
   };
 
   // Separate comments by their status

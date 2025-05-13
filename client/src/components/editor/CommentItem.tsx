@@ -765,7 +765,7 @@ export function CommentItem({
                         placeholder="Add a comment..."
                         className="w-full min-h-[60px] bg-transparent border-none p-0 resize-none focus:outline-none focus:ring-0"
                         autoFocus
-                          readOnly={isCompleted}
+                        readOnly={isCompleted}
                       />
                     )}
                   </div>
@@ -795,27 +795,27 @@ export function CommentItem({
                   </Button>
                 </div>
               ) : (
-                  <div className="flex items-center justify-left mt-3 space-x-3">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-6"
-                      onClick={handleIgnore}
-                    >
-                      <X className="h-3.5 w-3.5 mr-2" />
-                      Dismiss
-                    </Button>
+                <div className="flex items-center justify-left mt-3 space-x-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-6"
+                    onClick={handleIgnore}
+                  >
+                    <X className="h-3.5 w-3.5 mr-2" />
+                    Dismiss
+                  </Button>
 
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="h-8 px-6 pr-5 pl-3"
-                      onClick={handleAcceptSuggestion}
-                    >
-                      <Check className="h-3.5 w-3.5 mr-2" />
-                      Replace
-                    </Button>
-                  </div>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="h-8 px-6 pr-5 pl-3"
+                    onClick={handleAcceptSuggestion}
+                  >
+                    <Check className="h-3.5 w-3.5 mr-2" />
+                    Replace
+                  </Button>
+                </div>
               )}
             </div>
           </div>
@@ -826,31 +826,31 @@ export function CommentItem({
             <div className="flex-1">
               <div className="flex items-center justify-between">
                 <h3 className="text-base font-medium">Comment</h3>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(comment.createdAt).toLocaleDateString()} {new Date(comment.createdAt).toLocaleTimeString('en-US', {
+                <span className="text-xs text-muted-foreground">
+                  {new Date(comment.createdAt).toLocaleDateString()} {new Date(comment.createdAt).toLocaleTimeString('en-US', {
                     hour: 'numeric',
                     minute: '2-digit',
                     hour12: true
-                    })}
+                  })}
                 </span>
               </div>
 
-                {/* Completion status badge for user comments */}
-                {completionInfo && (
-                  <div className="flex justify-end mt-1">
-                    <span className={cn(
-                      "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border shadow-sm",
-                      completionInfo.action === 'active'
-                        ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 border-green-200"
-                        : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300 border-red-200"
-                    )}>
-                      {completionInfo.actionText}
-                    </span>
-                  </div>
-                )}
+              {/* Completion status badge for user comments */}
+              {completionInfo && (
+                <div className="flex justify-end mt-1">
+                  <span className={cn(
+                    "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border shadow-sm",
+                    completionInfo.action === 'active'
+                      ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 border-green-200"
+                      : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300 border-red-200"
+                  )}>
+                    {completionInfo.actionText}
+                  </span>
+                </div>
+              )}
 
               {comment.quotedText && (
-                  <div
+                <div
                   className="text-sm text-muted-foreground bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70 mt-3"
                   onClick={scrollToCommentInEditor}
                 >
@@ -880,7 +880,7 @@ export function CommentItem({
                       placeholder="Add a comment..."
                       className="w-full min-h-[60px] bg-transparent border-none p-0 resize-none focus:outline-none focus:ring-0"
                       autoFocus
-                        readOnly={isCompleted}
+                      readOnly={isCompleted}
                     />
                   </div>
                   <div className="flex justify-end">
@@ -897,45 +897,45 @@ export function CommentItem({
                 <div className="mt-3 text-sm">{comment.content || "No content"}</div>
               )}
 
-                {/* Show different buttons based on completed state */}
-                {isCompleted ? (
-                  <div className="flex justify-center mt-3">
+              {/* Show different buttons based on completed state */}
+              {isCompleted ? (
+                <div className="flex justify-center mt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-6"
+                    onClick={handleRevive}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 mr-2" />
+                    Restore
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex justify-end mt-3">
+                  <div className="flex items-center gap-2">
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
-                      className="h-8 px-6"
-                      onClick={handleRevive}
+                      className="h-8 px-3"
+                      onClick={() => setActiveCommentId(comment.id)}
+                      disabled={isCompleted}
                     >
-                      <RotateCcw className="h-3.5 w-3.5 mr-2" />
-                      Restore
+                      <Pencil className="h-3.5 w-3.5 mr-1" />
+                      Edit
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-3"
+                      onClick={handleIgnore}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1" />
+                      Delete
                     </Button>
                   </div>
-                ) : (
-                    <div className="flex justify-end mt-3">
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 px-3"
-                          onClick={() => setActiveCommentId(comment.id)}
-                          disabled={isCompleted}
-                        >
-                          <Pencil className="h-3.5 w-3.5 mr-1" />
-                          Edit
-                        </Button>
-
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 px-3"
-                          onClick={handleIgnore}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 mr-1" />
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                )}
+                </div>
+              )}
             </div>
           </div>
         )}
