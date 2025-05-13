@@ -10,7 +10,6 @@ import {
   X,
   RefreshCw,
   Loader2,
-  Wand2,
   Copy,
   Check as CheckIcon,
   Pin,
@@ -827,12 +826,12 @@ export function CommentItem({
             <div className="flex-1">
               <div className="flex items-center justify-between">
                 <h3 className="text-base font-medium">Comment</h3>
-                <span className="text-xs text-muted-foreground">
-                    {new Date(comment.createdAt).toLocaleDateString()} {new Date(comment.createdAtTime || comment.createdAt).toLocaleTimeString('en-US', {
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(comment.createdAt).toLocaleDateString()} {new Date(comment.createdAt).toLocaleTimeString('en-US', {
                     hour: 'numeric',
                     minute: '2-digit',
                     hour12: true
-                  })}
+                    })}
                 </span>
               </div>
 

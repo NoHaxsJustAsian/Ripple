@@ -1,9 +1,12 @@
+import { EventBatcher } from "@/lib/event-logger";
+
 // Editor component related types
 
 export interface EditorProps {
   className?: string;
   placeholder?: string;
   onEditorChange?: (content: string) => void;
+  eventBatcher?: EventBatcher;
 }
 
 export interface AIInsight {
@@ -43,8 +46,13 @@ export interface CommentType {
   authorName: string;
   createdAt: string;
   updatedAt: string;
+  content?: string;
+  from?: number;
+  to?: number;
   quotedText?: string;
+  text?: string;
   issueType?: string;
+  isAIFeedback?: boolean;
   suggestedEdit?: {
     original: string;
     suggested: string;
@@ -63,6 +71,7 @@ export interface CommentType {
     explanation: string;
     issueType?: string;
   }>;
+  resolved?: boolean;
 }
 
 export interface AnalysisResult {

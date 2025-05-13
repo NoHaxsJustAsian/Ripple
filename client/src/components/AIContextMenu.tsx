@@ -354,14 +354,14 @@ export function AIContextMenu({
               onBackToMenu={handleBackToContextMenu}
             />
           ) : (
-          // Initial prompt state
-                <InlineAIPrompt
-                  onSubmit={handleSubmitPrompt}
-                  onClose={handleClosePrompt}
-                  onBackToMenu={handleBackToContextMenu} // Add this line
-                  title="AI Writing Assistant"
-                  placeholder="Ask AI to help with your selected text..."
-                />
+            // Initial prompt state
+            <InlineAIPrompt
+              onSubmit={handleSubmitPrompt}
+              onClose={handleClosePrompt}
+              onBackToMenu={handleBackToContextMenu} // Add this line
+              title="AI Writing Assistant"
+              placeholder="Ask AI to help with your selected text..."
+            />
           )}
         </div>
       )}

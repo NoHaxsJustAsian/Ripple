@@ -748,26 +748,26 @@ export function CommentsList({
                   No dismissed comments
                 </div>
               ) : (
-                  displayCommentsByStatus('dismissed').map((comment) => (
-                    <CommentItem
-                      key={comment.id}
-                      comment={comment}
-                      editor={editor}
-                      activeCommentId={activeCommentId}
-                      setActiveCommentId={setActiveCommentId}
-                      setComments={setComments}
-                      comments={comments}
-                      onRefreshFeedback={handleRefreshFeedback}
-                      onRegenerateSuggestion={handleRegenerateSuggestion}
-                      onTogglePin={handleTogglePin}
-                      onMarkAsCompleted={handleMarkAsCompleted}
-                      onReviveComment={handleReviveComment}
-                      lastRefreshedTime={lastRefreshedTimes}
-                      isRefreshing={refreshingComments[comment.id] || false}
-                      isRegenerating={regeneratingComments[comment.id] || false}
-                      isCompleted={true}
-                    />
-                  ))
+                displayCommentsByStatus('dismissed').map((comment) => (
+                  <CommentItem
+                    key={comment.id}
+                    comment={comment}
+                    editor={editor}
+                    activeCommentId={activeCommentId}
+                    setActiveCommentId={setActiveCommentId}
+                    setComments={setComments}
+                    comments={comments}
+                    onRefreshFeedback={handleRefreshFeedback}
+                    onRegenerateSuggestion={handleRegenerateSuggestion}
+                    onTogglePin={handleTogglePin}
+                    onMarkAsCompleted={handleMarkAsCompleted}
+                    onReviveComment={handleReviveComment}
+                    lastRefreshedTime={lastRefreshedTimes}
+                    isRefreshing={refreshingComments[comment.id] || false}
+                    isRegenerating={regeneratingComments[comment.id] || false}
+                    isCompleted={true}
+                  />
+                ))
               )}
             </div>
           )}

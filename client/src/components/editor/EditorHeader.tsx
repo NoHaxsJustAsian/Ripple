@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ModeToggle } from '@/components/ui/mode-toggle';
 import { Save, FileDown, MessageSquare, HelpCircle, FileCheck2 } from 'lucide-react';
@@ -6,6 +6,12 @@ import { toast } from "sonner";
 import { AnalysisTools } from './AnalysisTools';
 import { CommentType } from './types';
 import { Editor } from '@tiptap/react';
+import { UserAvatar } from '@/components/UserAvatar';
+import { useAuth } from '@/lib/auth-context';
+import { FileService } from '@/lib/file-service';
+import { EventType } from '@/lib/event-logger';
+import { FilePicker } from '@/components/FilePicker';
+import { FileData } from '@/lib/supabase';
 
 interface EditorHeaderProps {
   editor: Editor | null;
@@ -18,6 +24,10 @@ interface EditorHeaderProps {
   setIsHelpOpen: (open: boolean) => void;
   isHelpOpen: boolean;
   setComments: React.Dispatch<React.SetStateAction<CommentType[]>>;
+  eventBatcher?: any;
+  currentFileId?: string | null;
+  setCurrentFileId?: (id: string | null) => void;
+  onLoadFile?: (file: FileData) => void;
 }
 
 export function EditorHeader({
@@ -33,16 +43,28 @@ export function EditorHeader({
   setComments
 }: EditorHeaderProps) {
   const [isSaving, setIsSaving] = useState(false);
+  const [isFilePickerOpen, setIsFilePickerOpen] = useState(false);
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const { user } = useAuth();
+  const [fileService, setFileService] = useState<FileService | null>(null);
+
+  // Initialize file service when user changes
+  useEffect(() => {
+    if (user) {
+      setFileService(new FileService(user.id));
+    } else {
+      setFileService(null);
+    }
+  }, [user]);
 
   const handleSave = useCallback(async () => {
-    if (!editor) return;
+    if (!editor || !user) return;
 
     setIsSaving(true);
     try {
+      // First, save to localStorage for backward compatibility
       localStorage.setItem('ripple-doc', JSON.stringify({
         title: documentTitle,
-        content: editor.getHTML(),
         comments,
         lastSaved: new Date().toISOString()
       }));
@@ -58,17 +80,16 @@ export function EditorHeader({
 
 
   const handleSaveAs = useCallback(async () => {
-    if (!editor) return;
+    if (!editor || !user) return;
 
     setIsSaving(true);
     try {
       const timestamp = new Date().toISOString().split('T')[0];
       const newTitle = `${documentTitle} - ${timestamp}`;
-      
+
       const docKey = `ripple-doc-${Date.now()}`;
       localStorage.setItem(docKey, JSON.stringify({
         title: newTitle,
-        content: editor.getHTML(),
         comments,
         lastSaved: new Date().toISOString()
       }));
@@ -92,8 +113,8 @@ export function EditorHeader({
             <span className="text-sm font-semibold">Ripple</span>
           </div>
           <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
-          <input 
-            type="text" 
+          <input
+            type="text"
             value={documentTitle}
             onChange={(e) => setDocumentTitle(e.target.value)}
             placeholder="Untitled document"
@@ -129,7 +150,7 @@ export function EditorHeader({
 
         {/* Right section */}
         <div className="flex items-center space-x-4">
-          <AnalysisTools 
+          <AnalysisTools
             editor={editor}
             setComments={setComments}
             setIsInsightsOpen={setIsInsightsOpen}
@@ -144,7 +165,7 @@ export function EditorHeader({
             <FileCheck2 className="h-3.5 w-3.5" />
             <span>Toggle Suggestions</span>
           </Button>
-          
+
           <Button
             variant="ghost"
             size="sm"
@@ -154,7 +175,7 @@ export function EditorHeader({
             <HelpCircle className="h-3.5 w-3.5" />
             <span>Help</span>
           </Button>
-          
+
           {/* <Button
             variant="ghost"
             size="sm"

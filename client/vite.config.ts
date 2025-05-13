@@ -4,7 +4,11 @@ import { defineConfig } from "vite"
  
 export default defineConfig({
   plugins: [react()],
-  base: "/Ripple/",
+  base: "/",
+  optimizeDeps: {
+    force: true,
+    include: ['@supabase/supabase-js']
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
