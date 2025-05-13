@@ -9,22 +9,14 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import { ContextMenuSeparator } from '@radix-ui/react-context-menu';
+  ContextMenuLabel,
+  ContextMenuSeparator,
+} from '@/components/ui/context-menu';
 import { Card, CardContent } from '@/components/ui/card';
+import { CommentType } from './editor/types';
 
-export interface CommentType {
-  id: string;
-  content: string;
-  createdAt: Date;
-  createdAtTime: Date;
-  quotedText: string;
-  feedbackHistory?: Array<{
-    timestamp: string;
-    explanation: string;
-    suggested?: string;
-  }>;
-}
+// Comment type re-exported for convenience
+export type { CommentType };
 
 interface AIContextMenuProps {
   children: React.ReactNode;

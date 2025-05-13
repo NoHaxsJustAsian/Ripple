@@ -9,7 +9,7 @@ import { CommentItem } from './CommentItem';
 import { refreshFeedback, regenerateSuggestion } from '@/lib/api';
 import { toast } from "sonner";
 
-// Update the CommentType to include completion info as an array
+// Add additional properties to CommentType
 declare module './types' {
   interface CommentType {
     isPinned?: boolean;
@@ -20,11 +20,11 @@ declare module './types' {
     }>;
     feedbackHistory?: Array<{
       timestamp: string;
-      original: string;      // The original text at this point in time
-      currentText: string;   // The current editor text at this point
-      suggested: string;     // The suggested text at this point
-      explanation: string;   // The feedback explanation at this point
-      issueType?: string;    // The issue type at this point (could change)
+      original?: string;
+      currentText?: string;
+      suggested?: string;
+      explanation: string;
+      issueType?: string;
     }>;
   }
 }

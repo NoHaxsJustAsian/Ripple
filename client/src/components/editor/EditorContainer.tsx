@@ -1,5 +1,5 @@
 // Key import changes needed
-import { useEffect, useState, useCallback, createContext, useRef, SetStateAction } from 'react';
+import { useEffect, useState, useCallback, createContext, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Highlight from '@tiptap/extension-highlight';
@@ -8,8 +8,8 @@ import { Color } from '@tiptap/extension-color';
 import Underline from '@tiptap/extension-underline';
 import { cn } from "@/lib/utils";
 import { EditorView } from 'prosemirror-view';
-import { HelpCircle, FolderOpen, Loader2 } from 'lucide-react';  // Add missing Lucide icons
-import { AIContextMenu, CommentType } from '../AIContextMenu';
+import { HelpCircle } from 'lucide-react';  // Add missing Lucide icons
+import { AIContextMenu } from '../AIContextMenu';
 import { EditorToolbar } from '../EditorToolbar';
 import { CommentExtension } from '../../extensions/Comment';
 import { SuggestEditExtension } from '../../extensions/SuggestEdit';
@@ -19,18 +19,14 @@ import { toast } from "sonner";
 import { HelpSplashScreen } from '../HelpSplashScreen';
 import { EditorHeader } from './EditorHeader';
 import { CommentsList } from './CommentsList';
-import { AIInsight, EditorProps } from './types';
+import { AIInsight, EditorProps, CommentType, dbCommentToUiComment } from './types';
 import { useAuth } from '@/lib/auth-context';
 import { FileService } from '@/lib/file-service';
 import { EventType } from '@/lib/event-logger';
-import { supabase } from '@/lib/supabase';
 import { logEvent } from '@/lib/event-logger';
 
 // Create a context for insights
 export const InsightsContext = createContext<[AIInsight[], React.Dispatch<React.SetStateAction<AIInsight[]>>]>([[], () => { }]);
-
-// At the top of the file, add this constant
-const DRAFT_CONTENT_KEY = 'ripple-draft-content';
 
 export function EditorContainer({
   className = '',
@@ -43,8 +39,6 @@ export function EditorContainer({
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isFirstVisit, setIsFirstVisit] = useState(false);
   const [documentTitle, setDocumentTitle] = useState('Untitled document');
-  const [showCommentInput] = useState(false);
-  const [selectedInsight, setSelectedInsight] = useState<number | null>(null);
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [comments, setComments] = useState<CommentType[]>([]);
@@ -60,9 +54,6 @@ export function EditorContainer({
 
   const [currentFileId, setCurrentFileId] = useState<string | null>(null);
   const [fileService] = useState<FileService | null>(user ? new FileService(user.id) : null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [usingLocalStorage, setUsingLocalStorage] = useState(true);
-  const [documentId, setDocumentId] = useState('');
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const editor = useEditor({
@@ -139,9 +130,6 @@ export function EditorContainer({
     onUpdate: ({ editor, transaction }) => {
       const html = editor.getHTML();
       onEditorChange?.(html);
-      // Clear the selected insight when user types
-      setSelectedInsight(null);
-
       // If this update was triggered by the user typing (not by a programmatic change),
       // we should remove any highlighting at the current cursor position
       if (transaction.docChanged && transaction.steps.some(step => step.toJSON().stepType === 'replace')) {
@@ -209,6 +197,36 @@ export function EditorContainer({
             setDocumentTitle(mostRecent.title);
             setCurrentFileId(mostRecent.id);
             editor.commands.setContent(mostRecent.content);
+
+            // Load comments for this file
+            console.log("Loading comments for file:", mostRecent.id);
+            const dbComments = await fileService.getComments(mostRecent.id);
+            console.log("Retrieved database comments:", dbComments);
+            
+            if (dbComments && dbComments.length > 0) {
+              // Convert DB comments to UI comments
+              const uiComments = dbComments.map(dbComment => dbCommentToUiComment(dbComment));
+              
+              console.log("Setting UI comments:", uiComments);
+              setComments(uiComments);
+              
+              // Apply comment marks to the editor content
+              uiComments.forEach(comment => {
+                if (comment.from !== undefined && comment.to !== undefined) {
+                  editor.commands.setTextSelection({
+                    from: comment.from,
+                    to: comment.to
+                  });
+                  editor.chain().setComment(comment.id).run();
+                }
+              });
+              
+              // Reset selection after applying marks
+              editor.commands.setTextSelection(0);
+            } else {
+              console.log("No comments found for file:", mostRecent.id);
+              setComments([]);
+            }
 
             // Log file open event
             eventBatcher?.addEvent(EventType.FILE_OPEN, {
@@ -522,15 +540,18 @@ export function EditorContainer({
     if (from === to) return;
 
     const quotedText = editor.state.doc.textBetween(from, to);
-    const commentId = `c${Date.now()}`;
+    const commentId = crypto.randomUUID();
     const newComment: CommentType = {
       id: commentId,
       createdAt: new Date(),
       quotedText,
       content: '',
-      createdAtTime: new Date()
+      createdAtTime: new Date(),
+      from,
+      to
     };
 
+    console.log("Adding new comment:", newComment);
     setComments(prev => [...prev, newComment]);
     editor.chain().setComment(commentId).run();
     setActiveCommentId(commentId);
@@ -563,8 +584,7 @@ export function EditorContainer({
       id: commentId,
       createdAt: new Date(),
       quotedText,
-      authorName: '',
-      updatedAt: '',
+      content: ''
     };
 
     setComments(prev => [...prev, newComment]);
@@ -588,7 +608,7 @@ export function EditorContainer({
 
   // Save document content
   const handleSave = useCallback(async () => {
-    if (!editor) return;
+    if (!editor || !fileService) return;
 
     try {
       // Log what we're saving
@@ -599,6 +619,9 @@ export function EditorContainer({
         essayTopicText
       });
 
+      console.log("Current comments being saved:", comments);
+
+      // Save to localStorage for backup
       localStorage.setItem('ripple-doc', JSON.stringify({
         title: documentTitle,
         content: editor.getHTML(),
@@ -610,55 +633,51 @@ export function EditorContainer({
         lastSaved: new Date().toISOString()
       }));
 
-      setIsSaving(true);
-      if (usingLocalStorage) {
-        try {
-          const content = editor.getHTML();
-          localStorage.setItem(
-            DRAFT_CONTENT_KEY,
-            JSON.stringify({
-              content,
-              comments: comments.map((comment) => ({
-                ...comment,
-                // Ensure both text and content fields are properly set for compatibility
-                // text: comment.content || comment.text,
-                // content: comment.content || comment.text,
-                // createdAt: comment.createdAt instanceof Date ? comment.createdAt.toISOString() : comment.createdAt
-              })),
-              id: "local-draft",
-            })
-          );
-          toast.success("Document saved successfully");
-          setIsSaving(false);
-        } catch (e: any) {
-          logEvent(user?.id || 'anonymous', EventType.ERROR, {
-            error: e.message,
-          });
-          toast.error("Failed to save document");
-        }
-        return;
-      }
 
       try {
         const content = editor.getHTML();
-        const jsonComments = comments.map((comment) => ({
-          ...comment,
-          text: comment.content,
-          content: comment.content,
-          createdAt: typeof comment.createdAt === 'string' ? new Date(comment.createdAt).toISOString() : comment.createdAt
-        }));
 
-        await supabase
-          .from("files")
-          .update({
-            content,
-            comments: jsonComments,
-          })
-          .eq("id", documentId);
+        // Save the file content first
+        let fileId = currentFileId;
+        if (!fileId) {
+          // Create a new file if we don't have one
+          const fileData = await fileService.saveFile(documentTitle, content);
+          if (fileData) {
+            fileId = fileData.id;
+            setCurrentFileId(fileId);
+          } else {
+            throw new Error("Failed to create file");
+          }
+        } else {
+          // Update the existing file
+          await fileService.saveFile(documentTitle, content, fileId);
+        }
 
-        logEvent(user?.id || 'anonymous', EventType.FILE_SAVE, {
-          documentId,
-        });
+        // Now save the comments if we have a file ID
+        if (fileId) {
+          console.log(`Preparing to save ${comments.length} comments for file ID: ${fileId}`);
+          
+          // Check if comments array is valid
+          if (!Array.isArray(comments)) {
+            console.error("Comments is not an array:", comments);
+            throw new Error("Comments is not a valid array");
+              }
+
+          if (comments.length > 0) {
+            // Verify comment structure
+            console.log("Comment samples before saving:", comments.slice(0, 2));
+            
+            const saveResult = await fileService.saveComments(fileId, comments);
+            console.log("Comment save result:", saveResult);
+
+            if (!saveResult) {
+              console.warn("Comments may not have saved successfully");
+            }
+                } else {
+            console.log("No comments to save");
+              }
+            }
+
         toast.success("Document saved successfully");
       } catch (e: any) {
         console.error("Error saving document", e);
@@ -667,193 +686,13 @@ export function EditorContainer({
         });
         toast.error("Failed to save document");
       }
-      setIsSaving(false);
     } catch (error) {
       console.error('Error saving document:', error);
       toast.error("Failed to save document");
     }
-  }, [editor, documentTitle, comments, paragraphTopicHighlights, paragraphTopicTexts, essayTopicHighlight, essayTopicText, usingLocalStorage, documentId, user]);
-
-  // Function to load a file from Supabase
-  const handleLoadFile = useCallback(async (file: any) => {
-    if (!editor) return;
-
-    try {
-      // Update the editor content
-      editor.commands.setContent(file.content);
-
-      // Update the document title
-      setDocumentTitle(file.title);
-
-      // Update the current file ID
-      setCurrentFileId(file.id);
-
-      // Clear any existing highlights and comments
-      if (essayTopicHighlight) {
-        editor.chain()
-          .setTextSelection({ from: essayTopicHighlight.from, to: essayTopicHighlight.to })
-          .unsetHighlight()
-          .run();
-      }
-
-      Object.entries(paragraphTopicHighlights).forEach(([, { from, to }]) => {
-        editor.chain()
-          .setTextSelection({ from, to })
-          .unsetHighlight()
-          .run();
-      });
-
-      // Reset state for highlights
-      setEssayTopicHighlight(null);
-      setParagraphTopicHighlights({});
-
-      // Load comments if they exist
-      if (file.comments && Array.isArray(file.comments)) {
-        try {
-          console.log("Loading comments:", file.comments);
-
-          // Convert the saved comment format to the application format
-          const loadedComments = file.comments.map((comment: any) => {
-            // Debug the comment
-            console.log("Processing comment:", comment);
-
-            // Create a new comment in the format expected by the application
-            const appComment: CommentType = {
-              id: comment.id || `c${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              // Map 'text' from DB to 'content' in app
-              content: comment.text || '',
-              quotedText: comment.quotedText || '',
-              createdAt: new Date().toISOString(),
-              from: comment.from || 0,
-              to: comment.to || 0,
-              isAIFeedback: comment.isAIFeedback || false,
-              resolved: comment.resolved || false,
-              // Add default values for issue type and feedback type
-              issueType: comment.issueType || 'suggestion',
-              authorId: '',
-              authorName: '',
-              updatedAt: new Date().toISOString(),
-            };
-
-            // Handle suggested edits separately to ensure they're properly structured
-            if (comment.suggestedEdit) {
-              console.log("Found suggested edit:", comment.suggestedEdit);
-
-              // For suggested edits, set content to 'Suggested Edit' as default if not present
-              appComment.content = appComment.content || 'Suggested Edit';
-
-              // If the suggestedEdit doesn't have the original text but quotedText exists, use that
-              if (!comment.suggestedEdit.original && comment.quotedText) {
-                comment.suggestedEdit.original = comment.quotedText;
-              }
-
-              appComment.suggestedEdit = {
-                original: comment.suggestedEdit.original || '',
-                suggested: comment.suggestedEdit.suggested || '',
-                explanation: comment.suggestedEdit.explanation || ''
-              };
-
-              // For suggested edits, use specific types if they exist, otherwise defaults
-              appComment.issueType = comment.issueType || 'grammar';
-
-              // Flag as AI feedback if not explicitly set
-              if (appComment.isAIFeedback === undefined) {
-                appComment.isAIFeedback = true;
-              }
-            }
-
-            console.log("Converted to app comment:", appComment);
-            return appComment;
-          });
-
-          console.log("All loaded comments:", loadedComments);
-
-          // Set the comments in state
-          setComments(loadedComments);
-
-          // Apply comment marks in the editor
-          loadedComments.forEach((comment: CommentType) => {
-            // Only try to find and mark the text if we have quoted text but no valid from/to positions
-            if (comment.quotedText && comment.quotedText.trim() !== '' &&
-              (!comment.from || !comment.to || comment.from === 0 || comment.to === 0)) {
-              try {
-                // Find the quoted text in the document
-                const docText = editor.state.doc.textContent;
-                const quotedText = comment.quotedText.trim();
-                const quotedTextPos = docText.indexOf(quotedText);
-
-                if (quotedTextPos !== -1) {
-                  // Update comment with found positions
-                  comment.from = quotedTextPos;
-                  comment.to = quotedTextPos + quotedText.length;
-
-                  console.log(`Found quoted text "${quotedText}" at positions ${comment.from}-${comment.to}`);
-
-                  // Apply the comment mark
-                  editor.chain()
-                    .setTextSelection({ from: comment.from, to: comment.to })
-                    .setComment(comment.id)
-                    .run();
-                } else {
-                  console.warn(`Could not find quoted text: "${quotedText}" in document`);
-                }
-              } catch (error) {
-                console.error('Error finding and marking text:', error, comment);
-              }
-            }
-            // If we have valid from/to, apply directly
-            else if (comment.from && comment.to && comment.from < comment.to) {
-              try {
-                editor.chain()
-                  .setTextSelection({ from: comment.from, to: comment.to })
-                  .setComment(comment.id)
-                  .run();
-              } catch (markError) {
-                console.error('Error applying comment mark:', markError, comment);
-              }
-            }
-          });
-
-          // Reset cursor position
-          editor.commands.setTextSelection(0);
-
-          // Log comment loading
-          eventBatcher?.addEvent(EventType.FILE_OPEN, {
-            action: 'load_comments',
-            comment_count: loadedComments.length
-          });
-        } catch (commentError) {
-          console.error('Error loading comments:', commentError);
-          // If we fail to load comments, clear them to avoid partial state
-          setComments([]);
-        }
-      } else {
-        // No comments to load
-        setComments([]);
-      }
-
-      toast.success(`Loaded document: ${file.title}`);
-
-      // Log file loaded event
-      eventBatcher?.addEvent(EventType.FILE_OPEN, {
-        file_id: file.id,
-        title: file.title,
-        success: true
-      });
-    } catch (error) {
-      console.error('Error loading file:', error);
-      toast.error('Failed to load document');
-
-      // Log error
-      eventBatcher?.addEvent(EventType.ERROR, {
-        action: 'load_file',
-        file_id: file.id,
-        error: String(error)
-      });
-    }
-  }, [editor, eventBatcher, setDocumentTitle, setCurrentFileId,
-    essayTopicHighlight, paragraphTopicHighlights, setComments,
-    setEssayTopicHighlight, setParagraphTopicHighlights]);
+  }, [editor, fileService, documentTitle, comments, currentFileId, 
+      paragraphTopicHighlights, paragraphTopicTexts, 
+      essayTopicHighlight, essayTopicText, user]);
 
   // Function to update the positions of comments when the document changes
   const updateCommentPositions = useCallback(() => {
@@ -877,11 +716,12 @@ export function EditorContainer({
 
         // If found, update the positions
         if (foundPos) {
+          const position = foundPos as { from: number; to: number };
           return {
             ...comment,
-            from: foundPos.from,
-            to: foundPos.to,
-            quotedText: editor.state.doc.textBetween(foundPos.from, foundPos.to)
+            from: position.from,
+            to: position.to,
+            quotedText: editor.state.doc.textBetween(position.from, position.to)
           };
         }
 
@@ -924,12 +764,47 @@ export function EditorContainer({
                 documentTitle={documentTitle}
                 setDocumentTitle={setDocumentTitle}
                 comments={comments}
-                toggleAIPanel={toggleAIPanel}
                 isInsightsOpen={isInsightsOpen}
                 setIsInsightsOpen={setIsInsightsOpen}
                 setIsHelpOpen={setIsHelpOpen}
                 isHelpOpen={isHelpOpen}
                 setComments={setComments}
+                eventBatcher={eventBatcher}
+                currentFileId={currentFileId}
+                setCurrentFileId={setCurrentFileId}
+                onLoadFile={(file) => {
+                  setCurrentFileId(file.id);
+                  setDocumentTitle(file.title);
+                  editor.commands.setContent(file.content);
+                  
+                  // Load comments for this file
+                  if (fileService) {
+                    console.log("Loading comments for selected file:", file.id);
+                    fileService.getComments(file.id).then(fileComments => {
+                      console.log("Retrieved comments for selected file:", fileComments);
+                      
+                      // Convert DB comments to UI comments
+                      const uiComments = fileComments.map(dbComment => dbCommentToUiComment(dbComment));
+                      
+                      console.log("Setting UI comments for selected file:", uiComments);
+                      setComments(uiComments);
+                      
+                      // Apply comment marks to the editor content
+                      uiComments.forEach(comment => {
+                        if (comment.from !== undefined && comment.to !== undefined) {
+                          editor.commands.setTextSelection({
+                            from: comment.from,
+                            to: comment.to
+                          });
+                          editor.chain().setComment(comment.id).run();
+                        }
+                      });
+                      
+                      // Reset selection after applying marks
+                      editor.commands.setTextSelection(0);
+                    });
+                  }
+                }}
               />
               <EditorToolbar
                 editor={editor}
@@ -951,9 +826,10 @@ export function EditorContainer({
                         onSelectAsEssayTopic={handleSelectAsEssayTopic}
                         activeCommentId={activeCommentId}
                         setActiveCommentId={setActiveCommentId}
-                        onAddComment={handleAddComment} comments={[]} setComments={function (value: SetStateAction<CommentType[]>): void {
-                          throw new Error('Function not implemented.');
-                        }}                      >
+                        onAddComment={handleAddComment} 
+                        comments={comments}
+                        setComments={setComments}
+                      >
                         <EditorContent editor={editor} />
                       </AIContextMenu>
                     </div>

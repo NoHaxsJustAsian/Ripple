@@ -25,16 +25,23 @@ export interface EventData {
  * @param userId - The user's ID
  * @param eventType - The type of event
  * @param eventData - Additional data about the event
+ * @param fileId - Optional file ID associated with the event
  * @returns Promise that resolves when the event is logged
  */
 export async function logEvent(
   userId: string,
   eventType: EventType | string,
-  eventData: EventData = {}
+  eventData: EventData = {},
+  fileId?: string
 ): Promise<void> {
   if (!userId) {
     console.warn('Attempted to log event without user ID');
     return;
+  }
+
+  // If fileId is not explicitly provided, try to get it from eventData
+  if (!fileId && eventData.file_id) {
+    fileId = eventData.file_id;
   }
 
   try {
@@ -43,6 +50,7 @@ export async function logEvent(
       .insert([
         {
           user_id: userId,
+          file_id: fileId,
           event_type: eventType,
           event_data: eventData
         }
@@ -61,7 +69,12 @@ export async function logEvent(
  */
 export class EventBatcher {
   private userId: string;
-  private batchedEvents: Array<{ event_type: string; event_data: EventData; timestamp: number }> = [];
+  private batchedEvents: Array<{ 
+    event_type: string; 
+    event_data: EventData; 
+    file_id?: string;
+    timestamp: number 
+  }> = [];
   private batchSize: number;
   private flushInterval: number;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -83,11 +96,22 @@ export class EventBatcher {
    * Adds an event to the batch
    * @param eventType - The type of event
    * @param eventData - Additional data about the event
+   * @param fileId - Optional file ID associated with the event
    */
-  public addEvent(eventType: EventType | string, eventData: EventData = {}): void {
+  public addEvent(
+    eventType: EventType | string, 
+    eventData: EventData = {},
+    fileId?: string
+  ): void {
+    // If fileId is not explicitly provided, try to get it from eventData
+    if (!fileId && eventData.file_id) {
+      fileId = eventData.file_id;
+    }
+    
     this.batchedEvents.push({
       event_type: eventType,
       event_data: eventData,
+      file_id: fileId,
       timestamp: Date.now()
     });
 
@@ -111,6 +135,7 @@ export class EventBatcher {
         .insert(
           eventsToSend.map(event => ({
             user_id: this.userId,
+            file_id: event.file_id,
             event_type: event.event_type,
             event_data: { ...event.event_data, timestamp: event.timestamp }
           }))

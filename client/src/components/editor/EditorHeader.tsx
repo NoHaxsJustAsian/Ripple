@@ -1,12 +1,11 @@
 import { useCallback, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ModeToggle } from '@/components/ui/mode-toggle';
-import { Save, FileDown, MessageSquare, HelpCircle, FileCheck2 } from 'lucide-react';
+import { Save, FileDown, HelpCircle, FileCheck2 } from 'lucide-react';
 import { toast } from "sonner";
 import { AnalysisTools } from './AnalysisTools';
 import { CommentType } from './types';
 import { Editor } from '@tiptap/react';
-import { UserAvatar } from '@/components/UserAvatar';
 import { useAuth } from '@/lib/auth-context';
 import { FileService } from '@/lib/file-service';
 import { EventType } from '@/lib/event-logger';
@@ -18,7 +17,6 @@ interface EditorHeaderProps {
   documentTitle: string;
   setDocumentTitle: (title: string) => void;
   comments: CommentType[];
-  toggleAIPanel: () => void;
   isInsightsOpen: boolean;
   setIsInsightsOpen: (open: boolean) => void;
   setIsHelpOpen: (open: boolean) => void;
@@ -35,7 +33,6 @@ export function EditorHeader({
   documentTitle,
   setDocumentTitle,
   comments,
-  toggleAIPanel,
   isInsightsOpen,
   setIsInsightsOpen,
   setIsHelpOpen,
@@ -81,64 +78,43 @@ export function EditorHeader({
         // Debug comments
         console.log("Comments to save:", comments);
 
-        // Convert comments to the format expected by Supabase
-        const formattedComments = comments.map(comment => {
-          const supabaseComment: any = {
-            id: comment.id,
-            // Map content to text field expected by Supabase
-            text: typeof comment.content === 'string' ? comment.content : '',
-            from: typeof comment.from === 'number' ? comment.from : 0,
-            to: typeof comment.to === 'number' ? comment.to : 0,
-            quotedText: comment.quotedText || '',
-            createdAt: typeof comment.createdAt === 'object' && comment.createdAt instanceof Date
-              ? comment.createdAt.toISOString()
-              : (typeof comment.createdAt === 'string' ? comment.createdAt : new Date().toISOString()),
-            resolved: !!comment.resolved,
-            issueType: comment.issueType || (comment.suggestedEdit ? 'grammar' : 'suggestion'),
-            feedbackType: comment.feedbackType || 'clarity',
-            isAIFeedback: comment.suggestedEdit ? true : !!comment.isAIFeedback
-          };
-
-          // Handle suggested edits if they exist
-          if (comment.suggestedEdit) {
-            supabaseComment.suggestedEdit = {
-              original: comment.suggestedEdit.original || comment.quotedText || '',
-              suggested: comment.suggestedEdit.suggested || '',
-              explanation: comment.suggestedEdit.explanation || ''
-            };
-          }
-
-          console.log("Formatted for Supabase:", supabaseComment);
-          return supabaseComment;
-        });
-
         const savedFile = await fileService.saveFile(
           documentTitle,
           content,
-          formattedComments,
           currentFileId || undefined
         );
 
         if (savedFile && setCurrentFileId) {
           setCurrentFileId(savedFile.id);
-          toast.success('Document saved to cloud');
+          
+          try {
+            // Save comments separately after saving the file
+            await fileService.saveComments(savedFile.id, comments);
+            
+            toast.success('Document saved to cloud');
 
-          // Log successful save
-          eventBatcher?.addEvent(EventType.FILE_SAVE, {
-            file_id: savedFile.id,
-            title: documentTitle,
-            comment_count: formattedComments.length,
-            success: true
-          });
+            // Log successful save
+            eventBatcher?.addEvent(EventType.FILE_SAVE, {
+              file_id: savedFile.id,
+              title: documentTitle,
+              comment_count: comments.length,
+              success: true
+            });
+          } catch (commentError) {
+            console.error('Error saving comments:', commentError);
+            toast.error('File saved but failed to save comments');
+            
+            // Log partial save
+            eventBatcher?.addEvent(EventType.FILE_SAVE, {
+              file_id: savedFile.id,
+              title: documentTitle,
+              success: true,
+              comments_success: false,
+              error: String(commentError)
+            });
+          }
         } else {
-          toast.error('Failed to save to cloud, but saved locally');
-
-          // Log failed save
-          eventBatcher?.addEvent(EventType.FILE_SAVE, {
-            title: documentTitle,
-            success: false,
-            error: 'Database save failed'
-          });
+          toast.success("Document saved locally");
         }
       } else {
         toast.success("Document saved locally");
@@ -178,56 +154,45 @@ export function EditorHeader({
 
       // Then save to Supabase as a new file if we have a file service
       if (fileService) {
-        // Convert comments to the format expected by Supabase
-        const formattedComments = comments.map(comment => {
-          const supabaseComment: any = {
-            id: comment.id,
-            // Map content to text field expected by Supabase
-            text: typeof comment.content === 'string' ? comment.content : '',
-            from: typeof comment.from === 'number' ? comment.from : 0,
-            to: typeof comment.to === 'number' ? comment.to : 0,
-            quotedText: comment.quotedText || '',
-            createdAt: typeof comment.createdAt === 'object' && comment.createdAt instanceof Date
-              ? comment.createdAt.toISOString()
-              : (typeof comment.createdAt === 'string' ? comment.createdAt : new Date().toISOString()),
-            resolved: !!comment.resolved,
-            issueType: comment.issueType || (comment.suggestedEdit ? 'grammar' : 'suggestion'),
-            feedbackType: comment.feedbackType || 'clarity',
-            isAIFeedback: comment.suggestedEdit ? true : !!comment.isAIFeedback
-          };
-
-          // Handle suggested edits if they exist
-          if (comment.suggestedEdit) {
-            supabaseComment.suggestedEdit = {
-              original: comment.suggestedEdit.original || comment.quotedText || '',
-              suggested: comment.suggestedEdit.suggested || '',
-              explanation: comment.suggestedEdit.explanation || ''
-            };
-          }
-
-          return supabaseComment;
-        });
-
         // Always create a new file for "Save As", don't pass the currentFileId
         const savedFile = await fileService.saveFile(
           newTitle,
-          content,
-          formattedComments
+          content
         );
 
         if (savedFile && setCurrentFileId) {
           setCurrentFileId(savedFile.id);
-          setDocumentTitle(newTitle);
-          toast.success('Saved as new document in cloud');
+          
+          try {
+            // Save comments separately after saving the file
+            await fileService.saveComments(savedFile.id, comments);
+            
+            setDocumentTitle(newTitle);
+            toast.success('Saved as new document in cloud');
 
-          // Log successful save
-          eventBatcher?.addEvent(EventType.FILE_SAVE, {
-            file_id: savedFile.id,
-            title: newTitle,
-            comment_count: formattedComments.length,
-            success: true,
-            action: 'save_as'
-          });
+            // Log successful save
+            eventBatcher?.addEvent(EventType.FILE_SAVE, {
+              file_id: savedFile.id,
+              title: newTitle,
+              comment_count: comments.length,
+              success: true,
+              action: 'save_as'
+            });
+          } catch (commentError) {
+            console.error('Error saving comments:', commentError);
+            setDocumentTitle(newTitle);
+            toast.error('New file saved but failed to save comments');
+            
+            // Log partial save
+            eventBatcher?.addEvent(EventType.FILE_SAVE, {
+              file_id: savedFile.id,
+              title: newTitle,
+              success: true,
+              comments_success: false,
+              error: String(commentError),
+              action: 'save_as'
+            });
+          }
         } else {
           // Still update the title since we saved locally
           setDocumentTitle(newTitle);

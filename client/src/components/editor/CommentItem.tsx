@@ -36,7 +36,6 @@ interface CommentItemProps {
   comments: CommentType[];
   onRefreshFeedback?: (commentId: string) => void;
   onRegenerateSuggestion?: (commentId: string) => void;
-  lastRefreshedTime?: { [commentId: string]: Date | null };
   isRefreshing?: boolean;
   isRegenerating?: boolean;
   onTogglePin?: (commentId: string, isPinned: boolean) => void;
@@ -54,7 +53,6 @@ export function CommentItem({
   comments,
   onRefreshFeedback,
   onRegenerateSuggestion,
-  lastRefreshedTime,
   isRefreshing = false,
   isRegenerating = false,
   onTogglePin,
@@ -70,10 +68,10 @@ export function CommentItem({
   // Pagination state
   const [historyIndex, setHistoryIndex] = useState(0);
   const [feedbackHistory, setFeedbackHistory] = useState<Array<{
-    timestamp: string;
-    original: string;
-    currentText: string;
-    suggested: string;
+    timestamp: string | Date;
+    original?: string;
+    currentText?: string;
+    suggested?: string;
     explanation: string;
     issueType?: string;
   }>>([]);
@@ -84,7 +82,8 @@ export function CommentItem({
 
   // Determine card style based on feedback type
   const cardStyle = comment.isAIFeedback
-    ? comment.feedbackType === 'general' : "shadow-[0_0_15px_rgba(168,85,247,0.15)]"; // User comments have no special style
+    ? "shadow-[0_0_15px_rgba(168,85,247,0.15)]" 
+    : ""; // User comments have no special style
 
   // Initialize feedback history when component mounts or comment changes
   useEffect(() => {
@@ -97,9 +96,9 @@ export function CommentItem({
     } else if (comment.suggestedEdit) {
       // Initialize with the current feedback as the only history item
       const initialHistory = [{
-        timestamp: comment.updatedAt || comment.createdAt,
-        original: comment.suggestedEdit.original || '',
-        currentText: currentEditorText || comment.suggestedEdit.original || '',
+        timestamp: comment.updatedAt || (typeof comment.createdAt === 'string' ? comment.createdAt : comment.createdAt.toISOString()),
+        original: comment.suggestedEdit.original || comment.quotedText || '',
+        currentText: currentEditorText || comment.suggestedEdit.original || comment.quotedText || '',
         suggested: comment.suggestedEdit.suggested || '',
         explanation: comment.suggestedEdit.explanation || '',
         issueType: comment.issueType
@@ -113,7 +112,16 @@ export function CommentItem({
       setTotalHistoryItems(0);
       setHistoryIndex(0);
     }
-  }, [comment.id, comment.feedbackHistory]);
+    
+    // Debug: check if we're properly recognizing suggestions
+    console.log('Comment loaded:', {
+      id: comment.id,
+      isAIFeedback: comment.isAIFeedback,
+      hasSuggestedEdit: !!comment.suggestedEdit,
+      issueType: comment.issueType,
+      suggestedEditData: comment.suggestedEdit
+    });
+  }, [comment.id, comment.feedbackHistory, comment.suggestedEdit, comment.quotedText, currentEditorText]);
 
   // Update history when a refresh or regenerate completes
   useEffect(() => {
@@ -165,7 +173,9 @@ export function CommentItem({
       });
 
       if (foundPos) {
-        const text = editor.state.doc.textBetween(foundPos.from, foundPos.to);
+        // Add type assertion to fix 'never' type error
+        const pos = foundPos as { from: number; to: number };
+        const text = editor.state.doc.textBetween(pos.from, pos.to);
         setCurrentEditorText(text);
       }
     };
@@ -208,7 +218,7 @@ export function CommentItem({
 
   // Get the current history item based on the history index
   const currentHistoryItem = feedbackHistory[historyIndex] || {
-    timestamp: comment.updatedAt || comment.createdAt,
+    timestamp: comment.updatedAt || (typeof comment.createdAt === 'string' ? comment.createdAt : comment.createdAt.toISOString()),
     original: comment.suggestedEdit?.original || '',
     currentText: currentEditorText || comment.suggestedEdit?.original || '',
     suggested: comment.suggestedEdit?.suggested || '',
@@ -232,15 +242,17 @@ export function CommentItem({
     });
 
     if (foundPos) {
+      // Add type assertion to fix 'never' type error
+      const pos = foundPos as { from: number; to: number };
       // Get the current text at the comment position
-      const currentText = editor.state.doc.textBetween(foundPos.from, foundPos.to);
+      const currentText = editor.state.doc.textBetween(pos.from, pos.to);
       setCurrentEditorText(currentText);
 
       // Set the selection in the editor
       editor
         .chain()
         .focus()
-        .setTextSelection(foundPos)
+        .setTextSelection(pos)
         .run();
 
       const selection = window.getSelection();
@@ -280,18 +292,24 @@ export function CommentItem({
     });
 
     if (foundPos && comment.suggestedEdit) {
+      // Add type assertion to fix 'never' type error
+      const pos = foundPos as { from: number; to: number };
+      
       // Apply the suggested edit
       // If we're viewing history, use the suggestion from the history
       const suggestionToApply = historyIndex === totalHistoryItems - 1
-        ? comment.suggestedEdit.suggested
-        : currentHistoryItem.suggested;
+        ? comment.suggestedEdit.suggested || ''
+        : currentHistoryItem.suggested || '';
 
-      editor
-        .chain()
-        .focus()
-        .setTextSelection(foundPos)
-        .insertContent(suggestionToApply)
-        .run();
+      // Ensure we don't try to insert undefined text
+      if (suggestionToApply) {
+        editor
+          .chain()
+          .focus()
+          .setTextSelection(pos)
+          .insertContent(suggestionToApply)
+          .run();
+      }
 
       // IMPORTANT: Do NOT unset the comment here - we need to keep it for tracking purposes
       // Instead, just mark it as completed
@@ -362,38 +380,10 @@ export function CommentItem({
     }
   };
 
-  // Format the time since last refreshed in a human-readable relative format
-  const getTimeSinceLastRefresh = () => {
-    // Check if we have a refresh time for this comment
-    const refreshTime = lastRefreshedTime?.[comment.id];
-
-    // If no refresh time exists, return empty string
-    if (!refreshTime) return "";
-
-    // Calculate time difference in milliseconds
-    const now = new Date();
-    const refreshDate = new Date(refreshTime);
-    const diffMs = now.getTime() - refreshDate.getTime();
-
-    // Convert to minutes, hours, days
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    // Format the time difference with the appropriate unit
-    if (diffMinutes < 60) {
-      return `${diffMinutes} ${diffMinutes === 1 ? 'minute' : 'minutes'} ago`;
-    } else if (diffHours < 24) {
-      return `${diffHours} ${diffHours === 1 ? 'hour' : 'hours'} ago`;
-    } else {
-      return `${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`;
-    }
-  };
-
-  // Format the timestamp for history items
-  const formatHistoryTimestamp = (timestamp: string) => {
+  // Modify the formatHistoryTimestamp function to handle Date objects
+  const formatHistoryTimestamp = (timestamp: string | Date) => {
     try {
-      const date = new Date(timestamp);
+      const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
       return date.toLocaleString('en-US', {
         month: 'short',
         day: 'numeric',
@@ -651,11 +641,6 @@ export function CommentItem({
                             </div>
 
                             <div className="flex items-center gap-2">
-                              {lastRefreshedTime?.[comment.id] && historyIndex === totalHistoryItems - 1 && (
-                                <span className="text-xs text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis max-w-[180px]">
-                                  {/* {getTimeSinceLastRefresh()} */}
-                                </span>
-                              )}
                               {!isCompleted && (
                                 <Button
                                   variant="ghost"
