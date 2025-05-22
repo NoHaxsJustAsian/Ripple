@@ -26,17 +26,7 @@ client = AzureOpenAI(
     api_version="2024-05-01-preview"
 )
 
-# Load NLP libraries
-# try:
-#     nlp = spacy.load("en_core_web_sm")
-#     nltk.download('wordnet', quiet=True)
-#     nltk.download('omw-1.4', quiet=True)
-# except:
-#     print("Warning: NLP dependencies may not be installed.")
-#     # print("Then run: python -m spacy download en_core_web_sm")
 
-# Define causal connectives (including multi-word phrases)
-CAUSAL_CONNECTIVES = ["although", "arise", "arises", "arising", "arose", "because", "cause", "caused", "causes", "causing", "condition", "conditions", "consequence", "consequences", "consequent", "consequently", "due to", "enable", "enabled", "enables", "enabling", "even then", "follow that", "follow the", "follow this", "followed that", "followed the", "followed this", "following that", "follows the", "follows this", "hence", "made", "make", "makes", "making", "nevertheless", "nonetheless", "only if", "provided that", "result", "results", "since", "so", "therefore", "though", "thus", "unless", "whenever"]
 
 # Custom exceptions
 class DocumentProcessingError(Exception):

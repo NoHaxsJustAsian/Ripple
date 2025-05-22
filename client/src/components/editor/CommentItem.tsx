@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Editor } from '@tiptap/react';
 import { Button } from '@/components/ui/button';
 import { cn } from "@/lib/utils";
@@ -18,7 +18,7 @@ import {
   RotateCcw,
   ListRestartIcon,
 } from 'lucide-react';
-import { CommentType } from './types';
+import { CommentType, Reference } from './types';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -74,6 +74,7 @@ export function CommentItem({
     suggested?: string;
     explanation: string;
     issueType?: string;
+    references?: Reference[];
   }>>([]);
   const [totalHistoryItems, setTotalHistoryItems] = useState(1);
 
@@ -84,6 +85,13 @@ export function CommentItem({
   const cardStyle = comment.isAIFeedback
     ? "shadow-[0_0_15px_rgba(168,85,247,0.15)]" 
     : ""; // User comments have no special style
+
+  // Ref for autoscroll
+  const commentRef = useRef<HTMLDivElement>(null);
+
+  // State for double-click editing
+  const [editingCurrentText, setEditingCurrentText] = useState<string | null>(null);
+  const [currentTextDraft, setCurrentTextDraft] = useState<string>("");
 
   // Initialize feedback history when component mounts or comment changes
   useEffect(() => {
@@ -101,7 +109,8 @@ export function CommentItem({
         currentText: currentEditorText || comment.suggestedEdit.original || comment.quotedText || '',
         suggested: comment.suggestedEdit.suggested || '',
         explanation: comment.suggestedEdit.explanation || '',
-        issueType: comment.issueType
+        issueType: comment.issueType,
+        references: comment.suggestedEdit.references
       }];
       setFeedbackHistory(initialHistory);
       setTotalHistoryItems(1);
@@ -136,14 +145,16 @@ export function CommentItem({
         currentText: currentEditorText || comment.suggestedEdit.original || '',
         suggested: comment.suggestedEdit.suggested || '',
         explanation: comment.suggestedEdit.explanation,
-        issueType: comment.issueType
+        issueType: comment.issueType,
+        references: comment.suggestedEdit.references
       };
 
       // Check if the new entry is meaningfully different from the previous one
       const lastItem = feedbackHistory.length > 0 ? feedbackHistory[feedbackHistory.length - 1] : null;
       const isDifferent = !lastItem ||
         lastItem.explanation !== newHistoryItem.explanation ||
-        lastItem.suggested !== newHistoryItem.suggested;
+        lastItem.suggested !== newHistoryItem.suggested ||
+        JSON.stringify(lastItem.references) !== JSON.stringify(newHistoryItem.references);
 
       if (isDifferent) {
         const updatedHistory = [...feedbackHistory, newHistoryItem];
@@ -152,7 +163,7 @@ export function CommentItem({
         setHistoryIndex(updatedHistory.length - 1); // Move to the newest item
       }
     }
-  }, [comment.suggestedEdit?.explanation, comment.suggestedEdit?.suggested]);
+  }, [comment.suggestedEdit?.explanation, comment.suggestedEdit?.suggested, comment.suggestedEdit?.references]);
 
   // Update current text when editor content changes
   useEffect(() => {
@@ -430,8 +441,106 @@ export function CommentItem({
 
   const completionInfo = getCompletionInfo();
 
+  // Autoscroll to this comment when it becomes active
+  useEffect(() => {
+    if (activeCommentId === comment.id && commentRef.current) {
+      commentRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [activeCommentId, comment.id]);
+
+  const handleCurrentTextDoubleClick = () => {
+    setEditingCurrentText(comment.id);
+    setCurrentTextDraft(
+      historyIndex === totalHistoryItems - 1
+        ? (currentEditorText !== null ? currentEditorText : comment.suggestedEdit?.original || '')
+        : currentHistoryItem.currentText || ""
+    );
+  };
+
+  const saveCurrentTextEdit = () => {
+    if (!editor || !comment.id) return;
+
+    // Find the comment mark
+    let foundPos: { from: number; to: number } | null = null;
+    editor.state.doc.descendants((node, pos) => {
+      const mark = node.marks.find(m =>
+        m.type.name === 'comment' &&
+        m.attrs.commentId === comment.id
+      );
+      if (mark) {
+        foundPos = { from: pos, to: pos + node.nodeSize };
+        return false;
+      }
+    });
+
+    if (foundPos) {
+      // Add type assertion to fix 'never' type error
+      const pos = foundPos as { from: number; to: number };
+
+      // Create a transaction to update the text and preserve the mark
+      const tr = editor.state.tr;
+      const commentMark = editor.schema.marks.comment.create({ commentId: comment.id });
+
+      // Replace the text while preserving the mark
+      tr.replaceWith(
+        pos.from,
+        pos.to,
+        editor.schema.text(currentTextDraft, [commentMark])
+      );
+
+      // Apply the transaction
+      editor.view.dispatch(tr);
+    }
+
+    // Update the comment's suggestedEdit.original
+    setComments(prev =>
+      prev.map(c =>
+        c.id === comment.id
+          ? {
+            ...c,
+            suggestedEdit: c.suggestedEdit
+              ? { ...c.suggestedEdit, original: currentTextDraft }
+              : c.suggestedEdit,
+          }
+          : c
+      )
+    );
+    setEditingCurrentText(null);
+  };
+
+  const handleCurrentTextAreaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      saveCurrentTextEdit();
+    } else if (e.key === "Escape") {
+      setEditingCurrentText(null);
+    }
+  };
+
+  // Show references if available
+  {
+    currentHistoryItem.references && currentHistoryItem.references.length > 0 && (
+      <div className="mt-3 p-2 bg-muted/20 rounded-md">
+        <h4 className="text-xs font-medium mb-1">References:</h4>
+        <div className="space-y-1">
+          {currentHistoryItem.references.map((ref, idx) => (
+            <div key={idx} className="text-xs">
+              <div className="font-medium">{ref.text}</div>
+              <div className="text-muted-foreground">{ref.referenceText}</div>
+              {ref.source && (
+                <div className="text-xs text-muted-foreground">
+                  Source: {ref.source}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div
+    <div ref={commentRef}
       className={cn(
         "bg-white dark:bg-background border border-border/40 rounded-md p-4 transition-all duration-200 relative",
         activeCommentId === comment.id && "ring-2 ring-blue-500",
@@ -477,16 +586,28 @@ export function CommentItem({
                   // Current issue type badges
                   <>
                     {issueType === 'clarity' && (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 border border-blue-200 shadow-sm">Clarity</span>
+                      <div>
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 border border-blue-200 shadow-sm">Clarity</span>
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 border border-blue-200 shadow-sm">+1</span>
+                      </div>
                     )}
                     {issueType === 'focus' && (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 border border-yellow-200 shadow-sm">Focus</span>
+                      <div>
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 border border-yellow-200 shadow-sm">Focus</span>
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 border border-yellow-200 shadow-sm">+1</span>
+                      </div>
                     )}
                     {issueType === 'flow' && (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-orange-200 text-orange-800 dark:bg-orange-900 dark:text-orange-300 border border-orange-300 shadow-sm">Flow</span>
+                      <div>
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-orange-200 text-orange-800 dark:bg-orange-900 dark:text-orange-300 border border-orange-300 shadow-sm">Flow</span>
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-orange-200 text-orange-800 dark:bg-orange-900 dark:text-orange-300 border border-orange-300 shadow-sm">+1</span>
+                      </div>
                     )}
                     {issueType && !['flow', 'focus', 'clarity'].includes(issueType) && (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 shadow-sm">{issueType}</span>
+                      <div>
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 shadow-sm">{issueType}</span>
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 shadow-sm">+1</span>
+                      </div>
                     )}
                   </>
                 ) : (
@@ -563,15 +684,66 @@ export function CommentItem({
                       <div className="relative">
                         <details className="mt-1" open>
                           <summary className="suggest-edit-label cursor-pointer">Current Text</summary>
-                          <div className={cn(
-                            "suggest-edit-deletion break-words mt-1",
-                            hasTextChanged() && "bg-red-50 dark:bg-red-900/20"
-                          )}>
-                            {/* Show either current document text, or historical text as appropriate */}
-                            {historyIndex === totalHistoryItems - 1
-                              ? (currentEditorText !== null ? currentEditorText : comment.suggestedEdit?.original || '')
-                              : currentHistoryItem.currentText}
-                          </div>
+                          <ContextMenu>
+                            <ContextMenuTrigger asChild>
+                              <div className={cn(
+                                "suggest-edit-deletion break-words mt-1",
+                                hasTextChanged() && "bg-red-50 dark:bg-red-900/20"
+                              )}>
+                                {/* Double-click to edit current text */}
+                                {editingCurrentText === comment.id ? (
+                                  <div
+                                    className="space-y-2"
+                                    onClick={(e) => e.stopPropagation()}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                  >
+                                    <textarea
+                                      className="w-full min-h-[60px] bg-muted border rounded p-2 mt-1"
+                                      value={currentTextDraft}
+                                      onChange={e => setCurrentTextDraft(e.target.value)}
+                                      onClick={(e) => e.stopPropagation()}
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" && !e.shiftKey) {
+                                          e.preventDefault();
+                                          saveCurrentTextEdit();
+                                        }
+                                      }}
+                                      style={{ resize: "vertical" }}
+                                    />
+                                    <div className="flex justify-end">
+                                      <Button
+                                        size="sm"
+                                        className="h-7 text-xs flex items-center gap-1.5"
+                                        onClick={saveCurrentTextEdit}
+                                      >
+                                        Save <span className="opacity-60">⏎</span>
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div
+                                    onDoubleClick={handleCurrentTextDoubleClick}
+                                    title="Double-click to edit"
+                                    style={{ whiteSpace: "pre-wrap", cursor: "pointer" }}
+                                  >
+                                    {historyIndex === totalHistoryItems - 1
+                                      ? (currentEditorText !== null ? currentEditorText : comment.suggestedEdit?.original || '')
+                                      : currentHistoryItem.currentText}
+                                  </div>
+                                )}
+                              </div>
+                            </ContextMenuTrigger>
+                            <ContextMenuContent className="w-64">
+                              <ContextMenuItem
+                                onClick={handleCurrentTextDoubleClick}
+                                className="flex items-center"
+                              >
+                                <Pencil className="h-4 w-4 mr-2" />
+                                <span>Edit current text</span>
+                              </ContextMenuItem>
+                            </ContextMenuContent>
+                          </ContextMenu>
                         </details>
                       </div>
                       <div>
@@ -695,64 +867,31 @@ export function CommentItem({
                 </div>
               )}
 
-              {activeCommentId === comment.id && (
+              {/* Only show textarea for user comments when active */}
+              {activeCommentId === comment.id && !comment.isAIFeedback && (
                 <div className="mt-3 space-y-2 bg-muted rounded-md p-2">
                   <div className="relative">
-                    {comment.suggestedEdit ? (
-                      <textarea
-                        id={comment.id}
-                        value={historyIndex === totalHistoryItems - 1
-                          ? comment.suggestedEdit.suggested
-                          : currentHistoryItem.suggested}
-                        onChange={(e) => {
-                          if (historyIndex === totalHistoryItems - 1) {
-                            setComments(prev => prev.map(c =>
-                              c.id === comment.id
-                                ? {
-                                  ...c,
-                                  suggestedEdit: {
-                                    ...c.suggestedEdit!,
-                                    suggested: e.target.value
-                                  }
-                                }
-                                : c
-                            ));
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            setActiveCommentId(null);
-                          }
-                        }}
-                        placeholder="Edit suggestion..."
-                        className="w-full min-h-[60px] bg-transparent border-none p-0 resize-none focus:outline-none focus:ring-0"
-                        autoFocus
-                        readOnly={historyIndex !== totalHistoryItems - 1 || isCompleted} // Read-only if viewing history or completed
-                      />
-                    ) : (
-                      <textarea
-                        id={comment.id}
-                        value={comment.content}
-                        onChange={(e) => {
-                          setComments(prev => prev.map(c =>
-                            c.id === comment.id
-                              ? { ...c, content: e.target.value }
-                              : c
-                          ));
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            setActiveCommentId(null);
-                          }
-                        }}
-                        placeholder="Add a comment..."
-                        className="w-full min-h-[60px] bg-transparent border-none p-0 resize-none focus:outline-none focus:ring-0"
-                        autoFocus
-                        readOnly={isCompleted}
-                      />
-                    )}
+                    <textarea
+                      id={comment.id}
+                      value={comment.content}
+                      onChange={(e) => {
+                        setComments(prev => prev.map(c =>
+                          c.id === comment.id
+                            ? { ...c, content: e.target.value }
+                            : c
+                        ));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          setActiveCommentId(null);
+                        }
+                      }}
+                      placeholder="Add a comment..."
+                      className="w-full min-h-[60px] bg-transparent border-none p-0 resize-none focus:outline-none focus:ring-0"
+                      autoFocus
+                      readOnly={isCompleted}
+                    />
                   </div>
                   <div className="flex justify-end">
                     <Button

@@ -34,19 +34,28 @@ export interface CommentType {
     suggested?: string;
     explanation: string;
     issueType?: string;
+    references?: Reference[];
   }>;
   completionInfo?: Array<{
-    action: 'active' | 'dismissed' | 'replaced';
+    action: 'active' | 'dismissed' | 'replaced' | 'accepted' | 'ignored';
     timestamp: string;
+    reason?: string;
   }>;
   suggestedEdit?: {
     original: string;
     suggested: string;
     explanation: string;
+    references?: Reference[];
   };
 }
 
-// Database conversion function
+export interface Reference {
+  text: string;
+  referenceText: string;
+  source?: 'quote' | 'implicit' | 'api';
+  position?: { from: number, to: number };
+}
+
 export function uiCommentToDbComment(comment: CommentType, fileId: string, userId: string): DBCommentType {
   // Ensure createdAt is properly converted to ISO string 
   let createdAtString: string;
@@ -193,13 +202,6 @@ export interface SuggestedEdit {
   suggested: string;
   explanation: string;
   references?: Reference[];
-}
-
-export interface Reference {
-  text: string;
-  referenceText: string;
-  source?: 'quote' | 'implicit' | 'api';
-  position?: { from: number, to: number };
 }
 
 export interface AnalysisResult {

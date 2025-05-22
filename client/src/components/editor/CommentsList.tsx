@@ -9,26 +9,6 @@ import { CommentItem } from './CommentItem';
 import { refreshFeedback, regenerateSuggestion } from '@/lib/api';
 import { toast } from "sonner";
 
-// Add additional properties to CommentType
-declare module './types' {
-  interface CommentType {
-    isPinned?: boolean;
-    // Array for tracking completion status and history
-    completionInfo?: Array<{
-      action: 'active' | 'dismissed' | 'replaced';
-      timestamp: string;
-    }>;
-    feedbackHistory?: Array<{
-      timestamp: string;
-      original?: string;
-      currentText?: string;
-      suggested?: string;
-      explanation: string;
-      issueType?: string;
-    }>;
-  }
-}
-
 interface CommentsListProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;

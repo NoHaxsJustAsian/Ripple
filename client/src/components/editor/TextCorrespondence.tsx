@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SuggestedEdit } from './types'; // Import your existing type
+import { SuggestedEdit, Reference } from './types';
 
 interface TextCorrespondenceProps {
     suggestedEdit: SuggestedEdit;
@@ -7,6 +7,7 @@ interface TextCorrespondenceProps {
 
 export function TextCorrespondence({ suggestedEdit }: TextCorrespondenceProps) {
     const [hoveredSegment, setHoveredSegment] = useState<number | null>(null);
+    const [hoveredReference, setHoveredReference] = useState<Reference | null>(null);
 
     // Text segmentation logic
     const computeSegments = (original: string, suggested: string) => {
@@ -30,73 +31,30 @@ export function TextCorrespondence({ suggestedEdit }: TextCorrespondenceProps) {
                 origIndex++;
                 suggIndex++;
             } else {
-                // Words don't match - look for next matching point
-                let matchFound = false;
-
-                // Look ahead for matches
-                for (let lookAhead = 1; lookAhead < 5; lookAhead++) {
-                    // Check original text ahead
-                    if (origIndex + lookAhead < originalWords.length &&
-                        suggIndex < suggestedWords.length &&
-                        originalWords[origIndex + lookAhead] === suggestedWords[suggIndex]) {
-                        // Collect words up to match
-                        for (let i = 0; i < lookAhead; i++) {
-                            origSegment += originalWords[origIndex + i];
-                        }
-                        // Store segment and reset
-                        segments.push({
-                            original: origSegment,
-                            suggested: suggSegment
-                        });
-                        origSegment = '';
-                        suggSegment = '';
-                        origIndex += lookAhead;
-                        matchFound = true;
-                        break;
-                    }
-
-                    // Check suggested text ahead
-                    if (origIndex < originalWords.length &&
-                        suggIndex + lookAhead < suggestedWords.length &&
-                        originalWords[origIndex] === suggestedWords[suggIndex + lookAhead]) {
-                        // Collect words up to match
-                        for (let i = 0; i < lookAhead; i++) {
-                            suggSegment += suggestedWords[suggIndex + i];
-                        }
-                        // Store segment and reset
-                        segments.push({
-                            original: origSegment,
-                            suggested: suggSegment
-                        });
-                        origSegment = '';
-                        suggSegment = '';
-                        suggIndex += lookAhead;
-                        matchFound = true;
-                        break;
-                    }
+                // Add any current segment
+                if (origSegment || suggSegment) {
+                    segments.push({
+                        original: origSegment,
+                        suggested: suggSegment
+                    });
+                    origSegment = '';
+                    suggSegment = '';
                 }
 
-                // If no match found, add current words and advance
-                if (!matchFound) {
-                    if (origIndex < originalWords.length) {
-                        origSegment += originalWords[origIndex];
-                        origIndex++;
-                    }
-
-                    if (suggIndex < suggestedWords.length) {
-                        suggSegment += suggestedWords[suggIndex];
-                        suggIndex++;
-                    }
-
-                    // Store accumulated non-matching text periodically
-                    if ((origIndex % 3 === 0 || suggIndex % 3 === 0) && (origSegment || suggSegment)) {
-                        segments.push({
-                            original: origSegment,
-                            suggested: suggSegment
-                        });
-                        origSegment = '';
-                        suggSegment = '';
-                    }
+                // Handle mismatched words
+                if (origIndex < originalWords.length) {
+                    segments.push({
+                        original: originalWords[origIndex],
+                        suggested: ''
+                    });
+                    origIndex++;
+                }
+                if (suggIndex < suggestedWords.length) {
+                    segments.push({
+                        original: '',
+                        suggested: suggestedWords[suggIndex]
+                    });
+                    suggIndex++;
                 }
             }
         }
@@ -114,27 +72,47 @@ export function TextCorrespondence({ suggestedEdit }: TextCorrespondenceProps) {
 
     const segments = computeSegments(suggestedEdit.original, suggestedEdit.suggested);
 
+    // Helper function to check if a segment contains a reference
+    const getSegmentReferences = (segment: string, isOriginal: boolean) => {
+        if (!suggestedEdit.references) return null;
+        return suggestedEdit.references.filter(ref => {
+            const text = isOriginal ? ref.text : ref.referenceText;
+            return segment.includes(text);
+        });
+    };
+
     return (
         <div className="space-y-4">
             {/* Original Text Section */}
             <div className="bg-muted/30 p-4 rounded-md border border-muted">
                 <h3 className="text-sm font-medium mb-2">Current Text:</h3>
                 <div className="text-sm leading-relaxed">
-                    {segments.map((segment, index) => (
-                        <span
-                            key={`original-${index}`}
-                            className={`cursor-pointer transition-colors duration-200 ${hoveredSegment === index
+                    {segments.map((segment, index) => {
+                        const references = getSegmentReferences(segment.original, true);
+                        return (
+                            <span
+                                key={`original-${index}`}
+                                className={`cursor-pointer transition-colors duration-200 ${hoveredSegment === index
                                     ? 'bg-blue-100 dark:bg-blue-900/30 rounded-sm'
                                     : (segment.original !== segment.suggested)
                                         ? 'bg-red-50 dark:bg-red-900/10'
                                         : ''
-                                }`}
-                            onMouseEnter={() => setHoveredSegment(index)}
-                            onMouseLeave={() => setHoveredSegment(null)}
-                        >
-                            {segment.original}
-                        </span>
-                    ))}
+                                    }`}
+                                onMouseEnter={() => {
+                                    setHoveredSegment(index);
+                                    if (references?.length) {
+                                        setHoveredReference(references[0]);
+                                    }
+                                }}
+                                onMouseLeave={() => {
+                                    setHoveredSegment(null);
+                                    setHoveredReference(null);
+                                }}
+                            >
+                                {segment.original}
+                            </span>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -142,25 +120,64 @@ export function TextCorrespondence({ suggestedEdit }: TextCorrespondenceProps) {
             <div className="bg-muted/30 p-4 rounded-md border border-muted">
                 <h3 className="text-sm font-medium mb-2">Edited Text:</h3>
                 <div className="text-sm leading-relaxed">
-                    {segments.map((segment, index) => (
-                        <span
-                            key={`suggested-${index}`}
-                            className={`cursor-pointer transition-colors duration-200 ${hoveredSegment === index
+                    {segments.map((segment, index) => {
+                        const references = getSegmentReferences(segment.suggested, false);
+                        return (
+                            <span
+                                key={`suggested-${index}`}
+                                className={`cursor-pointer transition-colors duration-200 ${hoveredSegment === index
                                     ? 'bg-blue-100 dark:bg-blue-900/30 rounded-sm'
                                     : (segment.original !== segment.suggested)
                                         ? 'bg-green-50 dark:bg-green-900/10'
                                         : ''
-                                }`}
-                            onMouseEnter={() => setHoveredSegment(index)}
-                            onMouseLeave={() => setHoveredSegment(null)}
-                        >
-                            {segment.suggested}
-                        </span>
-                    ))}
+                                    }`}
+                                onMouseEnter={() => {
+                                    setHoveredSegment(index);
+                                    if (references?.length) {
+                                        setHoveredReference(references[0]);
+                                    }
+                                }}
+                                onMouseLeave={() => {
+                                    setHoveredSegment(null);
+                                    setHoveredReference(null);
+                                }}
+                            >
+                                {segment.suggested}
+                            </span>
+                        );
+                    })}
                 </div>
             </div>
 
-            {/* Optional: Add explanation section */}
+            {/* References Section */}
+            {suggestedEdit.references && suggestedEdit.references.length > 0 && (
+                <div className="mt-4 p-3 bg-muted/20 rounded-md border border-muted">
+                    <h3 className="text-sm font-medium mb-2">References:</h3>
+                    <div className="space-y-2">
+                        {suggestedEdit.references.map((ref, index) => (
+                            <div
+                                key={`ref-${index}`}
+                                className={`text-sm p-2 rounded-md transition-colors ${hoveredReference === ref
+                                        ? 'bg-blue-50 dark:bg-blue-900/20'
+                                        : 'bg-muted/30'
+                                    }`}
+                                onMouseEnter={() => setHoveredReference(ref)}
+                                onMouseLeave={() => setHoveredReference(null)}
+                            >
+                                <div className="font-medium">{ref.text}</div>
+                                <div className="text-muted-foreground">{ref.referenceText}</div>
+                                {ref.source && (
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                        Source: {ref.source}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Explanation Section */}
             {suggestedEdit.explanation && (
                 <div className="mt-2">
                     <details>
