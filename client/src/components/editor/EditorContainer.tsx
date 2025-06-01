@@ -56,6 +56,9 @@ export function EditorContainer({
   const [fileService] = useState<FileService | null>(user ? new FileService(user.id) : null);
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Add state for focused comment to sync between editor and sidebar
+  const [focusedCommentId, setFocusedCommentId] = useState<string | null>(null);
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -71,6 +74,77 @@ export function EditorContainer({
         },
         onCommentActivated: (commentId: string | null) => {
           setActiveCommentId(commentId);
+        },
+        onCommentClicked: (commentId: string) => {
+          console.log('onCommentClicked triggered for:', commentId);
+          console.log('Available comments:', comments);
+
+          // Instead of duplicating logic, trigger the sidebar comment item click
+          // This ensures both editor and sidebar clicks use the same exact logic
+          const commentItemElement = document.querySelector(`[data-comment-item="${commentId}"]`) as HTMLElement;
+
+          if (commentItemElement) {
+            console.log('Found sidebar comment item, triggering click:', commentItemElement);
+            // Programmatically trigger the click on the sidebar comment item
+            commentItemElement.click();
+          } else {
+            console.log('Comment item not found in sidebar for ID:', commentId);
+
+            // Fallback to direct focus mode handling if sidebar item not found
+            const isCurrentlyFocused = focusedCommentId === commentId;
+
+            if (isCurrentlyFocused) {
+              console.log('Comment already focused, exiting focus mode');
+              // Exit focus mode
+              const editorElement = editor?.view.dom.closest('.ProseMirror') || editor?.view.dom;
+              if (editorElement) {
+                editorElement.classList.remove('focus-mode-active');
+                editorElement.removeAttribute('data-focused-comment');
+
+                // Remove focused-comment classes from all elements
+                const focusedElements = document.querySelectorAll('.focused-comment');
+                focusedElements.forEach(el => {
+                  el.classList.remove('focused-comment');
+                });
+              }
+              setFocusedCommentId(null);
+              return;
+            }
+
+            // Find the comment and trigger focus mode
+            const comment = comments.find(c => c.id === commentId);
+            console.log('Found comment:', comment);
+
+            if (comment) {
+              // Enter focus mode for this comment
+              const editorElement = editor?.view.dom.closest('.ProseMirror') || editor?.view.dom;
+              if (editorElement) {
+                console.log('Entering focus mode for comment:', commentId);
+
+                // Clear any existing focus states
+                const allFocusedElements = document.querySelectorAll('.focused-comment');
+                allFocusedElements.forEach(el => {
+                  el.classList.remove('focused-comment');
+                });
+
+                // Enter focus mode
+                editorElement.classList.add('focus-mode-active');
+                editorElement.setAttribute('data-focused-comment', commentId);
+
+                // Add focused-comment class to the clicked comment elements
+                const commentElements = document.querySelectorAll(`[data-comment-id="${commentId}"]`);
+                console.log('Found comment elements to focus:', commentElements);
+                commentElements.forEach(el => {
+                  el.classList.add('focused-comment');
+                });
+              }
+
+              // Update shared state
+              setFocusedCommentId(commentId);
+            } else {
+              console.log('Comment not found in comments array');
+            }
+          }
         },
       }),
       SuggestEditExtension.configure({
@@ -753,11 +827,60 @@ export function EditorContainer({
     };
   }, [editor, updateCommentPositions]);
 
+  // Add global click handler to exit focus mode when clicking outside comments
+  useEffect(() => {
+    const handleGlobalClick = (event: MouseEvent) => {
+      if (!focusedCommentId) return;
+
+      const target = event.target as HTMLElement;
+
+      // Check if the click is on a comment in the editor
+      const isCommentInEditor = target.closest('[data-comment-id]') || target.hasAttribute('data-comment-id');
+
+      // Check if the click is on a comment item in the sidebar
+      const isCommentItem = target.closest('[data-comment-item]') || target.closest('.cursor-pointer');
+
+      // Check if the click is inside the comments sidebar
+      const isInCommentsSidebar = target.closest('[data-comments-sidebar]');
+
+      // Check if the click is on any interactive element that shouldn't trigger unfocus
+      const isInteractiveElement = target.closest('button, input, textarea, select, [role="button"]');
+
+      // Exit focus mode if clicking outside of comments and not on interactive elements
+      if (!isCommentInEditor && !isCommentItem && !isInteractiveElement) {
+        console.log('Global click detected, exiting focus mode');
+
+        // Exit focus mode
+        const editorElement = editor?.view.dom.closest('.ProseMirror') || editor?.view.dom;
+        if (editorElement?.classList.contains('focus-mode-active')) {
+          editorElement.classList.remove('focus-mode-active');
+          editorElement.removeAttribute('data-focused-comment');
+
+          // Remove focused-comment classes from all elements
+          const focusedElements = document.querySelectorAll('.focused-comment');
+          focusedElements.forEach(el => {
+            el.classList.remove('focused-comment');
+          });
+        }
+
+        setFocusedCommentId(null);
+      }
+    };
+
+    // Add the event listener
+    document.addEventListener('click', handleGlobalClick, true);
+
+    // Cleanup
+    return () => {
+      document.removeEventListener('click', handleGlobalClick, true);
+    };
+  }, [focusedCommentId, editor]);
+
   return (
     <div className={cn("w-full h-full relative", className)}>
       <InsightsContext.Provider value={[insights, setInsights]}>
         <div className="h-full flex flex-col">
-          <div className="relative z-30">
+          <div className="sticky top-0 z-30 bg-background">
             <div className="rounded-lg overflow-hidden border border-border/40">
               <EditorHeader
                 editor={editor}
@@ -816,37 +939,61 @@ export function EditorContainer({
                 onToggleParagraphTopics={toggleParagraphTopics}
                 onToggleEssayTopics={toggleEssayTopics}
               />
-              <div className="flex-1 overflow-auto bg-[#FAF9F6] dark:bg-background/10 ">
-                <div className="mx-auto relative" style={{ width: '794px' }}>
-                  <div className="py-12">
-                    <div className="relative bg-[#FFFDF7] dark:bg-card shadow-sm">
-                      <AIContextMenu
-                        editor={editor}
-                        onSelectAsParagraphTopic={handleSelectAsParagraphTopic}
-                        onSelectAsEssayTopic={handleSelectAsEssayTopic}
-                        activeCommentId={activeCommentId}
-                        setActiveCommentId={setActiveCommentId}
-                        onAddComment={handleAddComment} 
-                        comments={comments}
-                        setComments={setComments}
-                      >
-                        <EditorContent editor={editor} />
-                      </AIContextMenu>
-                    </div>
-                  </div>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto bg-[#FAF9F6] dark:bg-background/10">
+            <div className="mx-auto relative" style={{ width: '794px' }}>
+              <div className="py-12">
+                <div
+                  className="relative bg-[#FFFDF7] dark:bg-card shadow-sm"
+                  onClick={(e) => {
+                    // Only exit focus mode when clicking directly on editor content
+                    const target = e.target as HTMLElement;
+                    const isEditorContent = target.closest('.ProseMirror') || target.classList.contains('ProseMirror');
 
-                  {/* Comments sidebar */}
-                  <CommentsList
-                    isOpen={isInsightsOpen}
-                    setIsOpen={setIsInsightsOpen}
-                    comments={comments}
-                    setComments={setComments}
+                    if (isEditorContent) {
+                      // Exit focus mode by removing CSS classes
+                      const editorElement = editor?.view.dom.closest('.ProseMirror') || editor?.view.dom;
+                      if (editorElement?.classList.contains('focus-mode-active')) {
+                        editorElement.classList.remove('focus-mode-active');
+                        editorElement.removeAttribute('data-focused-comment');
+
+                        // Remove focused-comment classes from all elements
+                        const focusedElements = document.querySelectorAll('.focused-comment');
+                        focusedElements.forEach(el => {
+                          el.classList.remove('focused-comment');
+                        });
+                      }
+                    }
+                  }}
+                >
+                  <AIContextMenu
+                    editor={editor}
+                    onSelectAsParagraphTopic={handleSelectAsParagraphTopic}
+                    onSelectAsEssayTopic={handleSelectAsEssayTopic}
                     activeCommentId={activeCommentId}
                     setActiveCommentId={setActiveCommentId}
-                    editor={editor}
-                  />
+                    onAddComment={handleAddComment}
+                    comments={comments}
+                    setComments={setComments}
+                  >
+                    <EditorContent editor={editor} />
+                  </AIContextMenu>
                 </div>
               </div>
+
+              {/* Comments sidebar */}
+              <CommentsList
+                isOpen={isInsightsOpen}
+                setIsOpen={setIsInsightsOpen}
+                comments={comments}
+                setComments={setComments}
+                activeCommentId={activeCommentId}
+                setActiveCommentId={setActiveCommentId}
+                editor={editor}
+                focusedCommentId={focusedCommentId}
+                setFocusedCommentId={setFocusedCommentId}
+              />
             </div>
           </div>
         </div>

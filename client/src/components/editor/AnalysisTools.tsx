@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Editor } from '@tiptap/react';
 import { Loader2, Clock, Highlighter, File } from 'lucide-react';
 import { toast } from "sonner";
@@ -120,7 +120,8 @@ export function AnalysisTools({
                 suggestedEdit: {
                   original: comment.suggestedEdit.original,
                   suggested: comment.suggestedEdit.suggested,
-                  explanation: comment.suggestedEdit.explanation
+                  explanation: comment.suggestedEdit.explanation,
+                  references: comment.suggestedEdit.references || []
                 }
               } : {})
             };
@@ -185,7 +186,7 @@ export function AnalysisTools({
       )}
       <div className="flex space-x-1 text-sm">
         {isAnalyzing ? (
-          <div className="flex items-center space-x-1">
+          <div className="flex items-center space-x-1 text-gray-600 ">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             <span>Checking...</span>
           </div>

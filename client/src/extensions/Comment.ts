@@ -24,6 +24,7 @@ export interface MarkWithRange {
 export interface CommentOptions {
   HTMLAttributes: Record<string, any>;
   onCommentActivated: (commentId: string | null) => void;
+  onCommentClicked?: (commentId: string) => void;
 }
 
 export interface CommentStorage {
@@ -39,6 +40,7 @@ export const CommentExtension = Mark.create<CommentOptions, CommentStorage>({
     return {
       HTMLAttributes: {},
       onCommentActivated: () => { },
+      onCommentClicked: () => { },
     };
   },
 
@@ -103,6 +105,49 @@ export const CommentExtension = Mark.create<CommentOptions, CommentStorage>({
     return {
       activeCommentId: null,
     };
+  },
+
+  onCreate() {
+    // Add click handler for comment marks
+    const handleCommentClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+
+      console.log('Comment click detected on:', target);
+
+      // Check if the clicked element or any parent has a comment mark
+      let commentElement = target.closest('[data-comment-id]') as HTMLElement | null;
+
+      if (!commentElement) {
+        // Also check if the target itself has the attribute
+        commentElement = target.hasAttribute('data-comment-id') ? target : null;
+      }
+
+      if (commentElement) {
+        const commentId = commentElement.getAttribute('data-comment-id');
+        console.log('Found comment ID:', commentId);
+
+        if (commentId && this.options.onCommentClicked) {
+          event.preventDefault();
+          event.stopPropagation();
+          console.log('Triggering onCommentClicked for:', commentId);
+          this.options.onCommentClicked(commentId);
+        }
+      } else {
+        console.log('No comment element found for click');
+      }
+    };
+
+    this.editor.view.dom.addEventListener('click', handleCommentClick);
+
+    // Store the handler for cleanup
+    (this as any).commentClickHandler = handleCommentClick;
+  },
+
+  onDestroy() {
+    // Remove click handler
+    if ((this as any).commentClickHandler) {
+      this.editor.view.dom.removeEventListener('click', (this as any).commentClickHandler);
+    }
   },
 
   addCommands() {

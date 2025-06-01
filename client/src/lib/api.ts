@@ -1,3 +1,5 @@
+import { Reference } from '@/components/editor/types';
+
 // API utility functions for communicating with the backend
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -37,6 +39,7 @@ interface ContextualAnalysisResponse {
         explanation: string;
         original: string;
         suggested: string;
+        references?: Reference[];
       };
     }[];
   };
@@ -69,6 +72,7 @@ interface RefreshFeedbackResponse {
   success: boolean;
   data: {
     updatedFeedback: string;
+    references?: Reference[];
   };
   processedAt: string;
 }
@@ -173,6 +177,7 @@ interface RegenerateSuggestionResponse {
       original: string;
       suggested: string;
       explanation: string;
+      references?: Reference[];
     }
   };
   processedAt: string;

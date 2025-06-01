@@ -105,3 +105,14 @@
 .dark .svg-theme {
   filter: invert(100%); /* Inverts the color to white in dark mode */
 }
+/* Reference link styles */
+.reference-link {
+  color: rgb(59, 130, 246) !important;
+  text-decoration: underline !important;
+  cursor: pointer !important;
+  transition: color 0.2s ease !important;
+}
+
+.reference-link:hover {
+  color: rgb(37, 99, 235) !important;
+}

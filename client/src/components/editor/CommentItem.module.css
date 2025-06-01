@@ -1,0 +1,10 @@
+.reference-link {
+    color: rgb(59, 130, 246);
+    text-decoration: underline;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.reference-link:hover {
+    color: rgb(37, 99, 235);
+}

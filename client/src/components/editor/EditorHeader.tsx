@@ -1,7 +1,8 @@
 import { useCallback, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ModeToggle } from '@/components/ui/mode-toggle';
-import { Save, FileDown, HelpCircle, FileCheck2 } from 'lucide-react';
+import { ToggleSwitch } from '@/components/ui/toggle-switch';
+import { Save, FileDown, HelpCircle, FileCheck2, Droplet } from 'lucide-react';
 import { toast } from "sonner";
 import { AnalysisTools } from './AnalysisTools';
 import { CommentType } from './types';
@@ -45,9 +46,28 @@ export function EditorHeader({
 }: EditorHeaderProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isFilePickerOpen, setIsFilePickerOpen] = useState(false);
+  const [isFlowMode, setIsFlowMode] = useState(false);
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   const { user } = useAuth();
   const [fileService, setFileService] = useState<FileService | null>(null);
+
+  // Custom DropletOff component
+  const DropletOffIcon = () => (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M18.715 13.186C18.29 11.858 17.384 10.607 16 9.5c-2-1.6-3.5-4-4-6.5a10.7 10.7 0 0 1-.884 2.586" />
+      <path d="m2 2 20 20" />
+      <path d="M8.795 8.797A11 11 0 0 1 8 9.5C6 11.1 5 13 5 15a7 7 0 0 0 13.222 3.208" />
+    </svg>
+  );
 
   // Initialize file service when user changes
   useEffect(() => {
@@ -241,6 +261,13 @@ export function EditorHeader({
     }
   };
 
+  const handleFlowToggle = (checked: boolean) => {
+    setIsFlowMode(checked);
+    // Add your flow mode logic here
+    // For example, you might want to modify editor behavior, UI layout, etc.
+    console.log('Flow mode:', checked ? 'enabled' : 'disabled');
+  };
+
   return (
     <>
       <div className="px-4 py-2 border-b border-border/40 bg-blue-100/60 dark:bg-blue-900/10 backdrop-blur supports-[backdrop-filter]:bg-blue-100/40 dark:supports-[backdrop-filter]:bg-blue-900/5">
@@ -258,6 +285,18 @@ export function EditorHeader({
               placeholder="Untitled document"
               className="bg-transparent border-none text-sm focus:outline-none focus:ring-0 p-0 h-6 text-stone-800 dark:text-zinc-100"
             />
+
+            <div className="bg-white dark:bg-transparent rounded-lg shadow-sm dark:shadow-none">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsHelpOpen(!isHelpOpen)}
+                className="h-7 px-3 text-xs flex items-center space-x-1"
+              >
+                <HelpCircle className="h-3.5 w-3.5" />
+                <span>Help</span>
+              </Button>
+            </div>
             <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
             <ModeToggle />
             <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
@@ -297,14 +336,33 @@ export function EditorHeader({
 
           {/* Right section */}
           <div className="flex items-center space-x-4">
+            <div>
+
+            </div>
             <AnalysisTools
               editor={editor}
               setComments={setComments}
               setIsInsightsOpen={setIsInsightsOpen}
             />
             <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
+
+            {/* Flow Toggle */}
+            <div className="flex items-center space-x-2 bg-white dark:bg-transparent rounded-lg px-3 py-1.5 shadow-sm dark:shadow-none">
+              <ToggleSwitch
+                checked={isFlowMode}
+                onCheckedChange={handleFlowToggle}
+                label="Flow Mode"
+                onIcon={<Droplet className="h-2.5 w-2.5" strokeWidth={2.5} />}
+                offIcon={<DropletOffIcon />}
+                activeColor="bg-blue-500"
+                size="sm"
+              />
+            </div>
+
+            <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
+            <div className="bg-white dark:bg-transparent rounded-lg shadow-sm dark:shadow-none">
             <Button
-              variant={isInsightsOpen ? "secondary" : "ghost"}
+                variant={isInsightsOpen ? "ghost" : "ghost"}
               size="sm"
               onClick={() => setIsInsightsOpen(!isInsightsOpen)}
               className="h-7 px-3 text-xs flex items-center space-x-1"
@@ -312,16 +370,8 @@ export function EditorHeader({
               <FileCheck2 className="h-3.5 w-3.5" />
               <span>Toggle Suggestions</span>
             </Button>
+            </div>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsHelpOpen(!isHelpOpen)}
-              className="h-7 px-3 text-xs flex items-center space-x-1"
-            >
-              <HelpCircle className="h-3.5 w-3.5" />
-              <span>Help</span>
-            </Button>
 
             {/* <Button
               variant="ghost"

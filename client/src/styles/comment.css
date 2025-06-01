@@ -9,6 +9,31 @@
   background-color: rgba(255, 212, 0, 0.4);
 }
 
+/* Focus mode styles - hide all yellow comments when active */
+.focus-mode-active .tiptap-comment {
+  background-color: transparent !important;
+  border-bottom: none !important;
+  padding: 0 !important;
+  transition: none !important;
+}
+
+/* Ensure no yellow hover effects in focus mode */
+.focus-mode-active .tiptap-comment:hover {
+  background-color: transparent !important;
+  border-bottom: none !important;
+}
+
+/* Show focused comment in blue */
+.focus-mode-active .tiptap-comment.focused-comment {
+  background-color: rgba(59, 130, 246, 0.3) !important;
+  border-bottom: 2px solid rgb(59, 130, 246) !important;
+  border-radius: 2px !important;
+  padding: 1px 2px !important;
+}
+
+.focus-mode-active .tiptap-comment.focused-comment:hover {
+  background-color: rgba(59, 130, 246, 0.4) !important;
+}
 .tiptap-suggest-edit {
   position: relative;
 }

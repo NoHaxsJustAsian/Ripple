@@ -50,9 +50,9 @@ export interface CommentType {
 }
 
 export interface Reference {
-  text: string;
+  allusion: string;
   referenceText: string;
-  source?: 'quote' | 'implicit' | 'api';
+  // source?: 'quote' | 'implicit' | 'api';
   position?: { from: number, to: number };
 }
 

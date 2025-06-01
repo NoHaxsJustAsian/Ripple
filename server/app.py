@@ -114,7 +114,7 @@ def analyze_text_with_context(
             "explanation": "A concise analysis that: 1) identifies what this text is trying to accomplish, 2) explains specifically what is missing or problematic, 3) describes how this affects the reader, and 4) justifies how the suggested change addresses these issues.",
             "references": [
             {{
-                "text": "phrase you refer to in your explanation",
+                "allusion": "phrase you refer to in your explanation",
                 "referenceText": "exact text to highlight in the document"
             }}
             ]
@@ -333,19 +333,34 @@ def analyze_text_with_context(
         "The literature review section of your paper presents three distinct theoretical frameworks that you have researched and included, but unfortunately fails to establish or demonstrate the important logical connections between these different theories and how they relate to each other in the context of your overall argument. This lack of explicit connection between the theoretical concepts creates a situation where readers might struggle to understand the relationship between these different frameworks and might not fully grasp how they collectively contribute to or support the central thesis of your paper regarding urban development patterns and processes. It would be highly beneficial to the overall coherence and persuasiveness of your argument if you were to consider adding additional explanatory text after the presentation of each theory to clearly articulate how that particular theoretical framework specifically connects to and supports your overall argument about urban development."
 
 
-        IMPORTANT: References should capture important CONCEPTS mentioned in your feedback, not just direct quotes. The goal is to help users see what parts of their document you're talking about.
+        IMPORTANT: Allusions in your feedback refer to the text that you're talking about. The goal is to help users see what parts of their document you're talking about.
 
-        Examples of good reference identification:
+        1) Here is one example of a good allusion and reference identification:
 
-        1. If your feedback mentions "introduction" -> The reference should point to the actual introduction section
-        2. If your feedback mentions "supporting evidence" -> The references should point to places where evidence is mentioned
-        3. If your feedback mentions "topic sentence" -> The reference should point to the actual topic sentence
+        Given the text: "Strangely enough, searching for solutions in these creative places floods back when I work on research and programming for my computational biology internships, observing patterns and breaking down problems into miniature tasks."
+        
+        Given the feedback: The current sentence introduces a connection between activities without clearly articulating the relationship. Explicitly linking the skills acquired through miniature making to computational biology tasks enhances focus, allowing readers to see the broader applicability of these skills.
 
-        For each key concept in your feedback, include a reference that would help the user understand what specific part of their text you're referring to.
+        The first allusion is "connection between activities"; its reference is "searching for solutions in these creative places floods back when I work on research and programming for my computational biology internships". The second allusion is "explicitly linking the skills acquired through miniature making to computational biology tasks".
 
-        DO NOT be overly literal. If you mention "the conclusion lacks clarity", the reference for "conclusion" should point to the conclusion paragraph, even if the word "conclusion" doesn't appear in the text.
+        2) Here is another example of a good allusion and reference identification:
 
-        Try to identify 2-4 key concepts in each feedback explanation that would be useful to highlight. These could be:
+        Given the text: "As I wonder why miniature making has become such an integral part of my routine, I’ve begun to notice just how much I’ve gained from it"
+
+        Given the feedback: The current sentence lacks focus, as it introduces a reflection without immediately connecting it to the benefits. Rephrasing to emphasize the gained skills sharpens the focus, helping readers understand the value of the activity more clearly.
+
+        The first allusion is "introduces the reflection"; its reference is "As I wonder why miniature making has become such an integral part of my routine,".
+
+        3) Here is another example of a good allusion and reference identification:
+
+        Given the text: I’d make frustrating mistakes, but I found my way, crocheting bicycle chains that created enough friction to pull cardboard gears
+
+        Given the feedback: The current phrasing is somewhat indirect, which may obscure the problem-solving process. Clarifying the sequence of actions makes the resolution more accessible, allowing readers to appreciate the ingenuity involved.
+
+        The first allusion is "the problem solving process"; its reference is "crocheting bicycle chains that created enough friction to pull cardboard gears". The second allusion is "the ingenuity involved"; its reference is "I’d make frustrating mistakes, but I found my way".
+
+
+        Identify ALL the relevant allusions and references for each feedback explanations. These could be:
         - Parts of the document structure (introduction, methodology, conclusion)
         - Types of content (evidence, arguments, examples, data)
         - Writing elements (transitions, topic sentences, thesis statements)
@@ -364,7 +379,7 @@ def analyze_text_with_context(
             "suggested": "improved version of the text",
             "references": [
                 {{
-                    "text": "phrase you refer to in your explanation",
+                    "allusion": "phrase you refer to in your explanation",
                     "referenceText": "exact text to highlight in the document"
                 }}
                 ]
@@ -393,9 +408,9 @@ def analyze_text_with_context(
         result = response.choices[0].message.content.strip()
         
         # Print the raw result for debugging
-        # print(f"Raw result from OpenAI: {result[:500]}...")
+        print(f"Raw result from OpenAI: {result[:500]}...")
 
-        # print(f"RECEIVED FROM OPENAI: {result}...")
+        print(f"RECEIVED FROM OPENAI: {result}...")
         
         try:
             # First try to extract JSON if it's wrapped in text or code blocks
@@ -438,12 +453,22 @@ def analyze_text_with_context(
                         for match in re.finditer(quote_regex, explanation):
                             quoted_text = match.group(1)
                             references.append({
-                                "text": f'"{quoted_text}"',
-                                "referenceText": quoted_text,
-                                "source": "quote"
+                                "allusion": quoted_text,
+                                "referenceText": quoted_text
                             })
                         
                         comment["suggestedEdit"]["references"] = references
+                    else:
+                        # Process existing references to ensure correct format
+                        processed_references = []
+                        for ref in comment["suggestedEdit"]["references"]:
+                            processed_ref = {
+                                "allusion": ref.get("allusion", ""),
+                                "referenceText": ref.get("referenceText", "")
+                            }
+                            processed_references.append(processed_ref)
+                        comment["suggestedEdit"]["references"] = processed_references
+                        print(f"Processed existing references: {processed_references}")
                     
                     # Standardize issueType to match our badge categories
                     issue_type_mapping = {
@@ -492,7 +517,12 @@ def analyze_text_with_context(
                         "original": "Has this system encountered any issues yet??",
                         "suggested": "Has this system encountered any issues yet?",
                         "explanation": "Using a single question mark is the correct punctuation for a question.",
-                        "references": []
+                        "references": [
+                            {{
+                                "allusion": "phrase you refer to in your explanation",
+                                "referenceText": "exact text to highlight in the document"
+                            }}
+                            ]
                     }
                 }]
                 
@@ -506,7 +536,12 @@ def analyze_text_with_context(
                     "original": content[:100] + ("..." if len(content) > 100 else ""),
                     "suggested": content[:100] + ("..." if len(content) > 100 else ""),
                     "explanation": "The text appears generally well-formed. Consider reviewing for clarity and purpose.",
-                    "references": []
+                    "references": [
+                    {{
+                        "allusion": "phrase you refer to in your explanation",
+                        "referenceText": "exact text to highlight in the document"
+                    }}
+                    ]
                 }
             }]
             
@@ -525,7 +560,12 @@ def analyze_text_with_context(
                         "original": "Has this system encountered any issues yet??",
                         "suggested": "Has this system encountered any issues yet?",
                         "explanation": "Using a single question mark is the correct punctuation for a question.",
-                        "references": []
+                        "references": [
+                        {{
+                            "allusion": "phrase you refer to in your explanation",
+                            "referenceText": "exact text to highlight in the document"
+                        }}
+                        ]
                     }
                 }]
             
@@ -538,7 +578,12 @@ def analyze_text_with_context(
                     "original": content[:100] + ("..." if len(content) > 100 else ""),
                     "suggested": content[:100] + ("..." if len(content) > 100 else ""),
                     "explanation": "The analysis couldn't be properly formatted. Please try again with more detailed text.",
-                    "references": []
+                    "references": [
+                    {{
+                        "allusion": "phrase you refer to in your explanation",
+                        "referenceText": "exact text to highlight in the document"
+                    }}
+                    ]
                 }
             }]
 
@@ -583,9 +628,6 @@ ORIGINAL FEEDBACK (about the original text):
 
 ISSUE TYPE: {issue_type}
 
-IMPORTANT: For action recommendations in your explanation, use HTML bold tags by wrapping the text like this: <b>action recommendation</b>. For example: "The current phrasing lacks clarity. <b>Try using more specific terminology</b> to help readers better understand your point."
-
-
 Your task is to analyze if the user's changes have addressed the issues mentioned in the original feedback. Provide updated feedback that:
 
 1. Acknowledges any improvements made
@@ -599,8 +641,23 @@ Guidelines:
 - If issues remain, be specific about what still needs improvement
 - Keep your feedback concise (2-3 sentences maximum)
 - Focus on the specific issue type: {issue_type}
+- For action recommendations in your explanation, use HTML bold tags by wrapping the text like this: <b>action recommendation</b>. For example: "The current phrasing lacks clarity. <b>Try using more specific terminology</b> to help readers better understand your point."
 
-Format your response as professional writing feedback without any additional explanation or meta-commentary.
+Format your response as:
+1. Your feedback text (with HTML bold tags for action recommendations)
+2. A list of references in this format:
+   REFERENCES:
+   - text: "part of your feedback that refers to the text"
+     referenceText: "actual text from the document being referenced"
+
+For example:
+"The transition between methodology and results has improved significantly, providing a clearer connection between the two sections. The significance of the patterns is now better articulated, though <b>consider elaborating on why these patterns warrant further investigation</b>."
+
+REFERENCES:
+- text: "transition between methodology and results"
+  referenceText: "The methodology section outlines our approach. The results demonstrate several key findings"
+- text: "significance of the patterns"
+  referenceText: "the data reveals compelling patterns that warrant further investigation"
 """
 
         # Make OpenAI API call
@@ -616,9 +673,45 @@ Format your response as professional writing feedback without any additional exp
             temperature=0.3  # Lower temperature for more consistent analysis
         )
         
-        # Extract and return the response text
-        updated_feedback = response.choices[0].message.content.strip()
-        return updated_feedback
+        # Extract the feedback text and references
+        full_response = response.choices[0].message.content.strip()
+        
+        # Split into feedback and references
+        parts = full_response.split("REFERENCES:", 1)
+        feedback_text = parts[0].strip().strip('"')  # Remove any quotes
+        references_part = parts[1].strip() if len(parts) > 1 else ""
+        
+        # Parse references
+        references = []
+        if references_part:
+            # Split by reference entries
+            ref_entries = references_part.split("- text:")
+            for entry in ref_entries[1:]:  # Skip first empty entry
+                try:
+                    # Extract text and referenceText
+                    text_match = entry.split('referenceText:')[0].strip()
+                    ref_match = entry.split('referenceText:')[1].strip()
+                    
+                    # Clean up quotes
+                    text = text_match.strip('"')
+                    ref_text = ref_match.strip('"')
+                    # Find position in feedback text
+                    start_pos = feedback_text.lower().find(text.lower())
+                    if start_pos != -1:
+                        # Get the actual text from the feedback (preserve case)
+                        actual_text = feedback_text[start_pos:start_pos + len(text)]
+                        references.append({
+                            "text": actual_text,
+                            "referenceText": ref_text,
+                            "position": {
+                                "start": start_pos,
+                                "end": start_pos + len(text)
+                            }
+                        })
+                except:
+                    continue
+        
+        return feedback_text, references
         
     except Exception as e:
         raise DocumentProcessingError(f"Failed to refresh feedback: {str(e)}")
@@ -653,7 +746,7 @@ def refresh_feedback_endpoint():
         issue_type = data.get('issueType', 'clarity')  # Default to clarity if not specified
 
         # Call the refresh feedback function
-        updated_feedback = refresh_feedback(
+        updated_feedback, references = refresh_feedback(
             original_text, 
             current_text,
             original_feedback,
@@ -663,7 +756,8 @@ def refresh_feedback_endpoint():
         return jsonify({
             "success": True,
             "data": {
-                "updatedFeedback": updated_feedback
+                "updatedFeedback": updated_feedback,
+                "references": references
             },
             "processedAt": datetime.utcnow().isoformat()
         })
@@ -952,7 +1046,26 @@ ISSUE TYPE: {issue_type}
 Generate a new suggestion to improve this text based on the issue type. The user has requested a fresh perspective on how to improve their writing.
 
 Guidelines:
-- Consider whether, compared to the original text, if the current text resolves {issue_type} issue. Based on the original issue, {original_explanation}, offer a suggested paraphrase or edit, and provide feedback on whether the change satisfies the {issue_type} issue. 
+- Consider whether, compared to the original text, if the current text resolves {issue_type} issue
+- Based on the original issue, {original_explanation}, offer a suggested paraphrase or edit
+- Provide feedback on whether the change satisfies the {issue_type} issue
+- For action recommendations in your explanation, use HTML bold tags by wrapping the text like this: <b>action recommendation</b>. For example: "The current phrasing lacks clarity. <b>Try using more specific terminology</b> to help readers better understand your point."
+
+Format your response as:
+1. Your feedback text (with HTML bold tags for action recommendations)
+2. A list of references in this format:
+   REFERENCES:
+   - text: "part of your feedback that refers to the text"
+     referenceText: "actual text from the document being referenced"
+
+For example:
+"The transition between methodology and results has improved significantly, providing a clearer connection between the two sections. The significance of the patterns is now better articulated, though <b>consider elaborating on why these patterns warrant further investigation</b>."
+
+REFERENCES:
+- text: "transition between methodology and results"
+  referenceText: "The methodology section outlines our approach. The results demonstrate several key findings"
+- text: "significance of the patterns"
+  referenceText: "the data reveals compelling patterns that warrant further investigation"
 """
 
         # Make OpenAI API call
@@ -968,8 +1081,42 @@ Guidelines:
             temperature=0.7  # Slightly higher temperature for creative suggestions
         )
         
-        # Extract the suggested text
-        suggested_text = response.choices[0].message.content.strip()
+        # Extract the suggested text and references
+        full_response = response.choices[0].message.content.strip()
+        
+        # Split into suggestion and references
+        parts = full_response.split("REFERENCES:", 1)
+        suggestion_part = parts[0].strip()
+        references_part = parts[1].strip() if len(parts) > 1 else ""
+        
+        # Parse references and find their positions in the suggestion text
+        references = []
+        if references_part:
+            # Split by reference entries
+            ref_entries = references_part.split("- text:")
+            for entry in ref_entries[1:]:  # Skip first empty entry
+                try:
+                    # Extract text and referenceText
+                    text_match = entry.split('referenceText:')[0].strip()
+                    ref_match = entry.split('referenceText:')[1].strip()
+                    
+                    # Clean up quotes
+                    text = text_match.strip('"')
+                    ref_text = ref_match.strip('"')
+                    
+                    # Find position in suggestion text
+                    start_pos = suggestion_part.find(text)
+                    if start_pos != -1:
+                        references.append({
+                            "text": text,
+                            "referenceText": ref_text,
+                            "position": {
+                                "start": start_pos,
+                                "end": start_pos + len(text)
+                            }
+                        })
+                except:
+                    continue
         
         # Keep the original explanation if provided, otherwise use a generic one
         explanation = original_explanation
@@ -978,8 +1125,9 @@ Guidelines:
                 
         return {
             "original": original_text,
-            "suggested": suggested_text,
-            "explanation": explanation
+            "suggested": suggestion_part,
+            "explanation": explanation,
+            "references": references
         }
         
     except Exception as e:

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Editor } from '@tiptap/react';
 import { Button } from '@/components/ui/button';
 import { cn } from "@/lib/utils";
@@ -44,8 +44,6 @@ interface CommentItemProps {
   onMarkAsCompleted?: (commentId: string, action: 'accepted' | 'ignored', reason?: string) => void;
   onReviveComment?: (commentId: string) => void;
   isCompleted?: boolean;
-  focusedCommentId?: string | null;
-  setFocusedCommentId?: (id: string | null) => void;
 }
 
 export function CommentItem({
@@ -62,16 +60,12 @@ export function CommentItem({
   onTogglePin,
   onMarkAsCompleted,
   onReviveComment,
-  isCompleted = false,
-  focusedCommentId,
-  setFocusedCommentId,
+  isCompleted = false
 }: CommentItemProps) {
   // State for tracking current text from the editor
   const [currentEditorText, setCurrentEditorText] = useState<string | null>(null);
   // State for copy button
   const [hasCopied, setHasCopied] = useState(false);
-  // State for focus mode
-  const [isFocused, setIsFocused] = useState(false);
 
   // Pagination state
   const [historyIndex, setHistoryIndex] = useState(0);
@@ -91,7 +85,7 @@ export function CommentItem({
 
   // Determine card style based on feedback type
   const cardStyle = comment.isAIFeedback
-    ? "shadow-[0_0_15px_rgba(168,85,247,0.15)]" 
+    ? "shadow-[0_0_15px_rgba(168,85,247,0.15)]"
     : ""; // User comments have no special style
 
   // Ref for autoscroll
@@ -100,6 +94,9 @@ export function CommentItem({
   // State for double-click editing
   const [editingCurrentText, setEditingCurrentText] = useState<string | null>(null);
   const [currentTextDraft, setCurrentTextDraft] = useState<string>("");
+
+  // State for reference highlighting
+  const [activeReferenceId, setActiveReferenceId] = useState<string | null>(null);
 
   // Initialize feedback history when component mounts or comment changes
   useEffect(() => {
@@ -129,7 +126,7 @@ export function CommentItem({
       setTotalHistoryItems(0);
       setHistoryIndex(0);
     }
-    
+
     // Debug: check if we're properly recognizing suggestions
     console.log('Comment loaded:', {
       id: comment.id,
@@ -314,7 +311,7 @@ export function CommentItem({
     if (foundPos && comment.suggestedEdit) {
       // Add type assertion to fix 'never' type error
       const pos = foundPos as { from: number; to: number };
-      
+
       // Apply the suggested edit
       // If we're viewing history, use the suggestion from the history
       const suggestionToApply = historyIndex === totalHistoryItems - 1
@@ -543,31 +540,53 @@ export function CommentItem({
     )
   }
 
-  // Modify the highlightReferencedText function
-  const highlightReferencedText = (referenceText: string) => {
-    if (!editor) return;
+  // Function to highlight referenced text in editor
+  const highlightReferencedText = useCallback((referenceText: string, shouldHighlight: boolean = true) => {
+    if (!editor || !referenceText) return;
 
-    // Search for the text and highlight it
-    const content = editor.state.doc.textContent;
-    const startIndex = content.indexOf(referenceText);
+    try {
+      // Get all text from the editor
+      const fullText = editor.state.doc.textContent;
 
-    if (startIndex !== -1) {
-      const from = startIndex;
-      const to = startIndex + referenceText.length;
+      // Find the text (case-insensitive)
+      const searchText = referenceText.toLowerCase();
+      const contentText = fullText.toLowerCase();
+      const startIndex = contentText.indexOf(searchText);
 
-      // Add temporary highlight
-      editor.commands.setTextSelection({ from, to });
-      editor.commands.setHighlight({ color: 'purple' });
+      if (startIndex !== -1) {
+        const endIndex = startIndex + referenceText.length;
 
-      // Remove highlight after delay
-      setTimeout(() => {
-        editor.commands.setTextSelection({ from, to });
-        editor.commands.unsetHighlight();
-      }, 2000);
+        if (shouldHighlight) {
+          // Clear any existing highlights first
+          editor.commands.unsetHighlight();
+          // Add new highlight
+          editor.commands.setTextSelection({ from: startIndex, to: endIndex });
+          editor.commands.setHighlight({ color: '#3b82f6' });
+        } else {
+          // Remove highlight
+          editor.commands.setTextSelection({ from: startIndex, to: endIndex });
+          editor.commands.unsetHighlight();
+          // Clear selection
+          editor.commands.blur();
+        }
+      }
+    } catch (error) {
+      console.warn('Error highlighting text:', error);
     }
-  };
+  }, [editor]);
 
-  // Modify the processExplanationText function
+  // Function to handle allusion hover
+  const handleAllusionHover = useCallback((referenceText: string, isEntering: boolean) => {
+    if (isEntering) {
+      setActiveReferenceId(referenceText);
+      highlightReferencedText(referenceText, true);
+    } else {
+      setActiveReferenceId(null);
+      highlightReferencedText(referenceText, false);
+    }
+  }, [editor]);
+
+  // Process explanation text with interactive allusions
   const processExplanationText = (text: string, references?: Reference[]) => {
     if (!text) return text;
 
@@ -576,30 +595,31 @@ export function CommentItem({
 
     // Then process references if available
     if (references && references.length > 0) {
-      // Sort references by position if available, otherwise by allusion length (longer matches first)
+      // Sort references by allusion length (longer matches first) to avoid partial replacements
       const sortedRefs = [...references].sort((a, b) => {
-        if (a.position && b.position) {
-          return b.position.from - a.position.from;
-        }
-        // Use allusion property and add null checks
         const aLength = a.allusion?.length || 0;
         const bLength = b.allusion?.length || 0;
         return bLength - aLength;
       });
+
       // Process each reference
       for (const ref of sortedRefs) {
-        const refText = ref.allusion;
-        console.log(refText);
+        const allusion = ref.allusion;
         const referenceText = ref.referenceText;
-        console.log(referenceText);
-        if (!refText || !referenceText) continue;
 
-        // Create a styled span for the reference using Tailwind classes
-        const styledSpan = `<span class="text-blue-500 underline cursor-pointer hover:text-blue-600">${refText}</span>`;
+        if (!allusion || !referenceText) continue;
 
-        // Replace the reference text with the styled span
+        // Create interactive span with hover effects and data attributes
+        const styledSpan = `<span 
+          class="allusion-text text-blue-500 underline cursor-pointer transition-colors duration-200 px-1 py-0.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30" 
+          data-reference-text="${referenceText.replace(/"/g, '&quot;')}"
+          onmouseenter="window.handleAllusionHover('${referenceText.replace(/'/g, "\\'")}', true)"
+          onmouseleave="window.handleAllusionHover('${referenceText.replace(/'/g, "\\'")}', false)"
+        >${allusion}</span>`;
+
+        // Replace the allusion text with the styled span
         // Use case-insensitive replacement to catch variations
-        const regex = new RegExp(refText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        const regex = new RegExp(allusion.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
         processedText = processedText.replace(regex, styledSpan);
       }
     }
@@ -607,136 +627,34 @@ export function CommentItem({
     return processedText;
   };
 
-  // Add this effect to set up the global handler
+  // Set up global handlers for allusion interactions
   useEffect(() => {
-    // Add the highlight handler to the window object
-    (window as any).highlightReference = (referenceText: string) => {
-      highlightReferencedText(referenceText);
-    };
+    // Add the hover handler to the window object
+    (window as any).handleAllusionHover = handleAllusionHover;
 
     // Cleanup
     return () => {
-      delete (window as any).highlightReference;
-    };
-  }, [editor]);
-
-  // Function to handle comment click and enter focus mode
-  const handleCommentClick = () => {
-    if (!editor || isCompleted) return;
-
-    // Check if this comment is currently focused using the shared state
-    const isCurrentlyFocused = focusedCommentId === comment.id;
-
-    // Toggle behavior: if THIS comment is already focused, deselect it
-    if (isCurrentlyFocused) {
-      console.log('Comment deselected, exiting focus mode for:', comment.id);
-
-      // Exit focus mode - restore normal yellow highlighting
-      const editorElement = editor.view.dom.closest('.ProseMirror') || editor.view.dom;
-      if (editorElement) {
-        editorElement.classList.remove('focus-mode-active');
-        editorElement.removeAttribute('data-focused-comment');
-      }
-
-      // Remove focused-comment classes from all elements
-      const focusedElements = document.querySelectorAll('.focused-comment');
-      focusedElements.forEach(el => {
-        el.classList.remove('focused-comment');
-      });
-
-      // Update shared state
-      if (setFocusedCommentId) {
-        setFocusedCommentId(null);
-      }
-      setIsFocused(false);
-      return;
-    }
-
-    console.log('Comment selected, entering focus mode for:', comment.id);
-
-    // FIRST: Clear any existing focus states from other comments
-    const allFocusedElements = document.querySelectorAll('.focused-comment');
-    allFocusedElements.forEach(el => {
-      el.classList.remove('focused-comment');
-    });
-
-    // THEN: Enter focus mode for this comment
-    const editorElement = editor.view.dom.closest('.ProseMirror') || editor.view.dom;
-    if (editorElement) {
-      editorElement.classList.add('focus-mode-active');
-      editorElement.setAttribute('data-focused-comment', comment.id);
-    }
-
-    // Find and mark the focused comment in the editor
-    let foundPos: { from: number; to: number } | null = null;
-    editor.state.doc.descendants((node, pos) => {
-      const mark = node.marks.find(m =>
-        m.type.name === 'comment' &&
-        m.attrs.commentId === comment.id
-      );
-      if (mark) {
-        foundPos = { from: pos, to: pos + node.nodeSize };
-        return false;
-      }
-    });
-
-    if (foundPos) {
-      // Add focused-comment class to the comment elements in the editor
-      const commentElements = document.querySelectorAll(`[data-comment-id="${comment.id}"]`);
-      commentElements.forEach(el => {
-        el.classList.add('focused-comment');
-      });
-    }
-
-    // Update shared state
-    if (setFocusedCommentId) {
-      setFocusedCommentId(comment.id);
-    }
-    setIsFocused(true);
-  };
-
-  // Add effect to handle focus mode exit
-  useEffect(() => {
-    const handleFocusExit = () => {
-      // Check if focus mode is still active for this comment
-      const editorElement = editor?.view.dom.closest('.ProseMirror') || editor?.view.dom;
-      const isFocusModeActive = editorElement?.classList.contains('focus-mode-active');
-      const currentFocusedComment = editorElement?.getAttribute('data-focused-comment');
-
-      // Only exit if focus mode is no longer active OR if another comment is now focused
-      if (!isFocusModeActive || (currentFocusedComment && currentFocusedComment !== comment.id)) {
-        setIsFocused(false);
+      delete (window as any).handleAllusionHover;
+      // Clear any active highlights when component unmounts
+      if (editor && activeReferenceId) {
+        try {
+          editor.commands.unsetHighlight();
+        } catch (error) {
+          console.warn('Error clearing highlights on unmount:', error);
+        }
       }
     };
-
-    // Set up an interval to check focus mode status
-    const interval = setInterval(handleFocusExit, 100);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [editor, comment.id]);
-
-  // Sync local isFocused state with shared focusedCommentId state
-  useEffect(() => {
-    const shouldBeFocused = focusedCommentId === comment.id;
-    if (isFocused !== shouldBeFocused) {
-      setIsFocused(shouldBeFocused);
-    }
-  }, [focusedCommentId, comment.id, isFocused]);
+  }, [handleAllusionHover, activeReferenceId, editor]);
 
   return (
     <div ref={commentRef}
       className={cn(
-        "bg-white dark:bg-background border border-border/40 rounded-md p-4 transition-all duration-200 relative cursor-pointer",
+        "bg-white dark:bg-background border border-border/40 rounded-md p-4 transition-all duration-200 relative",
         activeCommentId === comment.id && "ring-2 ring-blue-500",
         comment.isPinned && "border-yellow-400 dark:border-yellow-600",
         isCompleted && "opacity-80",
-        isFocused && "ring-2 ring-blue-400",
         cardStyle
       )}
-      onClick={handleCommentClick}
-      data-comment-item={comment.id}
     >
       {/* Pin button - Now using different icons for pinned vs unpinned state */}
       {!isCompleted && (
@@ -749,10 +667,7 @@ export function CommentItem({
               ? "text-yellow-500 hover:text-yellow-600 dark:text-yellow-400 dark:hover:text-yellow-300"
               : "text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
           )}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleTogglePin();
-          }}
+          onClick={handleTogglePin}
           title={comment.isPinned ? "Unpin comment" : "Pin comment"}
         >
           {comment.isPinned ? (
@@ -1030,19 +945,19 @@ export function CommentItem({
                             {isRefreshing && historyIndex === totalHistoryItems - 1 ? (
                               <div className="text-muted-foreground italic">Updating feedback...</div>
                             ) : (
-                                <div
-                                  className="prose prose-sm dark:prose-invert max-w-none"
-                                  dangerouslySetInnerHTML={{
-                                    __html: processExplanationText(
-                                      historyIndex === totalHistoryItems - 1
-                                        ? comment.suggestedEdit?.explanation || ''
-                                        : currentHistoryItem.explanation,
-                                      historyIndex === totalHistoryItems - 1
-                                        ? comment.suggestedEdit?.references
-                                        : currentHistoryItem.references
-                                    )
-                                  }}
-                                />
+                              <div
+                                className="prose prose-sm dark:prose-invert max-w-none"
+                                dangerouslySetInnerHTML={{
+                                  __html: processExplanationText(
+                                    historyIndex === totalHistoryItems - 1
+                                      ? comment.suggestedEdit?.explanation || ''
+                                      : currentHistoryItem.explanation,
+                                    historyIndex === totalHistoryItems - 1
+                                      ? comment.suggestedEdit?.references
+                                      : currentHistoryItem.references
+                                  )
+                                }}
+                              />
                             )}
                           </div>
                           {/* Show timestamp for historical items */}

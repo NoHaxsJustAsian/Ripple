@@ -17,6 +17,8 @@ interface CommentsListProps {
   activeCommentId: string | null;
   setActiveCommentId: (id: string | null) => void;
   editor: Editor | null;
+  focusedCommentId: string | null;
+  setFocusedCommentId: (id: string | null) => void;
 }
 
 export function CommentsList({
@@ -26,7 +28,9 @@ export function CommentsList({
   setComments,
   activeCommentId,
   setActiveCommentId,
-  editor
+  editor,
+  focusedCommentId,
+  setFocusedCommentId
 }: CommentsListProps) {
   const commentsSectionRef = useRef<HTMLDivElement | null>(null);
 
@@ -131,7 +135,8 @@ export function CommentsList({
               currentText: commentToRefresh.suggestedEdit.original || '',  // Initially, current text is the original
               suggested: commentToRefresh.suggestedEdit.suggested || '',
               explanation: commentToRefresh.suggestedEdit.explanation || '',
-              issueType: commentToRefresh.issueType
+              issueType: commentToRefresh.issueType,
+              references: commentToRefresh.suggestedEdit.references
             });
           }
 
@@ -142,7 +147,8 @@ export function CommentsList({
             currentText: currentText || '',
             suggested: commentToRefresh.suggestedEdit.suggested || '',
             explanation: response.data.updatedFeedback,
-            issueType: commentToRefresh.issueType
+            issueType: commentToRefresh.issueType,
+            references: commentToRefresh.suggestedEdit.references
           };
 
           // Update the comment with new feedback and the updated history
@@ -196,7 +202,8 @@ export function CommentsList({
             currentText: commentToRefresh.suggestedEdit.original || '',
             suggested: commentToRefresh.suggestedEdit.suggested || '',
             explanation: commentToRefresh.suggestedEdit.explanation || '',
-            issueType: commentToRefresh.issueType
+            issueType: commentToRefresh.issueType,
+            references: commentToRefresh.suggestedEdit.references
           });
         }
 
@@ -207,7 +214,8 @@ export function CommentsList({
           currentText: currentText || '',
           suggested: commentToRefresh.suggestedEdit?.suggested || commentToRefresh.quotedText || '',
           explanation: updatedFeedbackText,
-          issueType: commentToRefresh.issueType
+          issueType: commentToRefresh.issueType,
+          references: commentToRefresh.suggestedEdit?.references
         };
 
         // Update the comment with new feedback
@@ -225,7 +233,8 @@ export function CommentsList({
                   : {
                     original: c.quotedText || '',
                     suggested: c.quotedText || '',
-                    explanation: updatedFeedbackText
+                    explanation: updatedFeedbackText,
+                    references: c.suggestedEdit?.references
                   },
                 feedbackHistory: [...previousHistory, newHistoryEntry]
               }
@@ -316,7 +325,8 @@ export function CommentsList({
             currentText: commentToRegenerate.suggestedEdit.original || '',
             suggested: commentToRegenerate.suggestedEdit.suggested || '',
             explanation: commentToRegenerate.suggestedEdit.explanation || '',
-            issueType: commentToRegenerate.issueType
+            issueType: commentToRegenerate.issueType,
+            references: commentToRegenerate.suggestedEdit.references
           });
         }
 
@@ -327,7 +337,8 @@ export function CommentsList({
           currentText: currentText || '',
           suggested: response.data.suggestedEdit.suggested,
           explanation: response.data.suggestedEdit.explanation,
-          issueType: commentToRegenerate.issueType
+          issueType: commentToRegenerate.issueType,
+          references: response.data.suggestedEdit.references
         };
 
         // Update the comment with the new suggestion
@@ -337,7 +348,12 @@ export function CommentsList({
               ? {
                 ...c,
                 updatedAt: now,
-                suggestedEdit: response.data.suggestedEdit,
+                suggestedEdit: {
+                  original: commentToRegenerate.suggestedEdit?.original || commentToRegenerate.quotedText || '',
+                  suggested: response.data.suggestedEdit.suggested,
+                  explanation: response.data.suggestedEdit.explanation,
+                  references: response.data.suggestedEdit.references
+                },
                 feedbackHistory: [...previousHistory, newHistoryEntry]
               }
               : c
@@ -560,6 +576,7 @@ export function CommentsList({
         zIndex: 40,
         top: "6rem"
       }}
+      data-comments-sidebar="true"
     >
       {/* Toggle Button */}
       <button
@@ -645,9 +662,10 @@ export function CommentsList({
                   onTogglePin={handleTogglePin}
                   onMarkAsCompleted={handleMarkAsCompleted}
                   onReviveComment={handleReviveComment}
-                  lastRefreshedTime={lastRefreshedTimes}
                   isRefreshing={refreshingComments[comment.id] || false}
                   isRegenerating={regeneratingComments[comment.id] || false}
+                  focusedCommentId={focusedCommentId}
+                  setFocusedCommentId={setFocusedCommentId}
                 />
               ))
             )}
@@ -741,10 +759,11 @@ export function CommentsList({
                     onTogglePin={handleTogglePin}
                     onMarkAsCompleted={handleMarkAsCompleted}
                     onReviveComment={handleReviveComment}
-                    lastRefreshedTime={lastRefreshedTimes}
                     isRefreshing={refreshingComments[comment.id] || false}
                     isRegenerating={regeneratingComments[comment.id] || false}
                     isCompleted={true}
+                    focusedCommentId={focusedCommentId}
+                    setFocusedCommentId={setFocusedCommentId}
                   />
                 ))
               )}
