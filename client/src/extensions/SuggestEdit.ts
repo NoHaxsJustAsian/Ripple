@@ -113,42 +113,67 @@ export const SuggestEditExtension = Extension.create<SuggestEditOptions>({
             const decorations: Decoration[] = [];
             const doc = state.doc;
 
-            doc.descendants((node, pos) => {
-              const suggestEditMark = node.marks.find(mark => mark.type.name === 'suggestEditMark');
-              if (!suggestEditMark || !node.isText) return;
+            // Guard against infinite recursion
+            if (!doc || doc.nodeSize === 0) {
+              return DecorationSet.empty;
+            }
 
-              const originalText = node.text || '';
-              const suggestedText = suggestEditMark.attrs.suggestion || '';
-              const diff = diffChars(originalText, suggestedText);
-              let currentPos = pos;
-
-              diff.forEach((part: Change) => {
-                if (part.added) {
-                  // For additions, create a widget decoration at the current position
-                  decorations.push(
-                    Decoration.widget(currentPos, () => {
-                      const span = document.createElement('span');
-                      span.className = 'suggest-edit-addition';
-                      span.textContent = part.value;
-                      return span;
-                    }, { side: 1 })
-                  );
-                } else if (part.removed) {
-                  // For deletions, mark the text with strikethrough
-                  decorations.push(
-                    Decoration.inline(currentPos, currentPos + part.value.length, {
-                      class: 'suggest-edit-deletion'
-                    })
-                  );
-                  currentPos += part.value.length;
-                } else {
-                  // For unchanged text, just update the position
-                  currentPos += part.value.length;
+            try {
+              doc.descendants((node, pos) => {
+                // Additional safety check
+                if (!node || !node.marks) {
+                  return;
                 }
-              });
-            });
 
-            return DecorationSet.create(doc, decorations);
+                const suggestEditMark = node.marks.find(mark => mark.type.name === 'suggestEditMark');
+                if (!suggestEditMark || !node.isText) return;
+
+                const originalText = node.text || '';
+                const suggestedText = suggestEditMark.attrs.suggestion || '';
+
+                // Safety check for text content
+                if (!originalText && !suggestedText) {
+                  return;
+                }
+
+                const diff = diffChars(originalText, suggestedText);
+                let currentPos = pos;
+
+                diff.forEach((part: Change) => {
+                  if (part.added) {
+                    // For additions, create a widget decoration at the current position
+                    decorations.push(
+                      Decoration.widget(currentPos, () => {
+                        const span = document.createElement('span');
+                        span.className = 'suggest-edit-addition';
+                        span.textContent = part.value;
+                        return span;
+                      }, { side: 1 })
+                    );
+                  } else if (part.removed) {
+                // For deletions, mark the text with strikethrough
+                    const endPos = currentPos + part.value.length;
+                    // Ensure positions are valid
+                    if (endPos <= doc.nodeSize - 2) {
+                      decorations.push(
+                        Decoration.inline(currentPos, endPos, {
+                          class: 'suggest-edit-deletion'
+                        })
+                      );
+                    }
+                    currentPos += part.value.length;
+                  } else {
+                    // For unchanged text, just update the position
+                    currentPos += part.value.length;
+                  }
+                });
+              });
+
+              return DecorationSet.create(doc, decorations);
+            } catch (error) {
+              console.warn('SuggestEdit decorations error:', error);
+              return DecorationSet.empty;
+            }
           },
         },
       }),

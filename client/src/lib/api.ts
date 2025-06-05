@@ -17,6 +17,7 @@ interface ContextualAnalysisRequest {
   targetType: 'flow' | 'clarity' | 'focus' | 'all';
   paragraphTopics?: Record<string, string>;   // Dictionary of paragraph IDs to topic sentences
   essayTopic?: string;                        // The main essay topic/thesis statement
+  flowPrompt?: string;                        // Custom prompt for flow highlighting analysis
 }
 
 // Interface for analysis response
@@ -41,6 +42,11 @@ interface ContextualAnalysisResponse {
         suggested: string;
         references?: Reference[];
       };
+    }[];
+    flowHighlights?: {
+      text: string;
+      connectionStrength: number;
+      reason: string;
     }[];
   };
   processedAt: string;
@@ -275,6 +281,105 @@ export async function sendCustomPrompt(data: CustomPromptRequest): Promise<Custo
     return await response.json();
   } catch (error) {
     console.error('Error processing custom prompt:', error);
+    throw error;
+  }
+}
+
+// Interface for explain connection request
+interface ExplainConnectionRequest {
+  sentence: string;            // The specific sentence text
+  documentContext: string;     // Full document text
+  connectionStrength: number;  // The connection strength score
+}
+
+// Interface for explain connection response
+interface ExplainConnectionResponse {
+  success: boolean;
+  explanation: string;
+  processedAt: string;
+}
+
+/**
+ * Makes a request to explain how a sentence connects to the document through lexical cohesion
+ */
+export async function explainConnection(data: {
+  sentence: string;
+  documentContext: string;
+  connectionStrength: number;
+}): Promise<{ explanation: string }> {
+  if (!data.sentence.trim() || !data.documentContext.trim()) {
+    throw new Error('Empty sentence or document context');
+  }
+
+  console.log('Sending explain connection request for sentence:', data.sentence.substring(0, 50) + '...');
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/explain-connection`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      console.error('Server response error:', await response.json());
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Error explaining connection:', error);
+    throw error;
+  }
+}
+
+export async function analyzeSentenceFlow(data: {
+  sentence: string;
+  document: string;
+  prompt: string;
+}): Promise<{
+  result: Array<{
+    text: string;
+    position: { from: number; to: number };
+    connectionStrength: number;
+    reason: string;
+  }>;
+  paragraphCohesion: {
+    score: number;
+    analysis: string;
+    strengths: string[];
+    weaknesses: string[];
+  };
+  documentCohesion: {
+    score: number;
+    analysis: string;
+    strengths: string[];
+    weaknesses: string[];
+  };
+}> {
+  console.log('🔍 Sending sentence flow analysis request for:', data.sentence.substring(0, 50) + '...');
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/analyze-sentence-flow`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      console.error('Server response error:', await response.json());
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('✅ Sentence flow analysis result:', result);
+    return result;
+  } catch (error) {
+    console.error('❌ Error analyzing sentence flow:', error);
     throw error;
   }
 }

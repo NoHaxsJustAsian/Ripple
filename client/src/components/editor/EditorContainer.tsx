@@ -13,7 +13,11 @@ import { AIContextMenu } from '../AIContextMenu';
 import { EditorToolbar } from '../EditorToolbar';
 import { CommentExtension } from '../../extensions/Comment';
 import { SuggestEditExtension } from '../../extensions/SuggestEdit';
+import { CommentModeMark, FlowModeMark, SentenceConnectionModeMark } from "@/extensions/HighlightingModes";
+import { HighlightingManager, HighlightingMode } from '@/lib/highlighting-manager';
+import { SentenceFlowActionPanel } from '../SentenceFlowActionPanel';
 import '@/styles/comment.css';
+import '@/styles/highlighting-modes.css';
 import { AISidePanel } from '../AISidePanel';
 import { toast } from "sonner";
 import { HelpSplashScreen } from '../HelpSplashScreen';
@@ -58,6 +62,10 @@ export function EditorContainer({
 
   // Add state for focused comment to sync between editor and sidebar
   const [focusedCommentId, setFocusedCommentId] = useState<string | null>(null);
+
+  // Add HighlightingManager state
+  const [highlightingManager, setHighlightingManager] = useState<HighlightingManager | null>(null);
+  const [popoverTrigger, setPopoverTrigger] = useState(0); // State to force re-renders for popover
 
   const editor = useEditor({
     extensions: [
@@ -155,6 +163,9 @@ export function EditorContainer({
           console.log('Suggested edit:', { original, suggested });
         },
       }),
+      CommentModeMark,
+      FlowModeMark,
+      SentenceConnectionModeMark,
     ],
     content: '',
     editorProps: {
@@ -876,6 +887,80 @@ export function EditorContainer({
     };
   }, [focusedCommentId, editor]);
 
+  // Initialize highlighting manager when editor is ready
+  useEffect(() => {
+    if (editor && !highlightingManager) {
+      console.log('🎨 Creating HighlightingManager in EditorContainer');
+      const manager = new HighlightingManager(editor, (mode: HighlightingMode) => {
+        console.log(`📊 Highlighting Manager: Mode changed to ${mode}`);
+        // Force a re-render when highlighting manager state changes
+        setPopoverTrigger(prev => prev + 1);
+      });
+      setHighlightingManager(manager);
+
+      // Set initial mode to comments
+      manager.switchMode('comments');
+
+      // Set up flow hover listeners
+      manager.setupFlowHoverListeners();
+    }
+  }, [editor, highlightingManager]);
+
+  // Sentence flow popover action handlers
+  const handleExitFlowMode = useCallback(() => {
+    if (highlightingManager) {
+      highlightingManager.exitFlowSentenceMode();
+    }
+  }, [highlightingManager]);
+
+  const handleCopySentence = useCallback(() => {
+    const popoverState = highlightingManager?.getSentenceFlowPopoverState();
+    if (popoverState?.sentenceData?.text) {
+      navigator.clipboard.writeText(popoverState.sentenceData.text);
+      toast.success("Sentence copied to clipboard");
+      highlightingManager?.hideSentenceFlowPopover();
+    }
+  }, [highlightingManager]);
+
+  const handleAddCommentToSentence = useCallback(() => {
+    // Find the selected sentence and add a comment to it
+    if (highlightingManager && editor) {
+      const selectedElement = editor.view.dom.querySelector('.flow-sentence-selected');
+      if (selectedElement) {
+        // Simulate a click to add comment functionality
+        handleAddComment();
+        highlightingManager.hideSentenceFlowPopover();
+      }
+    }
+  }, [highlightingManager, editor, handleAddComment]);
+
+  const handleAnalyzeConnections = useCallback(() => {
+    // Re-run the sentence flow analysis
+    if (highlightingManager && editor) {
+      const selectedElement = editor.view.dom.querySelector('.flow-sentence-selected');
+      if (selectedElement) {
+        // Trigger a new analysis by simulating a click on the selected sentence
+        const clickEvent = new MouseEvent('click', {
+          view: window,
+          bubbles: true,
+          cancelable: true
+        });
+        selectedElement.dispatchEvent(clickEvent);
+        highlightingManager.hideSentenceFlowPopover();
+        toast.info("Re-analyzing sentence connections...");
+      }
+    }
+  }, [highlightingManager, editor]);
+
+  const handleExplainSentence = useCallback(() => {
+    const popoverState = highlightingManager?.getSentenceFlowPopoverState();
+    if (popoverState?.sentenceData?.text) {
+      // TODO: Implement sentence explanation functionality
+      toast.info("Sentence explanation feature coming soon!");
+      highlightingManager?.hideSentenceFlowPopover();
+    }
+  }, [highlightingManager]);
+
   return (
     <div className={cn("w-full h-full relative", className)}>
       <InsightsContext.Provider value={[insights, setInsights]}>
@@ -895,6 +980,7 @@ export function EditorContainer({
                 eventBatcher={eventBatcher}
                 currentFileId={currentFileId}
                 setCurrentFileId={setCurrentFileId}
+                highlightingManager={highlightingManager}
                 onLoadFile={(file) => {
                   setCurrentFileId(file.id);
                   setDocumentTitle(file.title);
@@ -977,7 +1063,9 @@ export function EditorContainer({
                     comments={comments}
                     setComments={setComments}
                   >
+                    <div className="editor-container">
                     <EditorContent editor={editor} />
+                    </div>
                   </AIContextMenu>
                 </div>
               </div>
@@ -1029,6 +1117,35 @@ export function EditorContainer({
             </button>
           </div>
         )}
+
+        {/* Sentence Flow Action Panel */}
+        {(() => {
+          const actionPanelState = highlightingManager?.getSentenceFlowActionPanelState();
+          console.log('🔧 Action panel render check:', {
+            hasManager: !!highlightingManager,
+            actionPanelState,
+            isVisible: actionPanelState?.isVisible,
+            sentenceData: actionPanelState?.sentenceData,
+            trigger: popoverTrigger // Add trigger dependency
+          });
+
+          return actionPanelState?.isVisible && actionPanelState?.sentenceData && (
+            <SentenceFlowActionPanel
+              position={{ x: 0, y: 0 }} // Position is handled by the component's fixed positioning
+              sentenceText={actionPanelState.sentenceData.text}
+              connectionStrength={actionPanelState.sentenceData.connectionStrength}
+              connectedSentences={actionPanelState.sentenceData.connectedSentences}
+              paragraphCohesion={actionPanelState.sentenceData.paragraphCohesion}
+              documentCohesion={actionPanelState.sentenceData.documentCohesion}
+              onExitFlowMode={handleExitFlowMode}
+              onAddComment={handleAddCommentToSentence}
+              onCopySentence={handleCopySentence}
+              onRedoAnalysis={() => highlightingManager?.redoSentenceFlowAnalysis()}
+              onExplainSentence={handleExplainSentence}
+              onClose={handleExitFlowMode} // Close button does the same as exit
+            />
+          );
+        })()}
       </InsightsContext.Provider>
     </div>
   );

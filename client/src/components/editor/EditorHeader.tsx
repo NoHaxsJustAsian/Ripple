@@ -12,6 +12,7 @@ import { FileService } from '@/lib/file-service';
 import { EventType } from '@/lib/event-logger';
 import { FilePicker } from '@/components/FilePicker';
 import { FileData } from '@/lib/supabase';
+import { HighlightingManager } from '@/lib/highlighting-manager';
 
 interface EditorHeaderProps {
   editor: Editor | null;
@@ -27,6 +28,7 @@ interface EditorHeaderProps {
   currentFileId?: string | null;
   setCurrentFileId?: (id: string | null) => void;
   onLoadFile?: (file: FileData) => void;
+  highlightingManager?: HighlightingManager | null;
 }
 
 export function EditorHeader({
@@ -42,7 +44,8 @@ export function EditorHeader({
   eventBatcher,
   currentFileId,
   setCurrentFileId,
-  onLoadFile
+  onLoadFile,
+  highlightingManager
 }: EditorHeaderProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isFilePickerOpen, setIsFilePickerOpen] = useState(false);
@@ -263,8 +266,21 @@ export function EditorHeader({
 
   const handleFlowToggle = (checked: boolean) => {
     setIsFlowMode(checked);
-    // Add your flow mode logic here
-    // For example, you might want to modify editor behavior, UI layout, etc.
+
+    if (highlightingManager) {
+      if (checked) {
+        // Flow mode ON: Switch to flow highlighting, hide comments
+        console.log('🌊 FLOW MODE ACTIVATED - Switching to flow highlights');
+        highlightingManager.switchMode('flow');
+      } else {
+        // Flow mode OFF: Switch back to comments, hide flow highlights  
+        console.log('💬 FLOW MODE DEACTIVATED - Switching to comment highlights');
+        highlightingManager.switchMode('comments');
+      }
+    } else {
+      console.warn('HighlightingManager not available for flow toggle');
+    }
+
     console.log('Flow mode:', checked ? 'enabled' : 'disabled');
   };
 
@@ -343,6 +359,7 @@ export function EditorHeader({
               editor={editor}
               setComments={setComments}
               setIsInsightsOpen={setIsInsightsOpen}
+              highlightingManager={highlightingManager || undefined}
             />
             <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
 

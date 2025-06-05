@@ -34,6 +34,20 @@
 .focus-mode-active .tiptap-comment.focused-comment:hover {
   background-color: rgba(59, 130, 246, 0.4) !important;
 }
+/* Flow mode styles - hide all comment highlights when flow mode is active */
+.flow-mode-active .tiptap-comment {
+  background-color: transparent !important;
+  border-bottom: none !important;
+  padding: 0 !important;
+  transition: none !important;
+  pointer-events: none;
+  /* Disable clicking on comments in flow mode */
+}
+
+.flow-mode-active .tiptap-comment:hover {
+  background-color: transparent !important;
+  border-bottom: none !important;
+}
 .tiptap-suggest-edit {
   position: relative;
 }

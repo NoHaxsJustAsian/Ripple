@@ -1,0 +1,289 @@
+/* Base highlighting mode styles */
+.highlighting-modes-container {
+    position: relative;
+}
+
+/* Comment Mode Highlights */
+.comment-mode-highlight {
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+/* Default comment highlighting (visible in comment mode) */
+.comment-mode-highlight[data-comment-type="general"] {
+    background-color: rgba(255, 212, 0, 0.2);
+    border-bottom: 2px solid rgb(255, 212, 0);
+}
+
+.comment-mode-highlight[data-comment-type="clarity"] {
+    background-color: rgba(59, 130, 246, 0.2);
+    border-bottom: 2px solid rgb(59, 130, 246);
+}
+
+.comment-mode-highlight[data-comment-type="flow"] {
+    background-color: rgba(16, 185, 129, 0.2);
+    border-bottom: 2px solid rgb(16, 185, 129);
+}
+
+.comment-mode-highlight[data-comment-type="focus"] {
+    background-color: rgba(168, 85, 247, 0.2);
+    border-bottom: 2px solid rgb(168, 85, 247);
+}
+
+/* Severity variations for comments */
+.comment-mode-highlight[data-severity="low"] {
+    opacity: 0.6;
+}
+
+.comment-mode-highlight[data-severity="high"] {
+    opacity: 1;
+    border-width: 3px;
+}
+
+/* References Mode Highlights */
+.references-mode-highlight {
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.references-mode-highlight[data-reference-type="citation"] {
+    background-color: rgba(139, 69, 19, 0.15);
+    border-bottom: 2px dotted rgb(139, 69, 19);
+}
+
+.references-mode-highlight[data-reference-type="implicit"] {
+    background-color: rgba(75, 85, 99, 0.15);
+    border-bottom: 2px dashed rgb(75, 85, 99);
+}
+
+.references-mode-highlight[data-reference-type="quote"] {
+    background-color: rgba(220, 38, 127, 0.15);
+    border-bottom: 2px solid rgb(220, 38, 127);
+}
+
+/* Flow Mode Highlights */
+.flow-mode-highlight {
+    transition: all 0.2s ease;
+    cursor: pointer;
+    position: relative;
+    z-index: 1;
+}
+
+/* New connection strength scale - no transparent/no-highlighting option */
+/* Weak cohesion: 0.0-0.3 range */
+.flow-mode-highlight[data-connection-strength^="0.0"],
+.flow-mode-highlight[data-connection-strength^="0.1"],
+.flow-mode-highlight[data-connection-strength^="0.2"],
+.flow-mode-highlight[data-connection-strength^="0.3"] {
+    background-color: rgba(34, 197, 94, 0.10);
+    border-bottom: 1px solid rgba(34, 197, 94, 0.4);
+    border-radius: 2px;
+    z-index: 2;
+}
+
+/* Moderate cohesion: 0.4-0.7 range */
+.flow-mode-highlight[data-connection-strength^="0.4"],
+.flow-mode-highlight[data-connection-strength^="0.5"],
+.flow-mode-highlight[data-connection-strength^="0.6"],
+.flow-mode-highlight[data-connection-strength^="0.7"] {
+    background-color: rgba(34, 197, 94, 0.5);
+    border-bottom: 2px solid rgba(34, 197, 94, 0.6);
+    border-radius: 2px;
+    z-index: 2;
+}
+
+/* Strong cohesion: 0.8-1.0 range */
+.flow-mode-highlight[data-connection-strength^="0.8"],
+.flow-mode-highlight[data-connection-strength^="0.9"],
+.flow-mode-highlight[data-connection-strength="1.0"],
+.flow-mode-highlight[data-connection-strength="1"] {
+    background-color: rgba(34, 197, 94, 0.8);
+    border-bottom: 2px solid rgba(34, 197, 94, 0.9);
+    border-radius: 2px;
+    z-index: 2;
+}
+
+/* Mode Switching States */
+/* When in comment mode, hide flow highlights */
+.editor-container[data-highlighting-mode="comments"] .flow-mode-highlight {
+    background-color: transparent !important;
+    border: none !important;
+    opacity: 1;
+}
+
+/* When in flow mode, hide comment highlights */
+.editor-container[data-highlighting-mode="flow"] .tiptap-comment {
+    background-color: transparent !important;
+    border: none !important;
+    opacity: 1;
+}
+
+/* When in flow-sentence mode, hide ALL highlights for clean view */
+.editor-container[data-highlighting-mode="flow-sentence"] .flow-mode-highlight {
+    background-color: transparent !important;
+    border: none !important;
+    opacity: 1;
+}
+
+/* Loading cursor state for flow-sentence analysis */
+.editor-container[data-highlighting-mode="flow-sentence"][data-analyzing="true"] {
+    cursor: wait !important;
+}
+
+/* Exception: Show selected sentence with darkest green highlighting */
+.editor-container[data-highlighting-mode="flow-sentence"] .flow-sentence-selected {
+    background-color: rgba(34, 197, 94, 0.9) !important;
+    border-bottom: 3px solid rgb(34, 197, 94) !important;
+    border-radius: 2px !important;
+    opacity: 1 !important;
+    position: relative;
+    z-index: 2;
+}
+
+.editor-container[data-highlighting-mode="flow-sentence"] .tiptap-comment {
+    background-color: transparent !important;
+    border: none !important;
+    opacity: 1;
+}
+
+.editor-container[data-highlighting-mode="flow-sentence"] .comment-mode-highlight {
+    background-color: transparent !important;
+    border: none !important;
+    opacity: 1;
+}
+
+.editor-container[data-highlighting-mode="flow-sentence"] .references-mode-highlight {
+    background-color: transparent !important;
+    border: none !important;
+    opacity: 1;
+}
+
+/* Hover effects for active modes */
+.editor-container[data-highlighting-mode="comments"] .tiptap-comment:hover {
+    opacity: 0.8;
+    transform: scale(1.01);
+}
+
+/* Active/Selected states */
+.comment-mode-highlight.active,
+.comment-mode-highlight.selected {
+    opacity: 1 !important;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+    border-radius: 2px;
+}
+
+.references-mode-highlight.active,
+.references-mode-highlight.selected {
+    opacity: 1 !important;
+    box-shadow: 0 0 0 2px rgba(139, 69, 19, 0.5);
+    border-radius: 2px;
+}
+
+.flow-mode-highlight.active,
+.flow-mode-highlight.selected {
+    opacity: 1 !important;
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.5);
+    border-radius: 2px;
+}
+
+/* Connection visualization for flow mode - only show when explanation is ready */
+.flow-mode-highlight::before {
+    content: "";
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Show explanation when available */
+.flow-mode-highlight[data-explanation]::before {
+    content: attr(data-connection-strength) " - " attr(data-explanation);
+    position: absolute;
+    top: 0%;
+    left: 50%;
+    transform: translateX(-50%) translateY(-100%);
+    margin-top: -8px;
+    width: 400px;
+    white-space: normal;
+    font-size: 1.0em;
+    padding: 8px 12px;
+    line-height: 1.4;
+    background: rgba(0, 0, 0, 0.92);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    color: white;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+    z-index: 10000;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.editor-container[data-highlighting-mode="flow"] .flow-mode-highlight[data-explanation]:hover::before {
+    opacity: 1;
+}
+
+/* Animation for mode transitions */
+.editor-container {
+    transition: all 0.3s ease;
+}
+
+.editor-container[data-highlighting-mode] .comment-mode-highlight,
+.editor-container[data-highlighting-mode] .references-mode-highlight,
+.editor-container[data-highlighting-mode] .flow-mode-highlight {
+    transition: all 0.3s ease;
+}
+
+/* Mode indicator styles (for debugging/development) */
+.highlighting-mode-indicator {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75em;
+    z-index: 1000;
+    opacity: 0.7;
+}
+
+/* Flow-sentence mode: hide all original flow highlights */
+.editor-container[data-highlighting-mode="flow-sentence"] .flow-mode-highlight {
+    background-color: transparent !important;
+    border-bottom: none !important;
+}
+
+/* Show only selected sentence in flow-sentence mode */
+.editor-container[data-highlighting-mode="flow-sentence"] .flow-sentence-selected {
+    background-color: rgba(34, 197, 94, 0.9) !important;
+    border-bottom: 3px solid rgb(34, 197, 94) !important;
+}
+
+/* Hide sentence connections when not in flow-sentence mode */
+.editor-container[data-highlighting-mode="comments"] .sentence-connection,
+.editor-container[data-highlighting-mode="flow"] .sentence-connection {
+    background-color: transparent !important;
+    border-bottom: none !important;
+}
+
+/* Show sentence connections only in flow-sentence mode */
+.editor-container[data-highlighting-mode="flow-sentence"] .sentence-connection {
+    border-bottom: 1px solid rgba(34, 197, 94, 0.6) !important;
+    transition: all 0.2s ease !important;
+}
+
+.editor-container[data-highlighting-mode="flow-sentence"] .sentence-connection-strong {
+    background-color: rgba(34, 197, 94, 0.7) !important;
+    border-bottom: 2px solid rgba(34, 197, 94, 0.8) !important;
+}
+
+.editor-container[data-highlighting-mode="flow-sentence"] .sentence-connection-moderate {
+    background-color: rgba(34, 197, 94, 0.4) !important;
+    border-bottom: 1px solid rgba(34, 197, 94, 0.6) !important;
+}
+
+.editor-container[data-highlighting-mode="flow-sentence"] .sentence-connection-weak {
+    background-color: rgba(34, 197, 94, 0.2) !important;
+    border-bottom: 1px solid rgba(34, 197, 94, 0.4) !important;
+}

@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import os
 import json
 from datetime import datetime
-from typing import Dict, List, Optional, Union, Literal
+from typing import Dict, List, Optional, Union, Literal, Tuple
 from text_segmentation import segment_texts
 
 # Load environment variables
@@ -37,7 +37,8 @@ def analyze_text_with_context(
     full_context: str,
     target_type: Literal["flow", "clarity", "focus", "all"],
     paragraph_topics: Dict[str, str] = None,
-    essay_topic: str = None 
+    essay_topic: str = None,
+    flow_prompt: str = None 
 ) -> List[Dict]:
     """
     Analyze text content with document context using OpenAI's GPT model.
@@ -345,7 +346,7 @@ def analyze_text_with_context(
 
         2) Here is another example of a good allusion and reference identification:
 
-        Given the text: "As I wonder why miniature making has become such an integral part of my routine, I’ve begun to notice just how much I’ve gained from it"
+        Given the text: "As I wonder why miniature making has become such an integral part of my routine, I've begun to notice just how much I've gained from it"
 
         Given the feedback: The current sentence lacks focus, as it introduces a reflection without immediately connecting it to the benefits. Rephrasing to emphasize the gained skills sharpens the focus, helping readers understand the value of the activity more clearly.
 
@@ -353,11 +354,11 @@ def analyze_text_with_context(
 
         3) Here is another example of a good allusion and reference identification:
 
-        Given the text: I’d make frustrating mistakes, but I found my way, crocheting bicycle chains that created enough friction to pull cardboard gears
+        Given the text: I'd make frustrating mistakes, but I found my way, crocheting bicycle chains that created enough friction to pull cardboard gears
 
         Given the feedback: The current phrasing is somewhat indirect, which may obscure the problem-solving process. Clarifying the sequence of actions makes the resolution more accessible, allowing readers to appreciate the ingenuity involved.
 
-        The first allusion is "the problem solving process"; its reference is "crocheting bicycle chains that created enough friction to pull cardboard gears". The second allusion is "the ingenuity involved"; its reference is "I’d make frustrating mistakes, but I found my way".
+        The first allusion is "the problem solving process"; its reference is "crocheting bicycle chains that created enough friction to pull cardboard gears". The second allusion is "the ingenuity involved"; its reference is "I'd make frustrating mistakes, but I found my way".
 
 
         Identify ALL the relevant allusions and references for each feedback explanations. These could be:
@@ -391,6 +392,7 @@ def analyze_text_with_context(
         }}
         ]
         """
+
         # Make OpenAI API call
         response = client.chat.completions.create(
             model=AZURE_DEPLOYMENT,
@@ -518,10 +520,10 @@ def analyze_text_with_context(
                         "suggested": "Has this system encountered any issues yet?",
                         "explanation": "Using a single question mark is the correct punctuation for a question.",
                         "references": [
-                            {{
+                            {
                                 "allusion": "phrase you refer to in your explanation",
                                 "referenceText": "exact text to highlight in the document"
-                            }}
+                            }
                             ]
                     }
                 }]
@@ -537,10 +539,10 @@ def analyze_text_with_context(
                     "suggested": content[:100] + ("..." if len(content) > 100 else ""),
                     "explanation": "The text appears generally well-formed. Consider reviewing for clarity and purpose.",
                     "references": [
-                    {{
+                    {
                         "allusion": "phrase you refer to in your explanation",
                         "referenceText": "exact text to highlight in the document"
-                    }}
+                    }
                     ]
                 }
             }]
@@ -561,10 +563,10 @@ def analyze_text_with_context(
                         "suggested": "Has this system encountered any issues yet?",
                         "explanation": "Using a single question mark is the correct punctuation for a question.",
                         "references": [
-                        {{
+                        {
                             "allusion": "phrase you refer to in your explanation",
                             "referenceText": "exact text to highlight in the document"
-                        }}
+                        }
                         ]
                     }
                 }]
@@ -579,10 +581,10 @@ def analyze_text_with_context(
                     "suggested": content[:100] + ("..." if len(content) > 100 else ""),
                     "explanation": "The analysis couldn't be properly formatted. Please try again with more detailed text.",
                     "references": [
-                    {{
+                    {
                         "allusion": "phrase you refer to in your explanation",
                         "referenceText": "exact text to highlight in the document"
-                    }}
+                    }
                     ]
                 }
             }]
@@ -591,6 +593,188 @@ def analyze_text_with_context(
         print(f"Error in analyze_text_with_context: {str(e)}")
         raise DocumentProcessingError(f"Failed to analyze document: {str(e)}")
     
+def analyze_lexical_cohesion_simple(content: str) -> List[Dict]:
+    """
+    Analyze lexical cohesion using a simple, reliable parsing format.
+    
+    Args:
+        content: The text content to analyze for lexical cohesion
+        
+    Returns:
+        List of flow highlights with connection strength scores
+        
+    Raises:
+        Exception: If analysis fails (caller should handle gracefully)
+    """
+    try:
+        # Create a simple, focused prompt for lexical cohesion
+        cohesion_prompt = f"""
+Analyze the lexical cohesion of EVERY sentence in this document. You must analyze all sentences without exception.
+
+Rate each sentence 0.0-1.0 based on:
+- Shared vocabulary with other sentences
+- Thematic consistency with main ideas
+- Semantic relationships and word families
+- Referential connections (pronouns, repeated concepts)
+
+NEW SCORING GUIDE (no zero/no-highlighting range):
+- 0.8-1.0: Strong cohesion (central themes, key vocabulary, main concepts)
+- 0.4-0.7: Moderate cohesion (supporting ideas, some vocabulary overlap)
+- 0.0-0.3: Weak cohesion (peripheral content, limited connections)
+
+IMPORTANT: Every sentence must receive a score. No sentence should be skipped.
+
+Text to analyze:
+{content}
+
+CRITICAL: Return one line per sentence in this exact format:
+sentence_text|score|brief_reason
+
+Example:
+The main argument focuses on climate policy.|0.9|central thesis with key vocabulary
+However, supporting evidence is also important.|0.6|supporting detail with thematic connection
+This peripheral detail adds context.|0.2|limited connection to main themes
+
+ANALYZE EVERY SENTENCE - do not skip any sentences. Return only the sentence analyses, no other text.
+"""
+
+        # Make the API call with increased token limit for complete coverage
+        response = client.chat.completions.create(
+            model=AZURE_DEPLOYMENT,
+            messages=[
+                {
+                    "role": "system", 
+                    "content": cohesion_prompt
+                }
+            ],
+            max_tokens=2000,  # Increased from 1000 to ensure complete analysis
+            temperature=0.2  # Low temperature for consistent analysis
+        )
+        
+        # Get the response content
+        response_text = response.choices[0].message.content.strip()
+        
+        # Parse the simple pipe-delimited format
+        flow_highlights = []
+        lines = response_text.split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            if not line or '|' not in line:
+                continue
+                
+            try:
+                # Split on pipe and extract components
+                parts = line.split('|', 2)  # Split on first 2 pipes only
+                if len(parts) >= 3:
+                    sentence_text = parts[0].strip()
+                    score_str = parts[1].strip()
+                    reason = parts[2].strip()
+                    
+                    # Convert score to float
+                    connection_strength = float(score_str)
+                    
+                    # Clamp score between 0.0 and 1.0
+                    connection_strength = max(0.0, min(1.0, connection_strength))
+                    
+                    # Add to flow highlights
+                    flow_highlights.append({
+                        "text": sentence_text,
+                        "connectionStrength": connection_strength,
+                        "reason": reason
+                    })
+                    
+            except (ValueError, IndexError) as e:
+                # Skip malformed lines but continue processing
+                print(f"Skipping malformed line: {line} - Error: {e}")
+                continue
+        
+        return flow_highlights
+        
+    except Exception as e:
+        print(f"Error in lexical cohesion analysis: {e}")
+        raise  # Let caller handle the fallback
+
+def generate_flow_highlights(content: str, flow_prompt: str) -> List[Dict]:
+    """
+    Generate flow highlights based on lexical cohesion analysis.
+    Uses AI-powered analysis with fallback to mock implementation.
+    """
+    if not flow_prompt:
+        return []
+    
+    try:
+        # Try AI-powered lexical cohesion analysis
+        print("🤖 Attempting AI-powered lexical cohesion analysis...")
+        ai_highlights = analyze_lexical_cohesion_simple(content)
+        
+        if ai_highlights:
+            print(f"✅ AI analysis successful: {len(ai_highlights)} highlights generated")
+            return ai_highlights
+        else:
+            print("⚠️ AI analysis returned empty results, falling back to mock")
+            raise Exception("Empty AI results")
+            
+    except Exception as e:
+        print(f"❌ AI analysis failed: {e}")
+        print("🔄 Falling back to mock keyword system...")
+        
+        # Fallback to existing mock implementation
+        return generate_mock_flow_highlights(content, flow_prompt)
+
+def generate_mock_flow_highlights(content: str, flow_prompt: str) -> List[Dict]:
+    """
+    Original mock implementation as fallback.
+    Updated to cover entire document with new scoring scale.
+    """
+    # Split content into sentences for basic highlighting
+    sentences = content.split('. ')
+    flow_highlights = []
+    
+    # Simple logic based on prompt keywords
+    high_keywords = ['important', 'crucial', 'key', 'main', 'primary', 'essential', 'significant']
+    medium_keywords = ['supporting', 'argument', 'evidence', 'because', 'therefore', 'however', 'furthermore']
+    low_keywords = ['also', 'additionally', 'meanwhile', 'for example', 'such as', 'in other words']
+    
+    for i, sentence in enumerate(sentences):  # Analyze ALL sentences, not just first 8
+        sentence = sentence.strip()
+        if not sentence or len(sentence) < 5:  # Skip very short fragments
+            continue
+            
+        # Determine connection strength based on content and keywords using new scale
+        connection_strength = 0.2  # Default weak strength (was 0.2, now still in weak range)
+        
+        # Check for high importance keywords
+        if any(keyword in sentence.lower() for keyword in high_keywords):
+            connection_strength = 0.9  # Strong cohesion
+            reason = f"Strong cohesion: contains key terms like '{[k for k in high_keywords if k in sentence.lower()][0]}'"
+        elif any(keyword in sentence.lower() for keyword in medium_keywords):
+            connection_strength = 0.6  # Moderate cohesion
+            reason = f"Moderate cohesion: contains supporting terms like '{[k for k in medium_keywords if k in sentence.lower()][0]}'"
+        elif any(keyword in sentence.lower() for keyword in low_keywords):
+            connection_strength = 0.3  # Weak cohesion
+            reason = f"Weak cohesion: transitional or example content"
+        else:
+            # First sentence often important, middle sentences medium, last sentences weak
+            if i == 0:
+                connection_strength = 0.9  # Strong cohesion
+                reason = "Strong cohesion: opening statement"
+            elif i <= 2:
+                connection_strength = 0.6  # Moderate cohesion
+                reason = "Moderate cohesion: early supporting content"
+            else:
+                connection_strength = 0.3  # Weak cohesion
+                reason = "Weak cohesion: later supporting content"
+        
+        # Remove the no-highlighting logic - every sentence gets highlighted
+        
+        flow_highlights.append({
+            "text": sentence + ('.' if not sentence.endswith('.') else ''),
+            "connectionStrength": connection_strength,
+            "reason": reason
+        })
+    
+    return flow_highlights
 
 def refresh_feedback(
     original_text: str, 
@@ -862,6 +1046,7 @@ def analyze_with_context():
         target_type = data['targetType']
         paragraph_topics = data.get('paragraphTopics', {})
         essay_topic = data.get('essayTopic', '')
+        flow_prompt = data.get('flowPrompt', '')
 
         if not content:
             return jsonify({
@@ -876,7 +1061,10 @@ def analyze_with_context():
             }), 400
 
         # Analyze the text content with context
-        analysis_data = analyze_text_with_context(content, full_context, target_type, paragraph_topics,essay_topic)
+        analysis_data = analyze_text_with_context(content, full_context, target_type, paragraph_topics, essay_topic, flow_prompt)
+
+        # Generate flow highlights if flow_prompt is provided
+        flow_highlights = generate_flow_highlights(content, flow_prompt)
         
         # Ensure each comment has the required fields for the new UI format
         for comment in analysis_data:
@@ -940,7 +1128,8 @@ def analyze_with_context():
         return jsonify({
             "success": True,
             "data": {
-                "comments": analysis_data
+                "comments": analysis_data,
+                "flowHighlights": flow_highlights
             },
             "processedAt": datetime.utcnow().isoformat()
         })
@@ -1419,93 +1608,561 @@ FORMAT YOUR RESPONSE AS:
     except Exception as e:
         raise DocumentProcessingError(f"Failed to process custom prompt: {str(e)}")
 
-
-def process_custom_prompt(
-    selected_text: str,
-    prompt: str,
-    full_context: str = None
-) -> dict:
+def analyze_sentence_connection(sentence: str, document: str, strength: float) -> str:
     """
-    Process a custom prompt for text improvement.
+    Generate a brief explanation of how a sentence connects to the document through lexical cohesion.
     
     Args:
-        selected_text: The text selected by the user
-        prompt: The user's custom prompt
-        full_context: Optional full document for context
+        sentence: The specific sentence to analyze
+        document: The full document context
+        strength: The connection strength score (0.0-1.0)
         
     Returns:
-        Dict with the suggested edit and response
+        Brief explanation of the lexical cohesion connections
         
     Raises:
-        DocumentProcessingError: If processing fails
+        Exception: If analysis fails
     """
     try:
-        # Create a prompt for the custom request
-        system_prompt = f"""You are an AI writing assistant helping a user improve their writing.
+        # Create a focused prompt for connection explanation
+        connection_prompt = f"""
+Explain in 1-2 short sentences how this sentence connects to the document through lexical cohesion.
 
-USER'S SELECTED TEXT:
-"{selected_text}"
+SENTENCE TO ANALYZE: "{sentence}"
+CONNECTION STRENGTH: {strength}
+DOCUMENT CONTEXT: {document}
 
-USER'S PROMPT:
-"{prompt}"
+Focus on specific lexical cohesion elements:
+- Shared vocabulary and word families
+- Thematic consistency with main ideas  
+- Referential connections (pronouns, repeated concepts)
+- Position in the argument structure
 
-Your task is to analyze the selected text based on the user's prompt and provide:
-1. A thoughtful explanation in response to the prompt
-2. A suggested improvement to the selected text
+Examples of good explanations:
+- "Reinforces main theme through repeated key vocabulary 'miniature making' and connects to earlier problem-solving examples"
+- "Transitional content with limited vocabulary overlap, provides chronological context but few thematic connections"
+- "Central argument with strong vocabulary ties to 'creativity' and 'determination' themes established throughout"
 
-GUIDELINES:
-- Be specific and constructive in your explanation
-- Focus on the type of improvement requested in the prompt
-- Keep your explanation concise (2-4 sentences)
-- Make your suggested improvement maintain the original meaning while addressing the user's request
-- If the user's prompt is unclear, focus on improving the clarity and flow of the text
-
-FORMAT YOUR RESPONSE AS:
-1. First provide a concise explanation that addresses the user's prompt
-2. Then provide your suggested improvement to the text
+Be concise, specific, and focus on HOW the sentence connects lexically. Keep under 20 words.
 """
 
-        # Add full context if provided
-        if full_context:
-            system_prompt += f"\n\nFULL DOCUMENT CONTEXT:\n{full_context}\n"
-            system_prompt += "\nConsider this context when providing your response, but focus primarily on improving the selected text."
-
-        # Make OpenAI API call
+        # Make the API call
         response = client.chat.completions.create(
             model=AZURE_DEPLOYMENT,
             messages=[
                 {
                     "role": "system",
-                    "content": system_prompt
+                    "content": connection_prompt
                 }
             ],
-            max_tokens=1000,
-            temperature=0.7  # Slightly higher temperature for creative suggestions
+            max_tokens=100,  # Keep it brief
+            temperature=0.3  # Low temperature for consistent analysis
         )
         
-        # Extract the response text
-        full_response = response.choices[0].message.content.strip()
+        # Get the response content and clean it up
+        explanation = response.choices[0].message.content.strip()
         
-        # Split into explanation and suggested text
-        # This is a simple approach; you may want to use more sophisticated parsing
-        parts = full_response.split("\n\n", 1)
-        
-        explanation = parts[0]
-        suggested_text = parts[1] if len(parts) > 1 else selected_text
-        
-        # Clean up the suggested text (remove quotes if present)
-        if suggested_text.startswith('"') and suggested_text.endswith('"'):
-            suggested_text = suggested_text[1:-1]
-        
-        return {
-            "response": explanation,
-            "suggestedText": suggested_text
-        }
+        # Remove quotes if present
+        if explanation.startswith('"') and explanation.endswith('"'):
+            explanation = explanation[1:-1]
+            
+        return explanation
         
     except Exception as e:
-        raise DocumentProcessingError(f"Failed to process custom prompt: {str(e)}")
+        print(f"Error in sentence connection analysis: {e}")
+        # Return a fallback explanation based on strength
+        if strength >= 0.8:
+            return "Strong thematic and vocabulary connections"
+        elif strength >= 0.4:
+            return "Moderate lexical overlap with main themes"
+        else:
+            return "Weak connection"
 
+@app.route("/api/explain-connection", methods=["POST"])
+def explain_connection():
+    """
+    API endpoint to explain how a specific sentence connects to the document.
+    
+    Expected JSON body:
+    {
+        "sentence": string,          // The specific sentence text
+        "documentContext": string,   // Full document text  
+        "connectionStrength": number // The connection strength score
+    }
+    
+    Returns:
+        JSON response with explanation or error message
+    """
+    try:
+        data = request.get_json()
+        if not data or 'sentence' not in data or 'documentContext' not in data:
+            return jsonify({
+                "error": "Missing required fields",
+                "code": "MISSING_FIELDS"
+            }), 400
 
+        sentence = data['sentence'].strip()
+        document_context = data['documentContext'].strip()
+        connection_strength = data.get('connectionStrength', 0.5)
+
+        if not sentence or not document_context:
+            return jsonify({
+                "error": "Empty sentence or document context",
+                "code": "EMPTY_CONTENT"
+            }), 400
+
+        # Generate the connection explanation
+        explanation = analyze_sentence_connection(sentence, document_context, connection_strength)
+        
+        return jsonify({
+            "success": True,
+            "explanation": explanation,
+            "processedAt": datetime.utcnow().isoformat()
+        })
+        
+    except Exception as e:
+        print(f"Error in explain connection endpoint: {str(e)}")
+        return jsonify({
+            "error": "Failed to generate connection explanation",
+            "code": "EXPLANATION_ERROR",
+            "detail": str(e)
+        }), 500
+
+def analyze_sentence_connections(clicked_sentence: str, full_document: str, clicked_sentence_strength: float) -> List[Dict]:
+    """
+    Analyze how a clicked sentence connects to all other sentences in the document.
+    The strength of the clicked sentence influences how many connections are found.
+    
+    Args:
+        clicked_sentence: The sentence that was clicked
+        full_document: The complete document text
+        clicked_sentence_strength: The connection strength of the clicked sentence (0.0-1.0)
+        
+    Returns:
+        List of connection data with positions and strengths
+    """
+    try:
+        # Split document into sentences with positions
+        import re
+        
+        # Find sentence boundaries (periods, exclamation marks, question marks)
+        sentence_pattern = r'[.!?]+\s+'
+        sentences = []
+        current_pos = 0
+        
+        # Split by sentence pattern but keep track of positions
+        parts = re.split(sentence_pattern, full_document)
+        
+        for i, part in enumerate(parts):
+            if part.strip():  # Skip empty parts
+                sentence_text = part.strip()
+                if sentence_text:
+                    # Find the actual position in the document
+                    start_pos = full_document.find(sentence_text, current_pos)
+                    if start_pos != -1:
+                        end_pos = start_pos + len(sentence_text)
+                        
+                        # Add punctuation if not the last sentence
+                        if i < len(parts) - 1:
+                            # Look for punctuation after this sentence
+                            remaining_text = full_document[end_pos:end_pos + 3]
+                            punct_match = re.match(r'[.!?]+', remaining_text)
+                            if punct_match:
+                                end_pos += len(punct_match.group())
+                                sentence_text += punct_match.group()
+                        
+                        sentences.append({
+                            "text": sentence_text,
+                            "position": {"from": start_pos, "to": end_pos}
+                        })
+                        current_pos = end_pos
+        
+        # Analyze connections between clicked sentence and all other sentences
+        connections = []
+        
+        # Calculate connection threshold based on clicked sentence strength
+        # Higher strength sentences should find more connections
+        if clicked_sentence_strength >= 0.8:
+            connection_threshold = 0.05  # Very liberal - show almost all connections
+        elif clicked_sentence_strength >= 0.5:
+            connection_threshold = 0.08  # Moderately liberal
+        else:
+            connection_threshold = 0.12  # Still less conservative than before
+        
+        print(f"Using connection threshold: {connection_threshold} (based on clicked strength: {clicked_sentence_strength})")
+        
+        for sentence_data in sentences:
+            sentence_text = sentence_data["text"]
+            
+            # Skip the clicked sentence itself
+            if sentence_text.strip() == clicked_sentence.strip():
+                continue
+            
+            # Calculate base connection strength
+            base_strength = calculate_sentence_connection_strength(clicked_sentence, sentence_text)
+            
+            # Boost connection strength based on clicked sentence's strength
+            # Higher strength sentences should have stronger connections to other sentences
+            strength_multiplier = 1.0 + (clicked_sentence_strength * 0.5)  # 1.0 to 1.5x multiplier
+            boosted_strength = min(base_strength * strength_multiplier, 1.0)
+            
+            # Only include sentences above the threshold
+            if boosted_strength > connection_threshold:
+                # Map to fixed highlighting scale: 0.8, 0.5, 0.2
+                if boosted_strength >= 0.4:
+                    final_strength = 0.8  # Strong connection
+                elif boosted_strength >= 0.15:
+                    final_strength = 0.5  # Moderate connection  
+                else:
+                    final_strength = 0.2  # Weak connection
+                
+                connections.append({
+                    "text": sentence_text,
+                    "position": sentence_data["position"],
+                    "connectionStrength": final_strength,
+                    "reason": get_connection_reason(clicked_sentence, sentence_text, final_strength)
+                })
+        
+        print(f"Found {len(connections)} connections for sentence with strength {clicked_sentence_strength}")
+        return connections
+        
+    except Exception as e:
+        print(f"Error analyzing sentence connections: {e}")
+        return []
+
+def calculate_sentence_connection_strength(sentence1: str, sentence2: str) -> float:
+    """
+    Calculate connection strength between two sentences based on lexical overlap.
+    """
+    # Simple implementation - can be enhanced with more sophisticated NLP
+    words1 = set(word.lower().strip('.,!?;:') for word in sentence1.split())
+    words2 = set(word.lower().strip('.,!?;:') for word in sentence2.split())
+    
+    # Remove common stop words
+    stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'was', 'are', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'my', 'your', 'his', 'her', 'its', 'our', 'their'}
+    
+    words1 = words1 - stop_words
+    words2 = words2 - stop_words
+    
+    if not words1 or not words2:
+        return 0.0
+    
+    # Calculate Jaccard similarity
+    intersection = len(words1.intersection(words2))
+    union = len(words1.union(words2))
+    
+    if union == 0:
+        return 0.0
+    
+    jaccard = intersection / union
+    
+    # Scale to our 0-1 range and add some randomness for demo
+    base_strength = min(jaccard * 2, 1.0)  # Scale up jaccard
+    
+    # Add thematic keywords boost
+    thematic_keywords = ['miniature', 'making', 'creative', 'problem', 'solving', 'computational', 'biology', 'research', 'programming']
+    thematic_boost = 0
+    for keyword in thematic_keywords:
+        if keyword in sentence1.lower() and keyword in sentence2.lower():
+            thematic_boost += 0.2
+    
+    final_strength = min(base_strength + thematic_boost, 1.0)
+    return round(final_strength, 2)
+
+def get_connection_reason(sentence1: str, sentence2: str, strength: float) -> str:
+    """
+    Generate a brief reason for the connection strength.
+    """
+    if strength >= 0.8:
+        return "Strong thematic and vocabulary overlap"
+    elif strength >= 0.5:
+        return "Moderate lexical connections"  
+    elif strength >= 0.2:
+        return "Some vocabulary overlap"
+    else:
+        return "Weak connection"
+
+def analyze_paragraph_cohesion(sentence: str, document: str) -> dict:
+    """
+    Analyze how a sentence coheres with its paragraph's main message.
+    
+    Args:
+        sentence: The sentence to analyze
+        document: The full document context
+        
+    Returns:
+        Dictionary with cohesion score, analysis, strengths, and weaknesses
+    """
+    try:
+        # Find the paragraph containing this sentence
+        paragraphs = document.split('\n\n')
+        target_paragraph = None
+        
+        for paragraph in paragraphs:
+            if sentence.strip() in paragraph:
+                target_paragraph = paragraph.strip()
+                break
+        
+        if not target_paragraph:
+            # If not found in paragraph splits, use the whole document as context
+            target_paragraph = document
+        
+        prompt = f"""
+Analyze how this sentence contributes to its paragraph's cohesion and main message.
+
+PARAGRAPH:
+{target_paragraph}
+
+TARGET SENTENCE:
+{sentence}
+
+Analyze:
+1. How well does this sentence connect to the paragraph's main message?
+2. What vocabulary, themes, or concepts link it to other sentences?
+3. Does it support, develop, or transition the paragraph's ideas?
+
+Provide:
+- Score (0.0-1.0): How well the sentence coheres with the paragraph
+- Analysis: 2-3 sentences explaining the cohesion
+- Strengths: List 1-3 ways it connects well (or empty if none)
+- Weaknesses: List 1-3 areas where cohesion could improve (or empty if none)
+
+Format your response as JSON:
+{{
+    "score": 0.8,
+    "analysis": "Brief analysis here",
+    "strengths": ["strength 1", "strength 2"],
+    "weaknesses": ["weakness 1"]
+}}
+"""
+
+        # Call Azure OpenAI
+        try:
+            client = AzureOpenAI(
+                api_key=AZURE_OPENAI_KEY,
+                api_version="2024-02-01",
+                azure_endpoint=AZURE_OPENAI_ENDPOINT
+            )
+
+            response = client.chat.completions.create(
+                model=AZURE_OPENAI_DEPLOYMENT_NAME,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=500,
+                temperature=0.3
+            )
+
+            result_text = response.choices[0].message.content.strip()
+            
+            # Try to parse as JSON
+            import json
+            result = json.loads(result_text)
+            
+            # Validate and set defaults
+            return {
+                "score": float(result.get("score", 0.5)),
+                "analysis": result.get("analysis", "Unable to analyze paragraph cohesion."),
+                "strengths": result.get("strengths", []),
+                "weaknesses": result.get("weaknesses", [])
+            }
+            
+        except json.JSONDecodeError:
+            print(f"Failed to parse paragraph cohesion JSON: {result_text}")
+            return {
+                "score": 0.5,
+                "analysis": "Unable to analyze paragraph cohesion due to parsing error.",
+                "strengths": [],
+                "weaknesses": []
+            }
+        except Exception as e:
+            print(f"Error calling Azure OpenAI for paragraph cohesion: {e}")
+            return {
+                "score": 0.5,
+                "analysis": "Unable to analyze paragraph cohesion due to API error.",
+                "strengths": [],
+                "weaknesses": []
+            }
+            
+    except Exception as e:
+        print(f"Error in analyze_paragraph_cohesion: {e}")
+        return {
+            "score": 0.5,
+            "analysis": "Unable to analyze paragraph cohesion.",
+            "strengths": [],
+            "weaknesses": []
+        }
+
+def analyze_document_cohesion(sentence: str, document: str) -> dict:
+    """
+    Analyze how a sentence coheres with the document's main message.
+    
+    Args:
+        sentence: The sentence to analyze
+        document: The full document context
+        
+    Returns:
+        Dictionary with cohesion score, analysis, strengths, and weaknesses
+    """
+    try:
+        prompt = f"""
+Analyze how this sentence contributes to the overall document's cohesion and main message.
+
+FULL DOCUMENT:
+{document}
+
+TARGET SENTENCE:
+{sentence}
+
+Analyze:
+1. How well does this sentence support the document's main thesis or purpose?
+2. What themes, arguments, or vocabulary connect it to the broader narrative?
+3. Does it advance the document's overall message or argument?
+
+Provide:
+- Score (0.0-1.0): How well the sentence coheres with the document's main message
+- Analysis: 2-3 sentences explaining the cohesion with the overall document
+- Strengths: List 1-3 ways it connects to the document's main themes (or empty if none)
+- Weaknesses: List 1-3 ways it could better support the document's message (or empty if none)
+
+Format your response as JSON:
+{{
+    "score": 0.7,
+    "analysis": "Brief analysis here",
+    "strengths": ["strength 1", "strength 2"],
+    "weaknesses": ["weakness 1"]
+}}
+"""
+
+        # Call Azure OpenAI
+        try:
+            client = AzureOpenAI(
+                api_key=AZURE_OPENAI_KEY,
+                api_version="2024-02-01",
+                azure_endpoint=AZURE_OPENAI_ENDPOINT
+            )
+
+            response = client.chat.completions.create(
+                model=AZURE_OPENAI_DEPLOYMENT_NAME,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=500,
+                temperature=0.3
+            )
+
+            result_text = response.choices[0].message.content.strip()
+            
+            # Try to parse as JSON
+            import json
+            result = json.loads(result_text)
+            
+            # Validate and set defaults
+            return {
+                "score": float(result.get("score", 0.5)),
+                "analysis": result.get("analysis", "Unable to analyze document cohesion."),
+                "strengths": result.get("strengths", []),
+                "weaknesses": result.get("weaknesses", [])
+            }
+            
+        except json.JSONDecodeError:
+            print(f"Failed to parse document cohesion JSON: {result_text}")
+            return {
+                "score": 0.5,
+                "analysis": "Unable to analyze document cohesion due to parsing error.",
+                "strengths": [],
+                "weaknesses": []
+            }
+        except Exception as e:
+            print(f"Error calling Azure OpenAI for document cohesion: {e}")
+            return {
+                "score": 0.5,
+                "analysis": "Unable to analyze document cohesion due to API error.",
+                "strengths": [],
+                "weaknesses": []
+            }
+            
+    except Exception as e:
+        print(f"Error in analyze_document_cohesion: {e}")
+        return {
+            "score": 0.5,
+            "analysis": "Unable to analyze document cohesion.",
+            "strengths": [],
+            "weaknesses": []
+        }
+
+@app.route("/api/analyze-sentence-flow", methods=["POST"])
+def analyze_sentence_flow():
+    """
+    API endpoint to analyze sentence flow in the context of a document.
+    
+    Expected JSON body:
+    {
+        "sentence": string,    // The sentence to analyze
+        "document": string,    // The full document context
+        "prompt": string       // Analysis prompt
+    }
+    
+    Returns:
+        JSON response with flow analysis result
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
+        sentence = data.get('sentence', '').strip()
+        document = data.get('document', '').strip()
+        prompt = data.get('prompt', '').strip()
+        
+        print(f"📝 Sentence Flow Analysis Request:")
+        print(f"   Sentence: {sentence[:50]}...")
+        print(f"   Document length: {len(document)} chars")
+        print(f"   Prompt: {prompt}")
+        
+        # First, we need to get the strength of the clicked sentence
+        # We'll do this by running our flow analysis on the document and finding the clicked sentence
+        try:
+            flow_highlights = generate_flow_highlights(document, "Analyze lexical cohesion")
+            clicked_sentence_strength = 0.5  # Default strength
+            
+            # Find the clicked sentence in the flow highlights
+            for highlight in flow_highlights:
+                if highlight.get('text', '').strip() == sentence.strip():
+                    clicked_sentence_strength = highlight.get('connectionStrength', 0.5)
+                    print(f"📊 Found clicked sentence strength: {clicked_sentence_strength}")
+                    break
+            
+            if clicked_sentence_strength == 0.5:
+                print(f"⚠️ Using default strength (0.5) - clicked sentence not found in flow highlights")
+        except Exception as e:
+            print(f"⚠️ Error getting sentence strength, using default: {e}")
+            clicked_sentence_strength = 0.5
+        
+        # Analyze sentence connections with the clicked sentence's strength
+        connections = analyze_sentence_connections(sentence, document, clicked_sentence_strength)
+        
+        print(f"✅ Found {len(connections)} sentence connections")
+        for conn in connections[:3]:  # Log first few for debugging
+            print(f"   - {conn['text'][:30]}... (strength: {conn['connectionStrength']})")
+        
+        # Analyze paragraph and document cohesion
+        print(f"🔍 Analyzing paragraph cohesion for sentence...")
+        paragraph_cohesion = analyze_paragraph_cohesion(sentence, document)
+        
+        print(f"🔍 Analyzing document cohesion for sentence...")
+        document_cohesion = analyze_document_cohesion(sentence, document)
+        
+        print(f"✅ Cohesion analysis complete:")
+        print(f"   Paragraph score: {paragraph_cohesion.get('score', 'N/A')}")
+        print(f"   Document score: {document_cohesion.get('score', 'N/A')}")
+        
+        return jsonify({
+            'result': connections,
+            'paragraphCohesion': paragraph_cohesion,
+            'documentCohesion': document_cohesion
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in analyze_sentence_flow: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 # Add frontend route handler if needed
 @app.route('/', defaults={'path': ''})

@@ -5,21 +5,25 @@ import { toast } from "sonner";
 import { ActionSelect, ActionItemType } from '../ui/multi-select';
 import { analyzeTextWithContext } from '@/lib/api';
 import { CommentType, AnalysisResult } from './types';
+import { HighlightingManager } from '@/lib/highlighting-manager';
 
 interface AnalysisToolsProps {
   editor: Editor | null;
   setComments: React.Dispatch<React.SetStateAction<CommentType[]>>;
   setIsInsightsOpen: (open: boolean) => void;
+  highlightingManager?: HighlightingManager;
 }
 
 export function AnalysisTools({
   editor,
   setComments,
-  setIsInsightsOpen
+  setIsInsightsOpen,
+  highlightingManager
 }: AnalysisToolsProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [lastAnalysisTime, setLastAnalysisTime] = useState<Date | null>(null);
+  const [flowPrompt, setFlowPrompt] = useState<string>('Highlight important arguments with high emphasis, supporting details with medium emphasis, and transitions with low emphasis');
 
   const formatAnalysisTime = (date: Date | null) => {
     if (!date) return '';
@@ -75,17 +79,85 @@ export function AnalysisTools({
       // Get full document content for context
       const fullContent = editor.state.doc.textContent;
 
-      // Call API with context - removed 'type' parameter
+      console.log('🚀 Running analysis with flow highlighting for:', analysisType);
+
+      // Call API with context AND flow prompt - always include flow highlighting
       const response = await analyzeTextWithContext({
         content: selectedContent,
         fullContext: fullContent,
-        targetType: targetType
+        targetType: targetType,
+        flowPrompt: flowPrompt // Always include flow prompt for integrated analysis
       });
 
       // Process the response
       setAnalysisResult(response.data);
       // Set the last analysis time
       setLastAnalysisTime(new Date());
+
+      console.log('📦 Analysis response received:', {
+        hasComments: !!response.data?.comments?.length,
+        commentsCount: response.data?.comments?.length || 0,
+        hasFlowHighlights: !!response.data?.flowHighlights?.length,
+        flowHighlightsCount: response.data?.flowHighlights?.length || 0
+      });
+
+      // Process flow highlights if they exist
+      if (response.data.flowHighlights && response.data.flowHighlights.length > 0 && highlightingManager) {
+        console.log('🟢 Processing flow highlights as part of regular analysis:', response.data.flowHighlights.length, 'highlights');
+
+        // Set document context for hover explanations
+        highlightingManager.setDocumentContext(fullContent);
+
+        const flowHighlightsWithPositions: Array<{
+          id: string;
+          connectionStrength: number;
+          connectedSentences: string[];
+          position: { from: number; to: number };
+        }> = [];
+
+        response.data.flowHighlights.forEach((highlight, index) => {
+          const textToFind = highlight.text;
+          let flowPosition = null;
+
+          // Use the same approach as comments - traverse document nodes
+          editor.state.doc.descendants((node, pos) => {
+            const nodeText = node.textContent;
+            if (nodeText.includes(textToFind)) {
+              const startPos = pos + nodeText.indexOf(textToFind);
+              const endPos = startPos + textToFind.length;
+              flowPosition = { from: startPos, to: endPos };
+              return false; // Stop traversal
+            }
+          });
+
+          if (flowPosition) {
+            const highlightData = {
+              id: `flow-${Date.now()}-${index}`,
+              connectionStrength: highlight.connectionStrength,
+              connectedSentences: [] as string[],
+              position: flowPosition
+            };
+
+            flowHighlightsWithPositions.push(highlightData);
+            console.log(`🎯 Flow highlight ${index + 1}: "${textToFind.substring(0, 50)}..." with strength ${highlight.connectionStrength}`);
+          } else {
+            console.warn('❌ Could not find position for flow highlight text:', textToFind.substring(0, 100));
+          }
+        });
+
+        // Add flow highlights to the highlighting manager
+        if (flowHighlightsWithPositions.length > 0) {
+          highlightingManager.addFlowHighlights(flowHighlightsWithPositions);
+          console.log('✅ Flow highlights added to HighlightingManager - they will be visible when flow mode is ON');
+          console.log('🔍 Flow highlights details:', flowHighlightsWithPositions.map(h => ({
+            text: h.position ? editor.state.doc.textBetween(h.position.from, h.position.to) : 'no position',
+            strength: h.connectionStrength,
+            position: h.position
+          })));
+        }
+      } else {
+        console.log('ℹ️ No flow highlights returned or HighlightingManager not available');
+      }
 
       if (response.data.comments?.length > 0) {
         const newComments: CommentType[] = [];
@@ -146,7 +218,7 @@ export function AnalysisTools({
     } finally {
       setIsAnalyzing(false);
     }
-  }, [editor, setComments, setIsInsightsOpen]);
+  }, [editor, setComments, setIsInsightsOpen, flowPrompt, highlightingManager]);
 
   // Update the feedback items with appropriate structure for ActionSelect
   const feedback_items: ActionItemType[] = [
@@ -158,12 +230,6 @@ export function AnalysisTools({
       description: 'Get comprehensive feedback for the entire document',
       action: () => runContextualAnalysis('all')
     },
-    // {
-    //   value: 'paragraph',
-    //   label: 'Analyze by Paragraph',
-    //   icon: <Zap className="h-3.5 w-3.5 text-yellow-500" />,
-    //   action: () => runContextualAnalysis('paragraph')
-    // },
     {
       value: 'custom',
       label: 'Check custom selection',

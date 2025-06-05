@@ -1,4 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600;700&family=Geist+Sans:wght@400;500;600;700&display=swap');
+/* Import highlighting modes styles */
+@import './styles/highlighting-modes.css';
 
 @tailwind base;
 @tailwind components;

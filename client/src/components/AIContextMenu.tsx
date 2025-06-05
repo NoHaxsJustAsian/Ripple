@@ -1,6 +1,6 @@
 import { useState, Dispatch, SetStateAction, useEffect } from 'react';
 import { Editor } from '@tiptap/react';
-import { Wand2, Copy, Clipboard, RectangleEllipsis, FileText, MessageSquare } from 'lucide-react';
+import { Wand2, Copy, Clipboard, RectangleEllipsis, FileText, MessageSquare, DropletIcon, Waves } from 'lucide-react';
 import { InlineAIPrompt } from './InlineAIPrompt';
 import { InlineAIResponse } from './InlineAIResponse';
 import { sendCustomPrompt } from '../lib/api';
@@ -158,14 +158,29 @@ export function AIContextMenu({
   const handleUpdateComment = (commentId: string) => {
     if (!editor) return;
 
+    // Guard against invalid document state
+    const doc = editor.state.doc;
+    if (!doc || doc.nodeSize === 0) {
+      return;
+    }
+
     // Find all marks with this comment ID
     const marks: { from: number; to: number }[] = [];
-    editor.state.doc.descendants((node, pos) => {
-      const mark = node.marks.find(m => m.type.name === 'comment' && m.attrs.commentId === commentId);
-      if (mark) {
-        marks.push({ from: pos, to: pos + node.nodeSize });
-      }
-    });
+
+    try {
+      doc.descendants((node, pos) => {
+        // Additional safety checks
+        if (!node || !node.marks) return;
+
+        const mark = node.marks.find(m => m.type.name === 'comment' && m.attrs.commentId === commentId);
+        if (mark) {
+          marks.push({ from: pos, to: pos + node.nodeSize });
+        }
+      });
+    } catch (error) {
+      console.warn('AIContextMenu handleUpdateComment descendants error:', error);
+      return;
+    }
 
     if (marks.length > 0) {
       // Get the combined text from all marks
@@ -210,46 +225,77 @@ export function AIContextMenu({
   useEffect(() => {
     if (!editor || !activeCommentId) return;
 
+    let isProcessing = false; // Guard against infinite recursion
+
     const handleSelectionChange = () => {
-      // Store current selection
-      const { from: currentFrom, to: currentTo } = editor.state.selection;
+      // Prevent infinite recursion
+      if (isProcessing) return;
+      isProcessing = true;
 
-      // Find all marks with this comment ID
-      const marks: { from: number; to: number }[] = [];
-      editor.state.doc.descendants((node, pos) => {
-        const mark = node.marks.find(m => m.type.name === 'comment' && m.attrs.commentId === activeCommentId);
-        if (mark) {
-          marks.push({ from: pos, to: pos + node.nodeSize });
+      try {
+        // Store current selection
+        const { from: currentFrom, to: currentTo } = editor.state.selection;
+
+        // Guard against invalid document state
+        const doc = editor.state.doc;
+        if (!doc || doc.nodeSize === 0) {
+          return;
         }
-      });
 
-      if (marks.length > 0) {
-        // Get the combined text from all marks
-        const quotedText = marks.map(({ from, to }) =>
-          editor.state.doc.textBetween(from, to)
-        ).join(' ');
+        // Find all marks with this comment ID
+        const marks: { from: number; to: number }[] = [];
 
-        // Only update the quoted text if it changed
-        setComments(prev => prev.map(comment =>
-          comment.id === activeCommentId && comment.quotedText !== quotedText
-            ? { ...comment, quotedText }
-            : comment
-        ));
+        try {
+          doc.descendants((node, pos) => {
+            // Additional safety checks
+            if (!node || !node.marks) return;
 
-        // If we're currently inside the comment mark, restore the cursor position
-        const isInsideComment = marks.some(({ from, to }) =>
-          currentFrom >= from && currentTo <= to
-        );
-
-        if (isInsideComment) {
-          editor.commands.setTextSelection({ from: currentFrom, to: currentTo });
+            const mark = node.marks.find(m => m.type.name === 'comment' && m.attrs.commentId === activeCommentId);
+            if (mark) {
+              marks.push({ from: pos, to: pos + node.nodeSize });
+            }
+          });
+        } catch (error) {
+          console.warn('AIContextMenu descendants error:', error);
+          return;
         }
+
+        if (marks.length > 0) {
+          // Get the combined text from all marks
+          const quotedText = marks.map(({ from, to }) =>
+            editor.state.doc.textBetween(from, to)
+          ).join(' ');
+
+          // Only update the quoted text if it changed
+          setComments(prev => prev.map(comment =>
+            comment.id === activeCommentId && comment.quotedText !== quotedText
+              ? { ...comment, quotedText }
+              : comment
+          ));
+
+          // If we're currently inside the comment mark, restore the cursor position
+          const isInsideComment = marks.some(({ from, to }) =>
+            currentFrom >= from && currentTo <= to
+          );
+
+          if (isInsideComment) {
+            editor.commands.setTextSelection({ from: currentFrom, to: currentTo });
+          }
+        }
+      } finally {
+        // Reset guard after a short delay
+        setTimeout(() => {
+          isProcessing = false;
+        }, 10);
       }
     };
 
     // Use transaction handler instead of selection update
     const handleTransaction = () => {
-      handleSelectionChange();
+      // Add debouncing to prevent excessive calls
+      setTimeout(() => {
+        handleSelectionChange();
+      }, 50);
     };
 
     editor.on('transaction', handleTransaction);
@@ -292,8 +338,8 @@ export function AIContextMenu({
               onSelect={onAddComment}
               className="flex items-center"
             >
-              <MessageSquare className="mr-2 h-4 w-4" />
-              <span>Add Comment</span>
+              <Waves className="mr-2 h-4 w-4" />
+              <span>See Sentence Flow</span>
             </ContextMenuItem>
             <ContextMenuItem
               onSelect={handleAIAction}
@@ -316,6 +362,14 @@ export function AIContextMenu({
             >
               <FileText className="mr-2 h-4 w-4" />
               <span>Set as Essay Topic</span>
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              onSelect={onAddComment}
+              className="flex items-center"
+            >
+              <MessageSquare className="mr-2 h-4 w-4" />
+              <span>Add Comment</span>
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
