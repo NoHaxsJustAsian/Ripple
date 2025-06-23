@@ -1,6 +1,6 @@
 import { useState, Dispatch, SetStateAction, useEffect } from 'react';
 import { Editor } from '@tiptap/react';
-import { Wand2, Copy, Clipboard, RectangleEllipsis, FileText, MessageSquare, DropletIcon, Waves } from 'lucide-react';
+import { Wand2, Copy, Clipboard, RectangleEllipsis, FileText, MessageSquare, DropletIcon, Waves, CheckCheckIcon, FileCheck2, DockIcon, HighlighterIcon } from 'lucide-react';
 import { InlineAIPrompt } from './InlineAIPrompt';
 import { InlineAIResponse } from './InlineAIResponse';
 import { sendCustomPrompt } from '../lib/api';
@@ -28,6 +28,7 @@ interface AIContextMenuProps {
   activeCommentId: string | null;
   setActiveCommentId: Dispatch<SetStateAction<string | null>>;
   onAddComment: () => void;
+  runContextualAnalysis?: (analysisType: 'all' | 'custom') => void;
 }
 
 export function AIContextMenu({
@@ -39,7 +40,8 @@ export function AIContextMenu({
   setComments,
   activeCommentId,
   setActiveCommentId,
-  onAddComment
+  onAddComment,
+  runContextualAnalysis
 }: AIContextMenuProps) {
   const [showInlinePrompt, setShowInlinePrompt] = useState(false);
   const [promptPosition, setPromptPosition] = useState({ x: 0, y: 0 });
@@ -335,11 +337,18 @@ export function AIContextMenu({
             </ContextMenuItem>
             <ContextMenuSeparator />
             <ContextMenuItem
-              onSelect={onAddComment}
+              onSelect={() => runContextualAnalysis?.('all')}
               className="flex items-center"
             >
-              <Waves className="mr-2 h-4 w-4" />
-              <span>See Sentence Flow</span>
+              <FileCheck2 className="mr-2 h-4 w-4" />
+              <span>Check Everything</span>
+            </ContextMenuItem>
+            <ContextMenuItem
+              onSelect={() => runContextualAnalysis?.('custom')}
+              className="flex items-center"
+            >
+              <HighlighterIcon className="mr-2 h-4 w-4" />
+              <span>Check Custom Selection</span>
             </ContextMenuItem>
             <ContextMenuItem
               onSelect={handleAIAction}

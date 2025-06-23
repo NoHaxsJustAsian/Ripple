@@ -6,24 +6,33 @@ import { ActionSelect, ActionItemType } from '../ui/multi-select';
 import { analyzeTextWithContext } from '@/lib/api';
 import { CommentType, AnalysisResult } from './types';
 import { HighlightingManager } from '@/lib/highlighting-manager';
+import { findAndExpandSentence, robustTextFind, expandToSentenceBoundaries } from '@/lib/prosemirror-text-utils';
 
 interface AnalysisToolsProps {
   editor: Editor | null;
   setComments: React.Dispatch<React.SetStateAction<CommentType[]>>;
   setIsInsightsOpen: (open: boolean) => void;
   highlightingManager?: HighlightingManager;
+  isAnalysisRunning?: boolean;
+  setIsAnalysisRunning?: (running: boolean) => void;
 }
 
 export function AnalysisTools({
   editor,
   setComments,
   setIsInsightsOpen,
-  highlightingManager
+  highlightingManager,
+  isAnalysisRunning: externalIsAnalysisRunning,
+  setIsAnalysisRunning: externalSetIsAnalysisRunning
 }: AnalysisToolsProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [lastAnalysisTime, setLastAnalysisTime] = useState<Date | null>(null);
   const [flowPrompt, setFlowPrompt] = useState<string>('Highlight important arguments with high emphasis, supporting details with medium emphasis, and transitions with low emphasis');
+
+  // Use external analysis running state if provided, otherwise use internal state
+  const isAnalysisRunning = externalIsAnalysisRunning !== undefined ? externalIsAnalysisRunning : isAnalyzing;
+  const setIsAnalysisRunning = externalSetIsAnalysisRunning || setIsAnalyzing;
 
   const formatAnalysisTime = (date: Date | null) => {
     if (!date) return '';
@@ -39,7 +48,7 @@ export function AnalysisTools({
   const runContextualAnalysis = useCallback(async (analysisType: 'all' | 'paragraph' | 'custom') => {
     if (!editor) return;
 
-    setIsAnalyzing(true);
+    setIsAnalysisRunning(true);
 
     try {
       let selectedContent = '';
@@ -117,18 +126,9 @@ export function AnalysisTools({
 
         response.data.flowHighlights.forEach((highlight, index) => {
           const textToFind = highlight.text;
-          let flowPosition = null;
 
-          // Use the same approach as comments - traverse document nodes
-          editor.state.doc.descendants((node, pos) => {
-            const nodeText = node.textContent;
-            if (nodeText.includes(textToFind)) {
-              const startPos = pos + nodeText.indexOf(textToFind);
-              const endPos = startPos + textToFind.length;
-              flowPosition = { from: startPos, to: endPos };
-              return false; // Stop traversal
-            }
-          });
+          // Use ProseMirror search for robust text finding and sentence expansion
+          const flowPosition = findAndExpandSentence(editor, textToFind);
 
           if (flowPosition) {
             const highlightData = {
@@ -139,9 +139,16 @@ export function AnalysisTools({
             };
 
             flowHighlightsWithPositions.push(highlightData);
-            console.log(`🎯 Flow highlight ${index + 1}: "${textToFind.substring(0, 50)}..." with strength ${highlight.connectionStrength}`);
+
+            const actualText = editor.state.doc.textBetween(flowPosition.from, flowPosition.to);
+            console.log(`🎯 Flow highlight ${index + 1} - ProseMirror search success:`, {
+              original: textToFind.substring(0, 50),
+              actualHighlighted: actualText.substring(0, 50),
+              position: flowPosition,
+              strength: highlight.connectionStrength
+            });
           } else {
-            console.warn('❌ Could not find position for flow highlight text:', textToFind.substring(0, 100));
+            console.warn('❌ ProseMirror search could not find position for flow highlight text:', textToFind.substring(0, 100));
           }
         });
 
@@ -164,18 +171,9 @@ export function AnalysisTools({
 
         response.data.comments.forEach(comment => {
           const textToFind = comment.highlightedText;
-          let commentPosition = null;
 
-          // Find the position of the text in the document
-          editor.state.doc.descendants((node, pos) => {
-            const nodeText = node.textContent;
-            if (nodeText.includes(textToFind)) {
-              const startPos = pos + nodeText.indexOf(textToFind);
-              const endPos = startPos + textToFind.length;
-              commentPosition = { from: startPos, to: endPos };
-              return false; // Stop traversal
-            }
-          });
+          // Use robust text finding for comments too
+          const commentPosition = robustTextFind(editor, textToFind);
 
           if (commentPosition) {
             const commentId = `comment-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -211,14 +209,19 @@ export function AnalysisTools({
         setIsInsightsOpen(true);
       }
 
+      // Clear any text selection after analysis completes
+      if (editor) {
+        editor.commands.focus('end');
+      }
+
     } catch (error) {
       console.error('Error running contextual analysis:', error);
       toast.error("Analysis failed. Please try again.");
       setAnalysisResult(null);
     } finally {
-      setIsAnalyzing(false);
+      setIsAnalysisRunning(false);
     }
-  }, [editor, setComments, setIsInsightsOpen, flowPrompt, highlightingManager]);
+  }, [editor, setComments, setIsInsightsOpen, flowPrompt, highlightingManager, setIsAnalysisRunning]);
 
   // Update the feedback items with appropriate structure for ActionSelect
   const feedback_items: ActionItemType[] = [
@@ -251,7 +254,7 @@ export function AnalysisTools({
         </>
       )}
       <div className="flex space-x-1 text-sm">
-        {isAnalyzing ? (
+        {isAnalysisRunning ? (
           <div className="flex items-center space-x-1 text-gray-600 ">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             <span>Checking...</span>

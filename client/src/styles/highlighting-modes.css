@@ -75,8 +75,8 @@
 .flow-mode-highlight[data-connection-strength^="0.1"],
 .flow-mode-highlight[data-connection-strength^="0.2"],
 .flow-mode-highlight[data-connection-strength^="0.3"] {
-    background-color: rgba(34, 197, 94, 0.10);
-    border-bottom: 1px solid rgba(34, 197, 94, 0.4);
+    background-color: rgba(65, 167, 207, 0.20);
+        border-bottom: 1px solid rgba(65, 167, 207, 0.4);
     border-radius: 2px;
     z-index: 2;
 }
@@ -86,8 +86,8 @@
 .flow-mode-highlight[data-connection-strength^="0.5"],
 .flow-mode-highlight[data-connection-strength^="0.6"],
 .flow-mode-highlight[data-connection-strength^="0.7"] {
-    background-color: rgba(34, 197, 94, 0.5);
-    border-bottom: 2px solid rgba(34, 197, 94, 0.6);
+    background-color: rgba(65, 167, 207, 0.5);
+        border-bottom: 2px solid rgba(65, 167, 207, 0.6);
     border-radius: 2px;
     z-index: 2;
 }
@@ -97,8 +97,8 @@
 .flow-mode-highlight[data-connection-strength^="0.9"],
 .flow-mode-highlight[data-connection-strength="1.0"],
 .flow-mode-highlight[data-connection-strength="1"] {
-    background-color: rgba(34, 197, 94, 0.8);
-    border-bottom: 2px solid rgba(34, 197, 94, 0.9);
+    background-color: rgba(65, 167, 207, 0.8);
+        border-bottom: 2px solid rgba(65, 167, 207, 0.9);
     border-radius: 2px;
     z-index: 2;
 }
@@ -125,6 +125,24 @@
     opacity: 1;
 }
 
+/* When in write mode, hide ALL highlights for distraction-free writing */
+.editor-container[data-highlighting-mode="write"] .comment-mode-highlight,
+.editor-container[data-highlighting-mode="write"] .flow-mode-highlight,
+.editor-container[data-highlighting-mode="write"] .references-mode-highlight,
+.editor-container[data-highlighting-mode="write"] .tiptap-comment {
+    background-color: transparent !important;
+    border: none !important;
+    opacity: 1 !important;
+}
+
+/* Ensure text cursor throughout the editor in write mode */
+.editor-container[data-highlighting-mode="write"] {
+    cursor: text !important;
+}
+
+.editor-container[data-highlighting-mode="write"] * {
+    cursor: text !important;
+}
 /* Loading cursor state for flow-sentence analysis */
 .editor-container[data-highlighting-mode="flow-sentence"][data-analyzing="true"] {
     cursor: wait !important;
@@ -132,8 +150,8 @@
 
 /* Exception: Show selected sentence with darkest green highlighting */
 .editor-container[data-highlighting-mode="flow-sentence"] .flow-sentence-selected {
-    background-color: rgba(34, 197, 94, 0.9) !important;
-    border-bottom: 3px solid rgb(34, 197, 94) !important;
+    background-color: rgba(65, 167, 207, 0.9) !important;
+        border-bottom: 3px solid rgb(65, 167, 207) !important;
     border-radius: 2px !important;
     opacity: 1 !important;
     position: relative;
@@ -182,7 +200,7 @@
 .flow-mode-highlight.active,
 .flow-mode-highlight.selected {
     opacity: 1 !important;
-    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.5);
+    box-shadow: 0 0 0 2px rgba(65, 167, 207, 0.5);
     border-radius: 2px;
 }
 
@@ -195,7 +213,7 @@
 
 /* Show explanation when available */
 .flow-mode-highlight[data-explanation]::before {
-    content: attr(data-connection-strength) " - " attr(data-explanation);
+    content: attr(data-explanation);
     position: absolute;
     top: 0%;
     left: 50%;
@@ -256,8 +274,8 @@
 
 /* Show only selected sentence in flow-sentence mode */
 .editor-container[data-highlighting-mode="flow-sentence"] .flow-sentence-selected {
-    background-color: rgba(34, 197, 94, 0.9) !important;
-    border-bottom: 3px solid rgb(34, 197, 94) !important;
+    background-color: rgba(65, 167, 207, 0.9) !important;
+        border-bottom: 3px solid rgb(65, 167, 207) !important;
 }
 
 /* Hide sentence connections when not in flow-sentence mode */
@@ -269,21 +287,27 @@
 
 /* Show sentence connections only in flow-sentence mode */
 .editor-container[data-highlighting-mode="flow-sentence"] .sentence-connection {
-    border-bottom: 1px solid rgba(34, 197, 94, 0.6) !important;
+    border-bottom: 1px solid rgba(65, 167, 207, 0.6) !important;
     transition: all 0.2s ease !important;
 }
 
 .editor-container[data-highlighting-mode="flow-sentence"] .sentence-connection-strong {
-    background-color: rgba(34, 197, 94, 0.7) !important;
-    border-bottom: 2px solid rgba(34, 197, 94, 0.8) !important;
+    background-color: rgba(65, 167, 207, 0.8) !important;
+        border-bottom: 2px solid rgba(65, 167, 207, 0.8) !important;
 }
 
 .editor-container[data-highlighting-mode="flow-sentence"] .sentence-connection-moderate {
-    background-color: rgba(34, 197, 94, 0.4) !important;
-    border-bottom: 1px solid rgba(34, 197, 94, 0.6) !important;
+    background-color: rgba(65, 167, 207, 0.6) !important;
+        border-bottom: 1px solid rgba(65, 167, 207, 0.6) !important;
 }
 
 .editor-container[data-highlighting-mode="flow-sentence"] .sentence-connection-weak {
-    background-color: rgba(34, 197, 94, 0.2) !important;
-    border-bottom: 1px solid rgba(34, 197, 94, 0.4) !important;
+    background-color: rgba(65, 167, 207, 0.5) !important;
+        border-bottom: 1px solid rgba(65, 167, 207, 0.4) !important;
+    }
+    
+    .flow-mode-highlight:hover {
+        background-color: rgba(175, 197, 34, 0.2);
+        border-bottom: 2px solid rgba(175, 197, 94, 0.8);
+        opacity: 1;
 }

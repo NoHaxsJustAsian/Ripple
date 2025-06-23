@@ -6,7 +6,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { Check, ChevronDown, MessageSquare, FileText, RectangleEllipsis } from 'lucide-react';
+import { Check, ChevronDown, MessageSquare, FileText, RectangleEllipsis, Eye, EyeOff } from 'lucide-react';
 // impor/ { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -176,22 +176,34 @@ export function EditorToolbar({
               variant={showParagraphTopics ? "secondary" : "ghost"}
               size="sm"
               onClick={onToggleParagraphTopics}
-              className="h-8 px-3 text-xs flex items-center space-x-1"
-              title="Show paragraph topic sentences"
+              className={`h-8 px-3 text-xs flex items-center space-x-1 transition-all duration-200 ${showParagraphTopics
+                ? 'bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200'
+                : 'hover:bg-gray-100 text-gray-600'
+                }`}
             >
-              <RectangleEllipsis className="h-3.5 w-3.5 mr-1" />
-              <span>Paragraph Topics</span>
+              <RectangleEllipsis className="h-3.5 w-3.5" />
+              <span>{showParagraphTopics ? 'Hide' : 'Show'} Paragraph Topics</span>
+              {showParagraphTopics && (
+                <div className="ml-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+              )}
             </Button>
             
+
             <Button
               variant={showEssayTopics ? "secondary" : "ghost"}
               size="sm"
               onClick={onToggleEssayTopics}
-              className="h-8 px-3 text-xs flex items-center space-x-1"
-              title="Show essay topic sentences"
+              className={`h-8 px-3 text-xs flex items-center space-x-1 transition-all duration-200 ${showEssayTopics
+                ? 'bg-purple-100 text-purple-800 border-purple-300 hover:bg-purple-200'
+                : 'hover:bg-gray-100 text-gray-600'
+                }`}
             >
-              <FileText className="h-3.5 w-3.5 mr-1" />
-              <span>Essay Topics</span>
+              <FileText className="h-3.5 w-3.5" />
+
+              <span>{showEssayTopics ? 'Hide' : 'Show'} Essay Topics</span>
+              {showEssayTopics && (
+                <div className="ml-1 w-2 h-2 bg-purple-500 rounded-full animate-pulse" />
+              )}
             </Button>
           </div>
           

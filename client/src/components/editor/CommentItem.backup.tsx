@@ -787,7 +787,7 @@ export function CommentItem({
                   onClick={scrollToCommentInEditor}
                 >
                   {comment.suggestedEdit ? (
-                    <div className="suggest-edit-container overflow-hidden" tabIndex={0} >
+                    <div className="suggest-edit-container overflow-hidden " tabIndex={0} >
                       <div className="relative">
                         <details className="mt-1" open>
                           <summary className="suggest-edit-label cursor-pointer">Current Text</summary>

@@ -2,7 +2,7 @@ import { Editor } from '@tiptap/react';
 import { CommentType } from '@/components/editor/types';
 import { explainConnection, analyzeSentenceFlow } from './api';
 
-export type HighlightingMode = 'comments' | 'flow' | 'flow-sentence';
+export type HighlightingMode = 'comments' | 'flow' | 'flow-sentence' | 'write';
 
 export interface HighlightingState {
     currentMode: HighlightingMode;
@@ -124,6 +124,25 @@ export class HighlightingManager {
     private sentenceConnectionHighlights: Map<string, any> = new Map();
     private isAnalyzing: boolean = false;
     private lastAnalyzedSentence: string | null = null;
+    private lastAnalyzedSentenceContext: {
+        originalText: string;
+        documentSnapshot: string;
+        paragraphIndex: number;
+        sentenceIndexInParagraph: number;
+        timestamp: number;
+        semanticKeywords: string[];
+    } | null = null;
+
+    // Add sentence tracking for flow analysis (similar to CommentItem)
+    private selectedSentenceTracker: {
+        originalText: string;
+        selectedSentenceId: string | null;
+        position: { from: number; to: number } | null;
+    } | null = null;
+
+    // Store paragraph topics for enhanced cohesion analysis
+    private paragraphTopics: { [paragraphId: string]: string } = {};
+
     private sentenceFlowPopoverState: {
         isVisible: boolean;
         position: { x: number; y: number };
@@ -134,14 +153,10 @@ export class HighlightingManager {
             paragraphCohesion?: {
                 score: number;
                 analysis: string;
-                strengths: string[];
-                weaknesses: string[];
             };
             documentCohesion?: {
                 score: number;
                 analysis: string;
-                strengths: string[];
-                weaknesses: string[];
             };
         } | null;
     } = {
@@ -159,14 +174,10 @@ export class HighlightingManager {
             paragraphCohesion?: {
                 score: number;
                 analysis: string;
-                strengths: string[];
-                weaknesses: string[];
             };
             documentCohesion?: {
                 score: number;
                 analysis: string;
-                strengths: string[];
-                weaknesses: string[];
             };
         } | null;
     } = {
@@ -202,18 +213,6 @@ export class HighlightingManager {
             editorDom.setAttribute('data-highlighting-mode', mode);
         }
 
-        console.log(`Switching highlighting mode from ${previousMode} to ${mode}`);
-
-        // Special logging for flow modes
-        if (mode === 'flow') {
-            console.log('🌊 FLOW MODE ACTIVATED - Flow highlights should now be visible');
-            console.log('Flow highlight data:', this.state.flowHighlights);
-        } else if (mode === 'flow-sentence') {
-            console.log('📝 FLOW-SENTENCE MODE ACTIVATED - All highlights hidden for clean view');
-        } else if (previousMode === 'flow' || previousMode === 'flow-sentence') {
-            console.log('🌊 FLOW MODE DEACTIVATED - Flow highlights should now be hidden');
-        }
-
         this.onModeChange?.(mode);
     }
 
@@ -223,11 +222,8 @@ export class HighlightingManager {
 
     // Method to exit flow-sentence mode and return to flow mode
     exitFlowSentenceMode(): void {
-        console.log('🔙 Attempting to exit flow-sentence mode...');
-        console.log('🔙 Current mode:', this.state.currentMode);
 
         if (this.state.currentMode === 'flow-sentence') {
-            console.log('🔙 Exiting flow-sentence mode, returning to flow mode');
 
             // Clear the selected sentence
             this.selectedFlowSentenceId = null;
@@ -238,10 +234,8 @@ export class HighlightingManager {
 
             // Remove selected class from any selected sentences
             const selectedElements = this.editor.view.dom.querySelectorAll('.flow-sentence-selected');
-            console.log('🔙 Found selected elements to remove:', selectedElements.length);
             selectedElements.forEach(el => {
                 el.classList.remove('flow-sentence-selected');
-                console.log('🔙 Removed flow-sentence-selected from element');
             });
 
             // Clear all sentence connection highlights
@@ -249,9 +243,6 @@ export class HighlightingManager {
 
             // Switch back to flow mode
             this.switchMode('flow');
-            console.log('🔙 Successfully returned to flow mode');
-        } else {
-            console.log('🔙 Not in flow-sentence mode, no action needed');
         }
     }
 
@@ -263,18 +254,12 @@ export class HighlightingManager {
         paragraphCohesion?: {
             score: number;
             analysis: string;
-            strengths: string[];
-            weaknesses: string[];
         };
         documentCohesion?: {
             score: number;
             analysis: string;
-            strengths: string[];
-            weaknesses: string[];
         };
     }): void {
-        console.log('📝 Showing sentence flow popover at:', position);
-        console.log('📝 Sentence data:', sentenceData);
 
         // Clear any existing timeout
         if (this.popoverTimeout) {
@@ -288,20 +273,13 @@ export class HighlightingManager {
             sentenceData
         };
 
-        console.log('📝 Updated popover state:', this.sentenceFlowPopoverState);
-
         // Trigger re-render if there's a callback
         if (this.onModeChange) {
-            console.log('📝 Triggering onModeChange callback');
             this.onModeChange(this.state.currentMode);
-        } else {
-            console.log('📝 No onModeChange callback available');
         }
     }
 
     hideSentenceFlowPopover(): void {
-        console.log('📝 Hiding sentence flow popover');
-
         // Clear any existing timeouts
         if (this.popoverTimeout) {
             clearTimeout(this.popoverTimeout);
@@ -318,7 +296,6 @@ export class HighlightingManager {
             sentenceData: null
         };
 
-        // Trigger re-render if there's a callback
         if (this.onModeChange) {
             this.onModeChange(this.state.currentMode);
         }
@@ -336,38 +313,24 @@ export class HighlightingManager {
         paragraphCohesion?: {
             score: number;
             analysis: string;
-            strengths: string[];
-            weaknesses: string[];
         };
         documentCohesion?: {
             score: number;
             analysis: string;
-            strengths: string[];
-            weaknesses: string[];
         };
     }): void {
-        console.log('🔧 Showing sentence flow action panel');
-        console.log('🔧 Sentence data:', sentenceData);
-
         this.sentenceFlowActionPanelState = {
             isVisible: true,
             sentenceData
         };
 
-        console.log('🔧 Updated action panel state:', this.sentenceFlowActionPanelState);
-
         // Trigger re-render if there's a callback
         if (this.onModeChange) {
-            console.log('🔧 Triggering onModeChange callback');
             this.onModeChange(this.state.currentMode);
-        } else {
-            console.log('🔧 No onModeChange callback available');
         }
     }
 
     hideSentenceFlowActionPanel(): void {
-        console.log('🔧 Hiding sentence flow action panel');
-
         this.sentenceFlowActionPanelState = {
             isVisible: false,
             sentenceData: null
@@ -385,8 +348,6 @@ export class HighlightingManager {
 
     // Comment Mode Methods
     addCommentHighlights(comments: CommentType[]): void {
-        console.log('Adding comment highlights:', comments.length);
-
         // Clear existing comment highlights
         this.clearCommentHighlights();
 
@@ -426,8 +387,6 @@ export class HighlightingManager {
         targetSentence: string;
         position: { from: number; to: number };
     }>): void {
-        console.log('Adding reference highlights:', references.length);
-
         // Clear existing reference highlights
         this.clearReferenceHighlights();
 
@@ -462,8 +421,6 @@ export class HighlightingManager {
         connectedSentences: string[];
         position: { from: number; to: number };
     }>): void {
-        console.log('Adding flow highlights:', sentences.length);
-
         // Clear existing flow highlights
         this.clearFlowHighlights();
 
@@ -513,8 +470,6 @@ export class HighlightingManager {
 
     // Set up DOM event listeners for flow hover functionality
     setupFlowHoverListeners(): void {
-        console.log('🎯 Setting up flow hover and click listeners');
-
         // Remove any existing listeners first
         this.cleanupFlowHoverListeners();
 
@@ -539,8 +494,6 @@ export class HighlightingManager {
 
     // Set up event listeners for popover mouse interactions
     setupPopoverEventListeners(): void {
-        console.log('🎯 Setting up popover event listeners');
-
         document.addEventListener('popover-mouse-enter', this.handlePopoverMouseEnter.bind(this));
         document.addEventListener('popover-mouse-leave', this.handlePopoverMouseLeave.bind(this));
     }
@@ -556,8 +509,6 @@ export class HighlightingManager {
     }
 
     private handlePopoverMouseLeave(): void {
-        console.log('🎯 Popover mouse leave - scheduling hide');
-
         // Schedule hide when leaving popover (with longer delay)
         this.popoverHideTimeout = setTimeout(() => {
             this.hideSentenceFlowPopover();
@@ -576,22 +527,23 @@ export class HighlightingManager {
     private async handleFlowMouseEnter(event: Event): Promise<void> {
         const target = event.target as HTMLElement;
 
-        console.log('🔍 Mouse enter detected on element:', {
-            tagName: target.tagName,
-            classList: Array.from(target.classList),
-            currentMode: this.state.currentMode,
-            hasSelectedClass: target.classList.contains('flow-sentence-selected'),
-            hasFlowClass: target.classList.contains('flow-mode-highlight'),
-            textContent: target.textContent?.substring(0, 50)
-        });
 
         // Flow-sentence mode: Handle hover on selected sentence to show popover
         if (target.classList.contains('flow-sentence-selected') && this.state.currentMode === 'flow-sentence') {
-            console.log('🎯 Flow-sentence-selected hover detected');
-
-            const sentenceText = target.textContent || '';
+            // Get the sentence ID to find the complete stored text
+            const sentenceId = target.getAttribute('data-sentence-id') || '';
             const connectionStrength = parseFloat(target.getAttribute('data-connection-strength') || '0');
             const connectedSentencesStr = target.getAttribute('data-connected-sentences') || '[]';
+
+            // Use stored complete sentence text instead of partial DOM text
+            let sentenceText = target.textContent || '';
+            const storedHighlight = this.state.flowHighlights.get(sentenceId);
+            if (storedHighlight) {
+                sentenceText = storedHighlight.content;
+                console.log('🔍 Using stored complete sentence for popover:', sentenceText.substring(0, 50));
+            } else {
+                console.warn('⚠️ No stored highlight found for popover, using DOM text:', sentenceText.substring(0, 50));
+            }
 
             let connectedSentences: string[] = [];
             try {
@@ -610,18 +562,6 @@ export class HighlightingManager {
                 y: Math.min(rect.bottom + 5, window.innerHeight - 180) // 5px below the sentence
             };
 
-            console.log('🎯 Calculated popover position:', {
-                mouseX: mouseEvent.clientX,
-                mouseY: mouseEvent.clientY,
-                rectTop: rect.top,
-                rectLeft: rect.left,
-                rectWidth: rect.width,
-                rectHeight: rect.height,
-                finalPosition: position,
-                windowWidth: window.innerWidth,
-                windowHeight: window.innerHeight
-            });
-
             // Show popover with delay to prevent flickering
             this.popoverTimeout = setTimeout(() => {
                 this.showSentenceFlowPopover(position, {
@@ -633,15 +573,22 @@ export class HighlightingManager {
         }
         // Regular flow mode hover handling (only in flow mode, not flow-sentence mode)
         else if (target.classList.contains('flow-mode-highlight') && this.state.currentMode === 'flow') {
-            console.log('🔵 Flow hover detected on:', target.textContent?.substring(0, 50));
-
-            const sentenceText = target.textContent || '';
+            // Get the sentence ID to find the complete stored text
+            const sentenceId = target.getAttribute('data-sentence-id') || '';
             const connectionStrength = parseFloat(target.getAttribute('data-connection-strength') || '0');
 
-            console.log('⏳ Loading explanation for strength:', connectionStrength);
+            // Use stored complete sentence text instead of partial DOM text
+            let sentenceText = target.textContent || '';
+            const storedHighlight = this.state.flowHighlights.get(sentenceId);
+            if (storedHighlight) {
+                sentenceText = storedHighlight.content;
+                console.log('🔍 Using stored complete sentence for hover:', sentenceText.substring(0, 50));
+            } else {
+                console.warn('⚠️ No stored highlight found, using DOM text:', sentenceText.substring(0, 50));
+            }
 
             try {
-                // Fetch explanation asynchronously
+                // Fetch explanation asynchronously using complete sentence text
                 const explanation = await this.flowHoverManager.handleHover(sentenceText, connectionStrength);
 
                 // Set explanation if available
@@ -654,14 +601,6 @@ export class HighlightingManager {
             } catch (error) {
                 console.error('Failed to load hover explanation:', error);
             }
-        } else {
-            console.log('❌ Hover conditions not met:', {
-                hasFlowClass: target.classList.contains('flow-mode-highlight'),
-                hasSelectedClass: target.classList.contains('flow-sentence-selected'),
-                isFlowMode: this.state.currentMode === 'flow',
-                isFlowSentenceMode: this.state.currentMode === 'flow-sentence',
-                currentMode: this.state.currentMode
-            });
         }
     }
 
@@ -707,35 +646,41 @@ export class HighlightingManager {
             event.preventDefault();
             event.stopPropagation();
 
-            // Get the clicked sentence text
-            const sentenceText = target.textContent || '';
+            // Get the clicked sentence text using stored content
+            let sentenceText = target.textContent || '';
+            let selectedSentenceId = target.getAttribute('data-sentence-id') || '';
+            const storedHighlight = this.state.flowHighlights.get(selectedSentenceId);
+            if (storedHighlight) {
+                sentenceText = storedHighlight.content;
+                console.log('🔍 Using stored complete sentence for analysis:', sentenceText.substring(0, 50));
+            } else {
+                console.warn('⚠️ No stored highlight found for analysis, using DOM text:', sentenceText.substring(0, 50));
+            }
 
             // Get the full document context
             const documentText = this.editor.getText();
 
-            // Store the selected sentence ID from the data attribute
-            let sentenceId = target.getAttribute('data-sentence-id');
-            console.log('📝 Sentence ID found:', sentenceId);
+            console.log('📝 Sentence ID found:', selectedSentenceId);
 
             // If no sentence ID, try to find it from flow highlights or generate a unique one
-            if (!sentenceId) {
+            if (!selectedSentenceId) {
                 // Try to find the sentence in our stored flow highlights
                 for (const [id, highlight] of this.state.flowHighlights) {
                     if (highlight.content === sentenceText) {
-                        sentenceId = id;
-                        console.log('📝 Found sentence ID from stored highlights:', sentenceId);
+                        selectedSentenceId = id;
+                        console.log('📝 Found sentence ID from stored highlights:', selectedSentenceId);
                         break;
                     }
                 }
 
                 // If still no ID, generate one
-                if (!sentenceId) {
-                    sentenceId = `selected-${Date.now()}`;
-                    console.log('📝 Generated new sentence ID:', sentenceId);
+                if (!selectedSentenceId) {
+                    selectedSentenceId = `selected-${Date.now()}`;
+                    console.log('📝 Generated new sentence ID:', selectedSentenceId);
                 }
             }
 
-            this.selectedFlowSentenceId = sentenceId;
+            this.selectedFlowSentenceId = selectedSentenceId;
 
             // Remove selected class from any previously selected sentences
             const previousSelected = this.editor.view.dom.querySelector('.flow-sentence-selected');
@@ -757,6 +702,11 @@ export class HighlightingManager {
 
             // Store the analyzed sentence for redo functionality
             this.lastAnalyzedSentence = sentenceText;
+            // Store enhanced context for robust sentence tracking
+            this.lastAnalyzedSentenceContext = this.captureSentenceContext(sentenceText, documentText);
+
+            // Initialize sentence tracker for this selected sentence
+            this.selectedSentenceTracker = this.initializeSentenceTracker(sentenceText, selectedSentenceId);
 
             // Make API call for sentence flow analysis
             try {
@@ -767,10 +717,14 @@ export class HighlightingManager {
                     prompt: 'Analyze this sentence in the context of the document'
                 });
 
+                // Find paragraph topic for this sentence
+                const paragraphTopic = this.findParagraphTopicForSentence(sentenceText, documentText);
+
                 const result = await analyzeSentenceFlow({
                     sentence: sentenceText,
                     document: documentText,
-                    prompt: 'Analyze this sentence in the context of the document' // Default prompt for now
+                    prompt: 'Analyze this sentence in the context of the document',
+                    paragraphTopic: paragraphTopic // Include paragraph topic if available
                 });
 
                 console.log('🎉 API call successful! Full result:', result);
@@ -782,7 +736,12 @@ export class HighlightingManager {
                 if (result.result && Array.isArray(result.result) && result.result.length > 0) {
                     console.log('🔗 About to apply connection highlights...');
                     console.log('🔗 Connection data:', result.result);
-                    this.addSentenceConnectionHighlights(result.result);
+                    // Add missing reason property to each connection
+                    const connectionsWithReason = result.result.map(conn => ({
+                        ...conn,
+                        reason: `Connection strength: ${conn.connectionStrength.toFixed(2)}`
+                    }));
+                    this.addSentenceConnectionHighlights(connectionsWithReason);
 
                     // Show the persistent action panel after successful analysis
                     this.showSentenceFlowActionPanel({
@@ -941,6 +900,15 @@ export class HighlightingManager {
         this.sentenceConnectionHighlights.clear();
     }
 
+    // Method to update the analyzed sentence text
+    public updateAnalyzedSentence(newSentenceText: string): void {
+        console.log('📝 Updating analyzed sentence:', {
+            oldSentence: this.lastAnalyzedSentence?.substring(0, 50) + '...',
+            newSentence: newSentenceText.substring(0, 50) + '...'
+        });
+        this.lastAnalyzedSentence = newSentenceText;
+    }
+
     // Method to redo sentence flow analysis with updated document content
     public async redoSentenceFlowAnalysis(): Promise<void> {
         if (!this.lastAnalyzedSentence) {
@@ -953,6 +921,17 @@ export class HighlightingManager {
         // Get current document text (this will include any user edits)
         const documentText = this.editor.getText();
 
+        // Get the current version of the tracked sentence (this is where the magic happens!)
+        const currentSentenceText = this.getCurrentTrackedSentenceText();
+        const sentenceToAnalyze = currentSentenceText || this.lastAnalyzedSentence;
+
+        console.log('🔍 Original sentence:', this.lastAnalyzedSentence.substring(0, 50) + '...');
+        console.log('🔍 Current sentence:', sentenceToAnalyze.substring(0, 50) + '...');
+
+        if (currentSentenceText && currentSentenceText !== this.lastAnalyzedSentence) {
+            console.log('📝 Sentence has been modified since original analysis');
+        }
+
         // Clear existing connection highlights
         this.clearSentenceConnectionHighlights();
 
@@ -963,22 +942,29 @@ export class HighlightingManager {
             console.log('📡 Making redo sentence flow analysis API call...');
             console.log('📡 Updated document length:', documentText.length);
 
-            const result = await analyzeSentenceFlow({
-                sentence: this.lastAnalyzedSentence,
-                document: documentText,
-                prompt: 'Analyze this sentence in the context of the updated document'
-            });
+            // Find paragraph topic for the current sentence
+            const paragraphTopic = this.findParagraphTopicForSentence(sentenceToAnalyze, documentText);
 
-            console.log('🎉 Redo API call successful! Full result:', result);
+            const result = await analyzeSentenceFlow({
+                sentence: sentenceToAnalyze, // Use the current sentence text!
+                document: documentText,
+                prompt: 'Analyze this sentence in the context of the updated document',
+                paragraphTopic: paragraphTopic // Include paragraph topic if available
+            });
 
             // Process the connection data and apply highlights
             if (result.result && Array.isArray(result.result) && result.result.length > 0) {
                 console.log('🔗 Applying updated connection highlights...');
-                this.addSentenceConnectionHighlights(result.result);
+                // Add missing reason property to each connection
+                const connectionsWithReason = result.result.map(conn => ({
+                    ...conn,
+                    reason: `Connection strength: ${conn.connectionStrength.toFixed(2)}`
+                }));
+                this.addSentenceConnectionHighlights(connectionsWithReason);
 
                 // Update the action panel with new analysis
                 this.showSentenceFlowActionPanel({
-                    text: this.lastAnalyzedSentence,
+                    text: sentenceToAnalyze, // Show the current sentence text
                     connectionStrength: result.result.length > 0 ? result.result[0].connectionStrength : 0,
                     connectedSentences: result.result.map(r => r.text),
                     paragraphCohesion: result.paragraphCohesion,
@@ -989,7 +975,7 @@ export class HighlightingManager {
 
                 // Update action panel even if no connections found
                 this.showSentenceFlowActionPanel({
-                    text: this.lastAnalyzedSentence,
+                    text: sentenceToAnalyze, // Show the current sentence text
                     connectionStrength: 0,
                     connectedSentences: [],
                     paragraphCohesion: result.paragraphCohesion,
@@ -1160,5 +1146,180 @@ export class HighlightingManager {
                 editorContainer.removeChild(testElement);
             }, 1000);
         }
+    }
+
+    private captureSentenceContext(sentenceText: string, documentText: string): {
+        originalText: string;
+        documentSnapshot: string;
+        paragraphIndex: number;
+        sentenceIndexInParagraph: number;
+        timestamp: number;
+        semanticKeywords: string[];
+    } {
+        const paragraphs = documentText.split(/\n\s*\n/).filter(p => p.trim());
+        let paragraphIndex = -1;
+        let sentenceIndexInParagraph = -1;
+
+        // Find which paragraph contains the sentence
+        for (let i = 0; i < paragraphs.length; i++) {
+            const sentences = paragraphs[i].split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
+            const sentenceIndex = sentences.findIndex(s => s === sentenceText.trim());
+            if (sentenceIndex !== -1) {
+                paragraphIndex = i;
+                sentenceIndexInParagraph = sentenceIndex;
+                break;
+            }
+        }
+
+        // Extract semantic keywords (important words that define the sentence meaning)
+        const commonWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those']);
+
+        const semanticKeywords = sentenceText.toLowerCase()
+            .replace(/[^\w\s]/g, ' ')
+            .split(/\s+/)
+            .filter(word => word.length > 2 && !commonWords.has(word))
+            .slice(0, 10); // Keep top 10 keywords
+
+        return {
+            originalText: sentenceText,
+            documentSnapshot: documentText,
+            paragraphIndex,
+            sentenceIndexInParagraph,
+            timestamp: Date.now(),
+            semanticKeywords
+        };
+    }
+
+    private initializeSentenceTracker(sentenceText: string, sentenceId: string): {
+        originalText: string;
+        selectedSentenceId: string | null;
+        position: { from: number; to: number } | null;
+    } {
+        // Find the position of the selected sentence in the editor
+        let foundPosition: { from: number; to: number } | null = null;
+
+        // Look for the sentence in flow highlights first
+        const flowHighlight = this.state.flowHighlights.get(sentenceId);
+        if (flowHighlight) {
+            foundPosition = flowHighlight.position;
+        } else {
+            // Fallback: search for the sentence text in the document
+            const documentText = this.editor.getText();
+            const sentenceIndex = documentText.indexOf(sentenceText);
+            if (sentenceIndex !== -1) {
+                foundPosition = {
+                    from: sentenceIndex,
+                    to: sentenceIndex + sentenceText.length
+                };
+            }
+        }
+
+        console.log('🎯 Initialized sentence tracker:', {
+            originalText: sentenceText.substring(0, 50) + '...',
+            sentenceId,
+            position: foundPosition
+        });
+
+        return {
+            originalText: sentenceText,
+            selectedSentenceId: sentenceId,
+            position: foundPosition
+        };
+    }
+
+    // Method to get the current text of the tracked sentence (called only on refresh)
+    private getCurrentTrackedSentenceText(): string | null {
+        if (!this.selectedSentenceTracker) {
+            console.warn('⚠️ No sentence tracker initialized');
+            return null;
+        }
+
+        // Strategy 1: Try to find by sentence ID in flow highlights
+        if (this.selectedSentenceTracker.selectedSentenceId) {
+            const flowHighlight = this.state.flowHighlights.get(this.selectedSentenceTracker.selectedSentenceId);
+            if (flowHighlight) {
+                // Get current text at the stored position
+                const currentText = this.editor.state.doc.textBetween(
+                    flowHighlight.position.from,
+                    flowHighlight.position.to
+                );
+                if (currentText.trim()) {
+                    console.log('✅ Found current sentence via flow highlight:', currentText.substring(0, 50) + '...');
+                    return currentText;
+                }
+            }
+        }
+
+        // Strategy 2: Try to find by stored position
+        if (this.selectedSentenceTracker.position) {
+            try {
+                const currentText = this.editor.state.doc.textBetween(
+                    this.selectedSentenceTracker.position.from,
+                    this.selectedSentenceTracker.position.to
+                );
+                if (currentText.trim()) {
+                    console.log('✅ Found current sentence via stored position:', currentText.substring(0, 50) + '...');
+                    return currentText;
+                }
+            } catch (error) {
+                console.warn('⚠️ Position out of bounds, trying fallback methods');
+            }
+        }
+
+        // Strategy 3: Search for similar sentence in document (fuzzy matching)
+        const documentText = this.editor.getText();
+        const originalWords = this.selectedSentenceTracker.originalText.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+        const sentences = documentText.split(/[.!?]+/).filter(s => s.trim().length > 10);
+
+        let bestMatch = null;
+        let bestScore = 0;
+
+        for (const sentence of sentences) {
+            const sentenceWords = sentence.toLowerCase().split(/\s+/);
+            const overlap = originalWords.filter(word =>
+                sentenceWords.some(sw => sw.includes(word) || word.includes(sw))
+            ).length;
+            const score = originalWords.length > 0 ? overlap / originalWords.length : 0;
+
+            if (score > bestScore && score > 0.6) { // 60% similarity threshold
+                bestScore = score;
+                bestMatch = sentence.trim();
+            }
+        }
+
+        if (bestMatch) {
+            console.log(`✅ Found current sentence via fuzzy matching (${(bestScore * 100).toFixed(1)}% similarity):`, bestMatch.substring(0, 50) + '...');
+            return bestMatch;
+        }
+
+        // Strategy 4: Fallback to original text
+        console.warn('⚠️ Could not find updated sentence, using original text');
+        return this.selectedSentenceTracker.originalText;
+    }
+
+    // Methods for paragraph topic management
+    setParagraphTopics(topics: { [paragraphId: string]: string }): void {
+        this.paragraphTopics = { ...topics };
+        console.log('📝 Updated paragraph topics in HighlightingManager:', this.paragraphTopics);
+    }
+
+    private findParagraphTopicForSentence(sentenceText: string, documentText: string): string | undefined {
+        // Find which paragraph contains the sentence
+        const paragraphs = documentText.split(/\n\s*\n/).filter(p => p.trim());
+
+        for (let i = 0; i < paragraphs.length; i++) {
+            if (paragraphs[i].includes(sentenceText.trim())) {
+                const paragraphId = `paragraph-${i}`;
+                const topic = this.paragraphTopics[paragraphId];
+                if (topic) {
+                    console.log(`📍 Found paragraph topic for sentence: "${topic}"`);
+                    return topic;
+                }
+                break;
+            }
+        }
+
+        console.log('📍 No paragraph topic found for this sentence');
+        return undefined;
     }
 } 

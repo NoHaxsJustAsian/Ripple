@@ -63,6 +63,10 @@
   overflow-wrap: break-word;
 }
 
+/* Dark mode for suggest-edit-container */
+.dark .suggest-edit-container {
+  background-color: rgb(30, 30, 30);
+}
 .suggest-edit-container:selected {
   outline: 2px solid #3b82f6;
   outline-offset: 2px;
@@ -76,6 +80,10 @@
   letter-spacing: 0.025em;
 }
 
+/* Dark mode for suggest-edit-label */
+.dark .suggest-edit-label {
+  color: rgb(156, 163, 175);
+}
 /* Collapsible styles */
 details.mt-1 {
   margin-top: 0.25rem;
@@ -144,6 +152,11 @@ details.mt-1[open] summary::after {
   overflow-wrap: break-word;
 }
 
+/* Dark mode for suggest-edit-deletion */
+.dark .suggest-edit-deletion {
+  background-color: rgb(69, 26, 26);
+  color: rgb(252, 165, 165);
+}
 .suggest-edit-addition {
   display: block;
   background-color: rgb(209, 250, 229);
@@ -154,8 +167,14 @@ details.mt-1[open] summary::after {
   border-left: 3px solid rgb(5, 150, 105);
   word-break: break-word;
   overflow-wrap: break-word;
-} 
+}
 
+/* Dark mode for suggest-edit-addition */
+.dark .suggest-edit-addition {
+  background-color: rgb(20, 83, 45);
+  color: rgb(167, 243, 208);
+  border-left: 3px solid rgb(34, 197, 94);
+}
 .suggest-edit-explanation {
   display: block;
   /* background-color: rgb(209, 250, 229); */
@@ -166,4 +185,45 @@ details.mt-1[open] summary::after {
   /* border-left: 3px solid rgb(5, 150, 105); */
   word-break: break-word;
   overflow-wrap: break-word;
+}
+/* Text selection mode cursor styles */
+.text-selection-mode {
+  cursor: not-allowed !important;
+}
+
+.text-selection-mode * {
+  cursor: not-allowed !important;
+}
+
+/* Allow text selection cursor only on actual text content */
+.text-selection-mode p,
+.text-selection-mode span,
+.text-selection-mode div[contenteditable],
+.text-selection-mode .ProseMirror-textdom,
+.text-selection-mode .ProseMirror p,
+.text-selection-mode .ProseMirror span,
+.text-selection-mode .ProseMirror div,
+.text-selection-mode .ProseMirror h1,
+.text-selection-mode .ProseMirror h2,
+.text-selection-mode .ProseMirror h3,
+.text-selection-mode .ProseMirror h4,
+.text-selection-mode .ProseMirror h5,
+.text-selection-mode .ProseMirror h6,
+.text-selection-mode .ProseMirror li,
+.text-selection-mode .ProseMirror blockquote {
+  cursor: text !important;
+}
+
+/* Ensure text nodes themselves have text cursor */
+.text-selection-mode .ProseMirror {
+  cursor: text !important;
+}
+
+/* Override for specific interactive elements that should remain not-allowed */
+.text-selection-mode button,
+.text-selection-mode input,
+.text-selection-mode textarea,
+.text-selection-mode select,
+.text-selection-mode a {
+  cursor: not-allowed !important;
 }

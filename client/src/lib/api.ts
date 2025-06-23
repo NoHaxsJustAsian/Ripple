@@ -339,24 +339,20 @@ export async function analyzeSentenceFlow(data: {
   sentence: string;
   document: string;
   prompt: string;
+  paragraphTopic?: string; // Add optional paragraph topic
 }): Promise<{
   result: Array<{
     text: string;
     position: { from: number; to: number };
     connectionStrength: number;
-    reason: string;
   }>;
   paragraphCohesion: {
     score: number;
     analysis: string;
-    strengths: string[];
-    weaknesses: string[];
   };
   documentCohesion: {
     score: number;
     analysis: string;
-    strengths: string[];
-    weaknesses: string[];
   };
 }> {
   console.log('🔍 Sending sentence flow analysis request for:', data.sentence.substring(0, 50) + '...');

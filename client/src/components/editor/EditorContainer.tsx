@@ -8,7 +8,7 @@ import { Color } from '@tiptap/extension-color';
 import Underline from '@tiptap/extension-underline';
 import { cn } from "@/lib/utils";
 import { EditorView } from 'prosemirror-view';
-import { HelpCircle } from 'lucide-react';  // Add missing Lucide icons
+import { HelpCircle, Loader2 } from 'lucide-react';  // Add missing Lucide icons
 import { AIContextMenu } from '../AIContextMenu';
 import { EditorToolbar } from '../EditorToolbar';
 import { CommentExtension } from '../../extensions/Comment';
@@ -28,6 +28,9 @@ import { useAuth } from '@/lib/auth-context';
 import { FileService } from '@/lib/file-service';
 import { EventType } from '@/lib/event-logger';
 import { logEvent } from '@/lib/event-logger';
+import { analyzeTextWithContext } from '@/lib/api';
+import { highlightDebugger } from '@/lib/highlighting-debug';
+import '@/lib/test-prosemirror-search'; // Import to make test functions globally available
 
 // Create a context for insights
 export const InsightsContext = createContext<[AIInsight[], React.Dispatch<React.SetStateAction<AIInsight[]>>]>([[], () => { }]);
@@ -63,9 +66,21 @@ export function EditorContainer({
   // Add state for focused comment to sync between editor and sidebar
   const [focusedCommentId, setFocusedCommentId] = useState<string | null>(null);
 
+  // Ref to trigger comment sorting from parent component
+  const sortCommentsRef = useRef<(() => void) | null>(null);
+
   // Add HighlightingManager state
   const [highlightingManager, setHighlightingManager] = useState<HighlightingManager | null>(null);
   const [popoverTrigger, setPopoverTrigger] = useState(0); // State to force re-renders for popover
+
+  // Add state for tracking analysis loading
+  const [isAnalysisRunning, setIsAnalysisRunning] = useState(false);
+
+  // Function to check if sentence flow analysis is running
+  const [isSentenceFlowAnalyzing, setIsSentenceFlowAnalyzing] = useState(false);
+
+  // Combined analysis state - true if either main analysis or sentence flow analysis is running
+  const isAnyAnalysisRunning = isAnalysisRunning || isSentenceFlowAnalyzing;
 
   const editor = useEditor({
     extensions: [
@@ -85,6 +100,19 @@ export function EditorContainer({
         },
         onCommentClicked: (commentId: string) => {
           console.log('onCommentClicked triggered for:', commentId);
+
+          // Check if we're in write mode - if so, ignore comment interactions for distraction-free writing
+          if (highlightingManager && highlightingManager.getCurrentMode() === 'write') {
+            console.log('Write mode is active - ignoring comment click for distraction-free writing');
+            return;
+          }
+
+          // Only allow comment focus actions in comments mode
+          if (highlightingManager && highlightingManager.getCurrentMode() !== 'comments') {
+            console.log('Not in comments mode - ignoring comment click focus actions');
+            return;
+          }
+
           console.log('Available comments:', comments);
 
           // Instead of duplicating logic, trigger the sidebar comment item click
@@ -168,19 +196,29 @@ export function EditorContainer({
       SentenceConnectionModeMark,
     ],
     content: '',
+    // Disable editor when any analysis is running
+    editable: !isAnyAnalysisRunning,
     editorProps: {
       attributes: {
         class: cn(
           "outline-none min-h-[1028px] text-[11pt]",
           "px-[64px] py-[84px]",
-          "text-stone-800 dark:text-zinc-50",
+          "text-stone-800 dark:text-zinc-400",
           "caret-blue-500",
           "[&>div]:min-h-[24px]",
           "[&>div]:break-words",
-          "[&>div]:max-w-[666px]"
+          "[&>div]:max-w-[666px]",
+          // Add loading styles when any analysis is running
+          isAnyAnalysisRunning && "pointer-events-none cursor-wait opacity-75"
         ),
       },
       handleKeyDown: (_view: EditorView, event: KeyboardEvent) => {
+        // Prevent all input when any analysis is running
+        if (isAnyAnalysisRunning) {
+          event.preventDefault();
+          return true;
+        }
+
         // Check if it's a content-modifying key (letter, number, space, delete, etc.)
         const isContentModifying = (
           // Single letters, numbers or special chars
@@ -497,6 +535,17 @@ export function EditorContainer({
     }
   }, [editor, showEssayTopics]);  // Remove toggleTopicSentencesVisibility from deps array to prevent infinite loops
 
+  // Add debug utilities to window for manual testing
+  useEffect(() => {
+    if (editor && typeof window !== 'undefined') {
+      (window as any).rippleDebug = {
+        debugText: (text: string) => highlightDebugger.quickDebug(editor, text),
+        debugComment: (comment: any) => highlightDebugger.debugComment(editor, comment, editor.state.doc.textContent),
+        editor: editor
+      };
+    }
+  }, [editor]);
+
   // Now add the selection handlers after the toggle state variables
   const handleSelectAsParagraphTopic = useCallback(() => {
     if (!editor) return;
@@ -618,6 +667,208 @@ export function EditorContainer({
     if (!editor) return '';
     return editor.getHTML();
   }, [editor]);
+
+  // Function to run contextual analysis
+  const runContextualAnalysis = useCallback(async (analysisType: 'all' | 'custom') => {
+    if (!editor) return;
+
+    setIsAnalysisRunning(true);
+
+    try {
+      let selectedContent = '';
+      let targetType: 'flow' | 'clarity' | 'focus' | 'all' = 'all';
+
+      // Handle each analysis type differently
+      switch (analysisType) {
+        case 'all':
+          // Select entire document content
+          editor.chain().focus().selectAll().run();
+          selectedContent = editor.state.doc.textContent;
+          break;
+
+        case 'custom':
+          // Use existing selection
+          selectedContent = editor.state.doc.textBetween(
+            editor.state.selection.from,
+            editor.state.selection.to
+          );
+          if (!selectedContent) {
+            toast.warning("Please make a Custom Selection first.");
+            return;
+          }
+          break;
+      }
+
+      if (!selectedContent) {
+        console.error('No content selected for analysis');
+        return;
+      }
+
+      // Get full document content for context
+      const fullContent = editor.state.doc.textContent;
+
+      console.log('🚀 Running analysis with flow highlighting for:', analysisType);
+
+      // Call API with context AND flow prompt - always include flow highlighting
+      const response = await analyzeTextWithContext({
+        content: selectedContent,
+        fullContext: fullContent,
+        targetType: targetType,
+        flowPrompt: 'Highlight important arguments with high emphasis, supporting details with medium emphasis, and transitions with low emphasis' // Always include flow prompt for integrated analysis
+      });
+
+      console.log('📦 Analysis response received:', {
+        hasComments: !!response.data?.comments?.length,
+        commentsCount: response.data?.comments?.length || 0,
+        hasFlowHighlights: !!response.data?.flowHighlights?.length,
+        flowHighlightsCount: response.data?.flowHighlights?.length || 0
+      });
+
+      // Process flow highlights if they exist
+      if (response.data.flowHighlights && response.data.flowHighlights.length > 0 && highlightingManager) {
+        console.log('🟢 Processing flow highlights as part of regular analysis:', response.data.flowHighlights.length, 'highlights');
+
+        // Set document context for hover explanations
+        highlightingManager.setDocumentContext(fullContent);
+
+        const flowHighlightsWithPositions: Array<{
+          id: string;
+          connectionStrength: number;
+          connectedSentences: string[];
+          position: { from: number; to: number };
+        }> = [];
+
+        response.data.flowHighlights.forEach((highlight, index) => {
+          const textToFind = highlight.text;
+          let flowPosition = null;
+
+          // Use the same approach as comments - traverse document nodes
+          editor.state.doc.descendants((node, pos) => {
+            const nodeText = node.textContent;
+            if (nodeText.includes(textToFind)) {
+              const startPos = pos + nodeText.indexOf(textToFind);
+              const endPos = startPos + textToFind.length;
+              flowPosition = { from: startPos, to: endPos };
+              return false; // Stop traversal
+            }
+          });
+
+          if (flowPosition) {
+            const highlightData = {
+              id: `flow-${Date.now()}-${index}`,
+              connectionStrength: highlight.connectionStrength,
+              connectedSentences: [] as string[],
+              position: flowPosition
+            };
+
+            flowHighlightsWithPositions.push(highlightData);
+            console.log(`🎯 Flow highlight ${index + 1}: "${textToFind.substring(0, 50)}..." with strength ${highlight.connectionStrength}`);
+          } else {
+            console.warn('❌ Could not find position for flow highlight text:', textToFind.substring(0, 100));
+          }
+        });
+
+        // Add flow highlights to the highlighting manager
+        if (flowHighlightsWithPositions.length > 0) {
+          highlightingManager.addFlowHighlights(flowHighlightsWithPositions);
+          console.log('✅ Flow highlights added to HighlightingManager - they will be visible when flow mode is ON');
+        }
+      } else {
+        console.log('ℹ️ No flow highlights returned or HighlightingManager not available');
+      }
+
+      if (response.data.comments?.length > 0) {
+        const newComments: CommentType[] = [];
+
+        response.data.comments.forEach((comment, index) => {
+          const textToFind = comment.highlightedText;
+
+          // Debug the first few comments to understand what's happening
+          if (index < 3) {
+            console.log(`\n🔍 DEBUGGING COMMENT ${index + 1}:`);
+            highlightDebugger.debugComment(editor, comment, fullContent);
+          }
+
+          let commentPosition = null;
+
+          // Find the position of the text in the document
+          editor.state.doc.descendants((node, pos) => {
+            const nodeText = node.textContent;
+            if (nodeText.includes(textToFind)) {
+              const startPos = pos + nodeText.indexOf(textToFind);
+              const endPos = startPos + textToFind.length;
+              commentPosition = { from: startPos, to: endPos };
+              return false; // Stop traversal
+            }
+          });
+
+          if (commentPosition) {
+            const commentId = `comment-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+            const newComment: CommentType = {
+              id: commentId,
+              content: comment.text,
+              createdAt: new Date(),
+              createdAtTime: new Date(),
+              quotedText: comment.highlightedText,
+              isAIFeedback: true,
+              issueType: comment.issueType || 'general',
+              ...(comment.suggestedEdit ? {
+                suggestedEdit: {
+                  original: comment.suggestedEdit.original,
+                  suggested: comment.suggestedEdit.suggested,
+                  explanation: comment.suggestedEdit.explanation,
+                  references: comment.suggestedEdit.references || []
+                }
+              } : {})
+            };
+
+            editor.chain()
+              .setTextSelection(commentPosition)
+              .setComment(commentId)
+              .run();
+
+            newComments.push(newComment);
+          }
+        });
+
+        setComments(prev => [...prev, ...newComments]);
+        setIsInsightsOpen(true);
+
+        // Trigger comment sorting to include new comments
+        setTimeout(() => {
+          if (sortCommentsRef.current) {
+            sortCommentsRef.current();
+          }
+        }, 50);
+
+        // Scroll to the most recently created comment after a short delay
+        if (newComments.length > 0) {
+          setTimeout(() => {
+            const mostRecentComment = newComments[newComments.length - 1];
+            const commentElement = document.querySelector(`[data-comment-item="${mostRecentComment.id}"]`);
+            if (commentElement) {
+              commentElement.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
+              });
+            }
+          }, 100);
+        }
+      }
+
+      // Clear any text selection after analysis completes
+      if (editor) {
+        editor.commands.focus('end');
+      }
+
+    } catch (error) {
+      console.error('Error running contextual analysis:', error);
+      toast.error("Analysis failed. Please try again.");
+    } finally {
+      setIsAnalysisRunning(false);
+    }
+  }, [editor, setComments, setIsInsightsOpen, highlightingManager, setIsAnalysisRunning]);
 
   const handleAddComment = useCallback(() => {
     if (!editor) return;
@@ -779,6 +1030,7 @@ export function EditorContainer({
       paragraphTopicHighlights, paragraphTopicTexts, 
       essayTopicHighlight, essayTopicText, user]);
 
+
   // Function to update the positions of comments when the document changes
   const updateCommentPositions = useCallback(() => {
     if (!editor) return;
@@ -898,6 +1150,9 @@ export function EditorContainer({
       });
       setHighlightingManager(manager);
 
+      // Expose globally for debugging
+      (window as any).highlightingManager = manager;
+
       // Set initial mode to comments
       manager.switchMode('comments');
 
@@ -905,6 +1160,30 @@ export function EditorContainer({
       manager.setupFlowHoverListeners();
     }
   }, [editor, highlightingManager]);
+
+  // Monitor sentence flow analysis state
+  useEffect(() => {
+    const checkSentenceFlowAnalysis = () => {
+      const editorContainer = editor?.view.dom.closest('.editor-container');
+      const isAnalyzing = editorContainer?.getAttribute('data-analyzing') === 'true';
+      setIsSentenceFlowAnalyzing(isAnalyzing);
+    };
+
+    // Set up mutation observer to watch for data-analyzing attribute changes
+    const editorContainer = editor?.view.dom.closest('.editor-container');
+    if (editorContainer) {
+      const observer = new MutationObserver(checkSentenceFlowAnalysis);
+      observer.observe(editorContainer, {
+        attributes: true,
+        attributeFilter: ['data-analyzing']
+      });
+
+      // Initial check
+      checkSentenceFlowAnalysis();
+
+      return () => observer.disconnect();
+    }
+  }, [editor]);
 
   // Sentence flow popover action handlers
   const handleExitFlowMode = useCallback(() => {
@@ -961,11 +1240,18 @@ export function EditorContainer({
     }
   }, [highlightingManager]);
 
+  // Update highlighting manager with paragraph topics whenever they change
+  useEffect(() => {
+    if (highlightingManager && paragraphTopicTexts) {
+      highlightingManager.setParagraphTopics(paragraphTopicTexts);
+    }
+  }, [highlightingManager, paragraphTopicTexts]);
+
   return (
     <div className={cn("w-full h-full relative", className)}>
       <InsightsContext.Provider value={[insights, setInsights]}>
         <div className="h-full flex flex-col">
-          <div className="sticky top-0 z-30 bg-background">
+          <div className="sticky top-0 z-[50] bg-background">
             <div className="rounded-lg overflow-hidden border border-border/40">
               <EditorHeader
                 editor={editor}
@@ -981,6 +1267,8 @@ export function EditorContainer({
                 currentFileId={currentFileId}
                 setCurrentFileId={setCurrentFileId}
                 highlightingManager={highlightingManager}
+                isAnalysisRunning={isAnalysisRunning}
+                setIsAnalysisRunning={setIsAnalysisRunning}
                 onLoadFile={(file) => {
                   setCurrentFileId(file.id);
                   setDocumentTitle(file.title);
@@ -1031,8 +1319,19 @@ export function EditorContainer({
             <div className="mx-auto relative" style={{ width: '794px' }}>
               <div className="py-12">
                 <div
-                  className="relative bg-[#FFFDF7] dark:bg-card shadow-sm"
+                  className={cn(
+                    "relative bg-[#FFFDF7] dark:bg-neutral-900 shadow-sm",
+                    // Add loading styles when any analysis is running
+                    isAnyAnalysisRunning && "cursor-wait"
+                  )}
                   onClick={(e) => {
+                    // Disable clicks when any analysis is running
+                    if (isAnyAnalysisRunning) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return;
+                    }
+
                     // Only exit focus mode when clicking directly on editor content
                     const target = e.target as HTMLElement;
                     const isEditorContent = target.closest('.ProseMirror') || target.classList.contains('ProseMirror');
@@ -1053,6 +1352,21 @@ export function EditorContainer({
                     }
                   }}
                 >
+                  {/* Loading overlay when any analysis is running */}
+                  {isAnyAnalysisRunning && (
+                    <div className="absolute inset-0 bg-white/80 dark:bg-gray-900/80 z-40 flex items-center justify-center backdrop-blur-sm">
+                      <div className="flex flex-col items-center space-y-3">
+                        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                        <div className="text-sm text-gray-600 dark:text-gray-300 font-medium">
+                          {isSentenceFlowAnalyzing ? "Analyzing sentence connections..." : "Analyzing document..."}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {isSentenceFlowAnalyzing ? "Finding related sentences in flow mode" : "Please wait while we process your feedback"}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <AIContextMenu
                     editor={editor}
                     onSelectAsParagraphTopic={handleSelectAsParagraphTopic}
@@ -1062,6 +1376,7 @@ export function EditorContainer({
                     onAddComment={handleAddComment}
                     comments={comments}
                     setComments={setComments}
+                    runContextualAnalysis={runContextualAnalysis}
                   >
                     <div className="editor-container">
                     <EditorContent editor={editor} />
@@ -1081,6 +1396,8 @@ export function EditorContainer({
                 editor={editor}
                 focusedCommentId={focusedCommentId}
                 setFocusedCommentId={setFocusedCommentId}
+                sortCommentsRef={sortCommentsRef}
+                highlightingManager={highlightingManager}
               />
             </div>
           </div>
@@ -1143,6 +1460,15 @@ export function EditorContainer({
               onRedoAnalysis={() => highlightingManager?.redoSentenceFlowAnalysis()}
               onExplainSentence={handleExplainSentence}
               onClose={handleExitFlowMode} // Close button does the same as exit
+              onUpdateSentence={(newSentenceText: string) => {
+                // Update the sentence in the highlighting manager and re-run analysis
+                if (highlightingManager) {
+                  highlightingManager.updateAnalyzedSentence(newSentenceText);
+                  highlightingManager.redoSentenceFlowAnalysis();
+                }
+              }}
+              editor={editor}
+              isAnalyzing={isSentenceFlowAnalyzing}
             />
           );
         })()}

@@ -2,7 +2,7 @@ import { useCallback, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ModeToggle } from '@/components/ui/mode-toggle';
 import { ToggleSwitch } from '@/components/ui/toggle-switch';
-import { Save, FileDown, HelpCircle, FileCheck2, Droplet } from 'lucide-react';
+import { Save, FileDown, HelpCircle, FileCheck2, Droplet, PencilIcon, Pencil, PencilOffIcon } from 'lucide-react';
 import { toast } from "sonner";
 import { AnalysisTools } from './AnalysisTools';
 import { CommentType } from './types';
@@ -29,6 +29,8 @@ interface EditorHeaderProps {
   setCurrentFileId?: (id: string | null) => void;
   onLoadFile?: (file: FileData) => void;
   highlightingManager?: HighlightingManager | null;
+  isAnalysisRunning?: boolean;
+  setIsAnalysisRunning?: (running: boolean) => void;
 }
 
 export function EditorHeader({
@@ -45,11 +47,14 @@ export function EditorHeader({
   currentFileId,
   setCurrentFileId,
   onLoadFile,
-  highlightingManager
+  highlightingManager,
+  isAnalysisRunning,
+  setIsAnalysisRunning
 }: EditorHeaderProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isFilePickerOpen, setIsFilePickerOpen] = useState(false);
-  const [isFlowMode, setIsFlowMode] = useState(false);
+  const [isFlowMode, setIsFlowMode] = useState(true);
+  const [isWriteMode, setIsWriteMode] = useState(false);
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   const { user } = useAuth();
   const [fileService, setFileService] = useState<FileService | null>(null);
@@ -80,6 +85,15 @@ export function EditorHeader({
       setFileService(null);
     }
   }, [user]);
+
+  // Sync highlighting manager with initial UI state
+  useEffect(() => {
+    if (highlightingManager && isFlowMode) {
+      // Set highlighting manager to flow mode to match the default UI state
+      console.log('🔄 Syncing highlighting manager with initial flow mode state');
+      highlightingManager.switchMode('flow');
+    }
+  }, [highlightingManager]); // Only run when highlighting manager becomes available
 
   const handleSave = useCallback(async () => {
     if (!editor || !user) return;
@@ -268,13 +282,25 @@ export function EditorHeader({
     setIsFlowMode(checked);
 
     if (highlightingManager) {
+      // Don't change highlighting mode if Write Mode is currently active
+      if (isWriteMode) {
+        console.log('🌊 Flow mode state updated but Write Mode is active - keeping write mode');
+        return;
+      }
+
       if (checked) {
         // Flow mode ON: Switch to flow highlighting, hide comments
         console.log('🌊 FLOW MODE ACTIVATED - Switching to flow highlights');
         highlightingManager.switchMode('flow');
+
+        // Check if there are no flow highlights yet
+        const flowHighlights = highlightingManager.getHighlightData('flow');
+        if (flowHighlights.size === 0) {
+          toast.info("No flow highlights yet. Check for feedback to generate them.", {
+            duration: 4000,
+          });
+        }
       } else {
-        // Flow mode OFF: Switch back to comments, hide flow highlights  
-        console.log('💬 FLOW MODE DEACTIVATED - Switching to comment highlights');
         highlightingManager.switchMode('comments');
       }
     } else {
@@ -282,6 +308,36 @@ export function EditorHeader({
     }
 
     console.log('Flow mode:', checked ? 'enabled' : 'disabled');
+  };
+
+  const handleWriteModeToggle = (checked: boolean) => {
+    setIsWriteMode(checked);
+
+    if (highlightingManager) {
+      if (checked) {
+        // Write mode ON: Switch to write mode, hide all highlights
+        console.log('✍️ WRITE MODE ACTIVATED - Switching to write mode, hiding all highlights');
+        highlightingManager.switchMode('write');
+        toast.info("Write mode activated - Focus on your writing!", {
+          duration: 3000,
+        });
+      } else {
+        // Write mode OFF: Restore appropriate mode based on Flow Mode state
+        console.log('✍️ WRITE MODE DEACTIVATED - Restoring normal mode');
+        if (isFlowMode) {
+          highlightingManager.switchMode('flow');
+        } else {
+          highlightingManager.switchMode('comments');
+        }
+        toast.info("Write mode deactivated", {
+          duration: 2000,
+        });
+      }
+    } else {
+      console.warn('HighlightingManager not available for write mode toggle');
+    }
+
+    console.log('Write mode:', checked ? 'enabled' : 'disabled');
   };
 
   return (
@@ -360,6 +416,8 @@ export function EditorHeader({
               setComments={setComments}
               setIsInsightsOpen={setIsInsightsOpen}
               highlightingManager={highlightingManager || undefined}
+              isAnalysisRunning={isAnalysisRunning}
+              setIsAnalysisRunning={setIsAnalysisRunning}
             />
             <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
 
@@ -372,6 +430,18 @@ export function EditorHeader({
                 onIcon={<Droplet className="h-2.5 w-2.5" strokeWidth={2.5} />}
                 offIcon={<DropletOffIcon />}
                 activeColor="bg-blue-500"
+                size="sm"
+              />
+            </div>
+
+            <div className="flex items-center space-x-2 bg-white dark:bg-transparent rounded-lg px-3 py-1.5 shadow-sm dark:shadow-none">
+              <ToggleSwitch
+                checked={isWriteMode}
+                onCheckedChange={handleWriteModeToggle}
+                label="Write Mode"
+                onIcon={<PencilIcon className="h-2.5 w-2.5" strokeWidth={2.5} />}
+                offIcon={<PencilOffIcon />}
+                activeColor="bg-green-500"
                 size="sm"
               />
             </div>

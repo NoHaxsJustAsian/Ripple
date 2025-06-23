@@ -1559,13 +1559,12 @@ GUIDELINES:
 - Focus on the type of improvement requested in the prompt
 - Keep your explanation concise (2-4 sentences)
 - Make your suggested improvement maintain the original meaning while addressing the user's request
-- If the user's prompt is unclear, focus on improving the clarity and flow of the text
-
-IMPORTANT: For action recommendations in your explanation, use HTML bold tags by wrapping the text like this: <b>action recommendation</b>. For example: "The current phrasing lacks clarity. <b>Try using more specific terminology</b> to help readers better understand your point."
+- If the user's prompt is unclear, focus on improving the clarity and flow of the text.
+- If the user's prompt is unrelated to writing feedback or text improvement, respond with "I'm sorry, I can only help with writing feedback and text improvement."
 
 FORMAT YOUR RESPONSE AS:
-1. First provide a concise explanation that addresses the user's prompt
-2. Then provide your suggested improvement to the text
+1. First, provide a concise explanation that addresses the user's prompt. Do not include any other additiional text of formatting. For example, no bulletpoints, no quotes, no formatting.
+2. Second, provide your suggested improvement to the text. If the prompt was unrelated to the writing feedback or text improvement, respond with the same text as the selected text. Do not include any other additiional text of formatting. For example, no bulletpoints, no quotes, no formatting. 
 """
 
         # Add full context if provided
@@ -1882,7 +1881,7 @@ def get_connection_reason(sentence1: str, sentence2: str, strength: float) -> st
     else:
         return "Weak connection"
 
-def analyze_paragraph_cohesion(sentence: str, document: str) -> dict:
+def analyze_paragraph_cohesion(sentence: str, document: str, paragraph_topic: str = None) -> dict:
     """
     Analyze how a sentence coheres with its paragraph's main message.
     
@@ -1907,32 +1906,77 @@ def analyze_paragraph_cohesion(sentence: str, document: str) -> dict:
             # If not found in paragraph splits, use the whole document as context
             target_paragraph = document
         
+        # Build the input section with optional paragraph topic
+        input_section = f"""
+        PARAGRAPH: {target_paragraph}
+        SENTENCE: {sentence}"""
+        
+        if paragraph_topic:
+            input_section += f"""
+        PARAGRAPH TOPIC: {paragraph_topic}"""
+        
         prompt = f"""
-Analyze how this sentence contributes to its paragraph's cohesion and main message.
+# Sentence Cohesion Analysis Prompt
 
-PARAGRAPH:
-{target_paragraph}
+        ## Task
+        Analyze how well the target sentence contributes to its paragraph's cohesion and main message.
 
-TARGET SENTENCE:
-{sentence}
+        **Input:**
+        ```{input_section}
+        ```
 
-Analyze:
-1. How well does this sentence connect to the paragraph's main message?
-2. What vocabulary, themes, or concepts link it to other sentences?
-3. Does it support, develop, or transition the paragraph's ideas?
+        ## Analysis Framework
+        Evaluate these aspects:
+        1. **Sentence-to-Sentence Relationships**: How does this sentence interact with specific other sentences in the paragraph? Does it build on them, compete with them, or disconnect from them?
+        2. **Word and Theme Connections**: What specific words, concepts, or themes from other sentences does this sentence connect to, ignore, or contradict?
+        3. **Reader Flow**: How do readers move from the previous sentence to this one, and from this one to the next?
+        4. **Progression**: Does this sentence advance, repeat, or disrupt the ideas established by surrounding sentences?{f'''
+        5. **Topic Alignment**: How well does this sentence support or relate to the paragraph topic: "{paragraph_topic}"? Does it advance, support, or deviate from this main focus?''' if paragraph_topic else ''}
 
-Provide:
-- Score (0.0-1.0): How well the sentence coheres with the paragraph
-- Analysis: 2-3 sentences explaining the cohesion
-- Strengths: List 1-3 ways it connects well (or empty if none)
-- Weaknesses: List 1-3 areas where cohesion could improve (or empty if none)
+## Response Guidelines
+
+        ### Tone & Approach
+        - Professional and helpful, focusing on specific sentence relationships
+        - Show how readers experience transitions between sentences ("Readers move from..." "This shift from...")
+        - Point out where sentences build on each other or where they disconnect
+        - Frame suggestions as ways to strengthen specific connections between sentences
+
+        ### Content Requirements
+        - **Specific Sentence Connections**: Show how the target sentence relates to particular other sentences in the paragraph
+        - **Word/Theme Analysis**: Point out specific words or concepts that connect, clash, or are missing between sentences
+        - **Context References**: Use brief quotes (3-8 words) from other sentences to show these specific relationships
+        - **Concise Analysis**: Limit feedback to exactly 2-3 sentences maximum
+        - **Helpful Suggestions**: Frame suggestions as ways to strengthen connections between specific sentences using <b>bold tags</b>
+
+        ### Language Style
+        - Use clear, accessible language appropriate for high school level
+        - Maintain professional tone without overly complex vocabulary
+        - Use conditional/suggestive phrasing ("could be," "might help," "would strengthen")
+        - Vary opening phrases beyond "This sentence..." or "The text..."
+        - Avoid difficult terminology when simpler words convey the same meaning
+
+        **Score Scale:**
+        - 0.9-1.0: Excellent connection, clearly helps the paragraph's purpose
+        - 0.7-0.8: Good connection with minor gaps
+        - 0.5-0.6: Moderate connection, some unclear relationships
+        - 0.3-0.4: Weak connection, limited tie to main message
+        - 0.0-0.2: Poor connection, disrupts paragraph flow
+
+        ## Example Analysis Style
+        **Good (sentence-to-sentence focus):** "This sentence introduces 'cost-effective alternatives' but doesn't connect to the previous sentence's focus on 'rising emissions despite international agreements.' The word 'alternatives' also shifts away from the opening's emphasis on 'coordinated global action,' suggesting individual choice rather than collective effort. <b>Consider linking how affordability addresses the emission problem or enables the international cooperation mentioned earlier</b>."
+
+**Good (word/theme analysis):** "The sentence shifts from 'international agreements' to economic benefits without bridging these concepts. Both discuss solutions, but the move from political cooperation to market forces could confuse readers about what type of solution is being advocated. <b>Try showing how cost-effectiveness supports the international cooperation mentioned earlier</b>."
+
+        **Good (competing themes):** "This sentence emphasizes individual technology benefits while surrounding sentences focus on collective action ('coordinated global action,' 'international agreements'). <b>Consider showing how affordability makes global coordination more feasible</b>."
+        
+        {f'''**Good (topic alignment):** "This sentence discusses cost reduction but doesn't clearly connect to the paragraph topic '{paragraph_topic}.' While cost is mentioned, the connection to the main focus isn't explicit. <b>Consider showing how cost reduction specifically supports {paragraph_topic[:30]}{'...' if len(paragraph_topic) > 30 else ''}</b>."''' if paragraph_topic else ''}
+
+    **Avoid:** "This sentence is unclear and doesn't connect properly. Fix the transitions and make it more specific."
 
 Format your response as JSON:
 {{
     "score": 0.8,
-    "analysis": "Brief analysis here",
-    "strengths": ["strength 1", "strength 2"],
-    "weaknesses": ["weakness 1"]
+    "analysis": "Brief analysis here"
 }}
 """
 
@@ -1945,7 +1989,7 @@ Format your response as JSON:
             )
 
             response = client.chat.completions.create(
-                model=AZURE_OPENAI_DEPLOYMENT_NAME,
+                model=AZURE_DEPLOYMENT,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=500,
                 temperature=0.3
@@ -1953,42 +1997,39 @@ Format your response as JSON:
 
             result_text = response.choices[0].message.content.strip()
             
+            # Clean markdown code blocks if present
+            if result_text.startswith('```json'):
+                result_text = result_text.replace('```json', '').replace('```', '').strip()
+            elif result_text.startswith('```'):
+                result_text = result_text.replace('```', '').strip()
+            
             # Try to parse as JSON
-            import json
             result = json.loads(result_text)
             
             # Validate and set defaults
             return {
                 "score": float(result.get("score", 0.5)),
                 "analysis": result.get("analysis", "Unable to analyze paragraph cohesion."),
-                "strengths": result.get("strengths", []),
-                "weaknesses": result.get("weaknesses", [])
             }
             
         except json.JSONDecodeError:
             print(f"Failed to parse paragraph cohesion JSON: {result_text}")
             return {
                 "score": 0.5,
-                "analysis": "Unable to analyze paragraph cohesion due to parsing error.",
-                "strengths": [],
-                "weaknesses": []
+                "analysis": "Unable to analyze paragraph cohesion due to parsing error."
             }
         except Exception as e:
             print(f"Error calling Azure OpenAI for paragraph cohesion: {e}")
             return {
                 "score": 0.5,
-                "analysis": "Unable to analyze paragraph cohesion due to API error.",
-                "strengths": [],
-                "weaknesses": []
+                "analysis": "Unable to analyze paragraph cohesion due to API error."
             }
             
     except Exception as e:
         print(f"Error in analyze_paragraph_cohesion: {e}")
         return {
             "score": 0.5,
-            "analysis": "Unable to analyze paragraph cohesion.",
-            "strengths": [],
-            "weaknesses": []
+            "analysis": "Unable to analyze paragraph cohesion."
         }
 
 def analyze_document_cohesion(sentence: str, document: str) -> dict:
@@ -2004,32 +2045,67 @@ def analyze_document_cohesion(sentence: str, document: str) -> dict:
     """
     try:
         prompt = f"""
-Analyze how this sentence contributes to the overall document's cohesion and main message.
+# Document Cohesion Analysis Prompt
 
-FULL DOCUMENT:
-{document}
+## Task
+Analyze how well the target sentence contributes to the overall document's cohesion and main message.
 
-TARGET SENTENCE:
-{sentence}
+**Input:**
+```
+FULL DOCUMENT: {document}
+SENTENCE: {sentence}
+```
 
-Analyze:
-1. How well does this sentence support the document's main thesis or purpose?
-2. What themes, arguments, or vocabulary connect it to the broader narrative?
-3. Does it advance the document's overall message or argument?
+## Analysis Framework
+Evaluate these aspects:
+1. **Thesis/Argument Connections**: How does this sentence relate to specific arguments, claims, or themes from other parts of the document?
+2. **Vocabulary and Concept Links**: What specific words, phrases, or concepts from this sentence connect to, build on, or clash with other sections?
+3. **Document Progression**: Does this sentence advance the document's overall argument or repeat/contradict points made elsewhere?
+4. **Reader Understanding**: How does this sentence help or hinder readers following the document's main message?
 
-Provide:
-- Score (0.0-1.0): How well the sentence coheres with the document's main message
-- Analysis: 2-3 sentences explaining the cohesion with the overall document
-- Strengths: List 1-3 ways it connects to the document's main themes (or empty if none)
-- Weaknesses: List 1-3 ways it could better support the document's message (or empty if none)
+## Response Guidelines
+
+### Tone & Approach
+- Professional and helpful, focusing on specific document relationships
+- Show how the sentence connects to or disconnects from other parts of the document
+- Point out where the sentence builds on earlier ideas or where it conflicts with them
+- Frame suggestions as ways to strengthen specific connections within the document
+
+### Content Requirements
+- **Specific Document Connections**: Show how the target sentence relates to particular other sections, arguments, or themes in the document
+- **Word/Concept Analysis**: Point out specific words or concepts that connect, clash, or are missing between this sentence and other parts
+- **Context References**: Use brief quotes (3-8 words) from other parts of the document to show these specific relationships
+- **Concise Analysis**: Limit feedback to exactly 2 sentences maximum
+- **Helpful Suggestions**: Frame suggestions as ways to strengthen connections within the overall document using <b>bold tags</b>
+
+### Language Style
+- Use clear, accessible language appropriate for high school level
+- Maintain professional tone without overly complex vocabulary
+- Use conditional/suggestive phrasing ("could strengthen," "might connect," "would help")
+- Avoid difficult terminology when simpler words convey the same meaning
+
+**Score Scale:**
+- 0.9-1.0: Excellent connection, clearly advances document's main message
+- 0.7-0.8: Good connection with minor gaps in supporting the overall argument
+- 0.5-0.6: Moderate connection, some unclear relationships to document themes
+- 0.3-0.4: Weak connection, limited tie to main arguments or thesis
+- 0.0-0.2: Poor connection, disrupts or contradicts document's main message
+
+## Example Analysis Style
+**Good (document-specific connections):** "This sentence introduces economic concerns but doesn't build on the environmental focus established in the opening paragraphs ('urgent climate action'). The shift to cost considerations contradicts the earlier emphasis on 'moral responsibility' without showing how these perspectives connect. <b>Consider linking economic factors to the environmental arguments or establishing this as a counterpoint to address</b>."
+
+**Good (vocabulary/concept analysis):** "The sentence uses 'individual responsibility' while the document's conclusion emphasizes 'collective action' and 'systemic change.' This creates competing themes that could confuse readers about the document's main stance. <b>Try aligning the responsibility framework with the collective approach established elsewhere</b>."
+
+**Good (progression analysis):** "This sentence repeats the same statistical data mentioned in paragraph two ('75% increase') without advancing the argument or providing new insights. <b>Consider how this information builds on or complicates the earlier discussion</b>."
+
+**Avoid:** "This sentence doesn't fit well with the document. It should be more connected to the main idea."
 
 Format your response as JSON:
 {{
     "score": 0.7,
-    "analysis": "Brief analysis here",
-    "strengths": ["strength 1", "strength 2"],
-    "weaknesses": ["weakness 1"]
+    "analysis": "Brief analysis here"
 }}
+
 """
 
         # Call Azure OpenAI
@@ -2041,7 +2117,7 @@ Format your response as JSON:
             )
 
             response = client.chat.completions.create(
-                model=AZURE_OPENAI_DEPLOYMENT_NAME,
+                model=AZURE_DEPLOYMENT,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=500,
                 temperature=0.3
@@ -2049,42 +2125,39 @@ Format your response as JSON:
 
             result_text = response.choices[0].message.content.strip()
             
+            # Clean markdown code blocks if present
+            if result_text.startswith('```json'):
+                result_text = result_text.replace('```json', '').replace('```', '').strip()
+            elif result_text.startswith('```'):
+                result_text = result_text.replace('```', '').strip()
+            
             # Try to parse as JSON
-            import json
             result = json.loads(result_text)
             
             # Validate and set defaults
             return {
                 "score": float(result.get("score", 0.5)),
-                "analysis": result.get("analysis", "Unable to analyze document cohesion."),
-                "strengths": result.get("strengths", []),
-                "weaknesses": result.get("weaknesses", [])
+                "analysis": result.get("analysis", "Unable to analyze document cohesion.")
             }
             
         except json.JSONDecodeError:
             print(f"Failed to parse document cohesion JSON: {result_text}")
             return {
                 "score": 0.5,
-                "analysis": "Unable to analyze document cohesion due to parsing error.",
-                "strengths": [],
-                "weaknesses": []
+                "analysis": "Unable to analyze document cohesion due to parsing error."
             }
         except Exception as e:
             print(f"Error calling Azure OpenAI for document cohesion: {e}")
             return {
                 "score": 0.5,
-                "analysis": "Unable to analyze document cohesion due to API error.",
-                "strengths": [],
-                "weaknesses": []
+                "analysis": "Unable to analyze document cohesion due to API error."
             }
             
     except Exception as e:
         print(f"Error in analyze_document_cohesion: {e}")
         return {
             "score": 0.5,
-            "analysis": "Unable to analyze document cohesion.",
-            "strengths": [],
-            "weaknesses": []
+            "analysis": "Unable to analyze document cohesion."
         }
 
 @app.route("/api/analyze-sentence-flow", methods=["POST"])
@@ -2111,11 +2184,13 @@ def analyze_sentence_flow():
         sentence = data.get('sentence', '').strip()
         document = data.get('document', '').strip()
         prompt = data.get('prompt', '').strip()
+        paragraph_topic = data.get('paragraphTopic', '').strip()  # Get paragraph topic if provided
         
         print(f"📝 Sentence Flow Analysis Request:")
         print(f"   Sentence: {sentence[:50]}...")
         print(f"   Document length: {len(document)} chars")
         print(f"   Prompt: {prompt}")
+        print(f"   Paragraph Topic: {paragraph_topic[:50] if paragraph_topic else 'None'}...")
         
         # First, we need to get the strength of the clicked sentence
         # We'll do this by running our flow analysis on the document and finding the clicked sentence
@@ -2145,7 +2220,7 @@ def analyze_sentence_flow():
         
         # Analyze paragraph and document cohesion
         print(f"🔍 Analyzing paragraph cohesion for sentence...")
-        paragraph_cohesion = analyze_paragraph_cohesion(sentence, document)
+        paragraph_cohesion = analyze_paragraph_cohesion(sentence, document, paragraph_topic)
         
         print(f"🔍 Analyzing document cohesion for sentence...")
         document_cohesion = analyze_document_cohesion(sentence, document)

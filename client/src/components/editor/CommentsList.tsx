@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { Editor } from '@tiptap/react';
 import { cn } from "@/lib/utils";
 import { ArrowRightToLine, ChevronDown, ChevronUp, FileCheck, RefreshCw, XCircle } from 'lucide-react';
@@ -8,6 +8,7 @@ import { CommentType } from './types';
 import { CommentItem } from './CommentItem';
 import { refreshFeedback, regenerateSuggestion } from '@/lib/api';
 import { toast } from "sonner";
+import { HighlightingManager } from '@/lib/highlighting-manager';
 
 interface CommentsListProps {
   isOpen: boolean;
@@ -19,6 +20,8 @@ interface CommentsListProps {
   editor: Editor | null;
   focusedCommentId: string | null;
   setFocusedCommentId: (id: string | null) => void;
+  sortCommentsRef?: React.MutableRefObject<(() => void) | null>;
+  highlightingManager?: HighlightingManager | null;
 }
 
 export function CommentsList({
@@ -30,7 +33,9 @@ export function CommentsList({
   setActiveCommentId,
   editor,
   focusedCommentId,
-  setFocusedCommentId
+  setFocusedCommentId,
+  sortCommentsRef,
+  highlightingManager
 }: CommentsListProps) {
   const commentsSectionRef = useRef<HTMLDivElement | null>(null);
 
@@ -390,6 +395,7 @@ export function CommentsList({
     });
   };
 
+
   // New function to handle marking comments as completed
   const handleMarkAsCompleted = (commentId: string, action: 'accepted' | 'ignored', reason?: string) => {
     const now = new Date().toISOString();
@@ -454,7 +460,7 @@ export function CommentsList({
   };
 
   // Apply the current sort method to the comments
-  const applySort = (sortValue: string) => {
+  const applySort = useCallback((sortValue: string) => {
     const sorted = [...comments];
 
     if (sortValue === "newest") {
@@ -505,7 +511,14 @@ export function CommentsList({
     }
 
     setComments(sorted);
-  };
+  }, [comments, editor, setComments]);
+
+  // Expose the applySort function through the ref
+  useEffect(() => {
+    if (sortCommentsRef) {
+      sortCommentsRef.current = () => applySort(sortMethod);
+    }
+  }, [sortCommentsRef, applySort, sortMethod]);
 
   const filterOptions = [
     { value: 'flow', label: 'Flow' },
@@ -563,6 +576,22 @@ export function CommentsList({
     return filteredComments;
   };
 
+  const nonDismissedComments = comments.filter(
+    (comment) => getCommentStatus(comment) !== 'dismissed'
+  );
+
+  const clarityCount = nonDismissedComments.filter(
+    (c) => c.issueType === 'clarity'
+  ).length;
+
+  const flowCount = nonDismissedComments.filter(
+    (c) => c.issueType === 'flow'
+  ).length;
+
+  const focusCount = nonDismissedComments.filter(
+    (c) => c.issueType === 'focus'
+  ).length;
+
   return (
     <div
       ref={commentsSectionRef}
@@ -598,11 +627,12 @@ export function CommentsList({
       </button>
 
       {/* Panel Content */}
-      <div className="h-full overflow-y-auto">
-        {/* Filter Tabs */}
+      <div className="h-full flex flex-col relative">
+        {/* Scrollable Content Area */}
+        <div className="flex-1 overflow-y-auto pb-16">
         <div className="flex items-center justify-left mb-4 pt-6 pl-4">
-          {/* <div className="flex items-center">
-            <div className="flex items-center gap-1 p-1">
+
+            <div className="flex items-center gap-2 mr-4">
               <label
                 htmlFor="comment-sort"
                 className="text-xs font-medium text-muted-foreground whitespace-nowrap"
@@ -611,20 +641,17 @@ export function CommentsList({
               </label>
               <Select
                 onValueChange={sortComments}
-                defaultValue={sortMethod}
+                defaultValue={"default"}
               >
-                <SelectTrigger className="h-8 text-xs w-24">
+                <SelectTrigger className="h-8 text-xs w-32">
                   <SelectValue placeholder="Sort" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="default">Default</SelectItem>
-                  <SelectItem value="newest">Newest</SelectItem>
-                  <SelectItem value="oldest">Oldest</SelectItem>
-                  <SelectItem value="smart">Smart</SelectItem>
+                  <SelectItem value="default">In Order</SelectItem>
+                  <SelectItem value="newest">Newest First</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-          </div> */}
           <div className="flex items-center gap-2">
             <label
               htmlFor="comment-sort"
@@ -666,6 +693,7 @@ export function CommentsList({
                   isRegenerating={regeneratingComments[comment.id] || false}
                   focusedCommentId={focusedCommentId}
                   setFocusedCommentId={setFocusedCommentId}
+                  isWriteMode={highlightingManager?.getCurrentMode() === 'write'}
                 />
               ))
             )}
@@ -764,6 +792,7 @@ export function CommentsList({
                     isCompleted={true}
                     focusedCommentId={focusedCommentId}
                     setFocusedCommentId={setFocusedCommentId}
+                    isWriteMode={highlightingManager?.getCurrentMode() === 'write'}
                   />
                 ))
               )}
@@ -771,12 +800,28 @@ export function CommentsList({
           )}
         </div>
 
-        {/* Empty state when no comments exist */}
-        {comments.length === 0 && (
-          <div className="text-center text-muted-foreground pt-8">
-            No comments yet
+          {/* Empty state when no comments exist */}
+          {comments.length === 0 && (
+            <div className="text-center text-muted-foreground pt-8">
+              No comments yet
+            </div>
+          )}
+        </div>
+
+        {/* Fixed Bottom Filter Bar */}
+        <div className="absolute bottom-0 left-0 right-0 bg-background border-t border-border/40 p-3">
+          <div className="flex gap-2 justify-center">
+            <span className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900 px-2.5 py-1 text-xs font-medium text-blue-800 dark:text-blue-300">
+              Clarity: {clarityCount}
+            </span>
+            <span className="inline-flex items-center rounded-full bg-orange-100 dark:bg-orange-900 px-2.5 py-1 text-xs font-medium text-orange-800 dark:text-orange-300">
+              Flow: {flowCount}
+            </span>
+            <span className="inline-flex items-center rounded-full bg-yellow-100 dark:bg-yellow-900 px-2.5 py-1 text-xs font-medium text-yellow-800 dark:text-yellow-300">
+              Focus: {focusCount}
+            </span>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

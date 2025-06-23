@@ -8,7 +8,6 @@ import {
   Trash2,
   Check,
   X,
-  RefreshCw,
   Loader2,
   Copy,
   Check as CheckIcon,
@@ -46,6 +45,7 @@ interface CommentItemProps {
   isCompleted?: boolean;
   focusedCommentId?: string | null;
   setFocusedCommentId?: (id: string | null) => void;
+  isWriteMode?: boolean;
 }
 
 export function CommentItem({
@@ -65,6 +65,7 @@ export function CommentItem({
   isCompleted = false,
   focusedCommentId,
   setFocusedCommentId,
+  isWriteMode = false,
 }: CommentItemProps) {
   // State for tracking current text from the editor
   const [currentEditorText, setCurrentEditorText] = useState<string | null>(null);
@@ -72,6 +73,11 @@ export function CommentItem({
   const [hasCopied, setHasCopied] = useState(false);
   // State for focus mode
   const [isFocused, setIsFocused] = useState(false);
+  // State for current text hover
+  const [isCurrentTextHovered, setIsCurrentTextHovered] = useState(false);
+  // State for text selection mode
+  const [isInSelectionMode, setIsInSelectionMode] = useState(false);
+  const [selectedEditorText, setSelectedEditorText] = useState<string>('');
 
   // Pagination state
   const [historyIndex, setHistoryIndex] = useState(0);
@@ -174,7 +180,7 @@ export function CommentItem({
     }
   }, [comment.suggestedEdit?.explanation, comment.suggestedEdit?.suggested, comment.suggestedEdit?.references]);
 
-  // Update current text when editor content changes
+  // Load initial current text when component mounts (no auto-updates)
   useEffect(() => {
     if (!editor || !comment.id) return;
 
@@ -200,22 +206,52 @@ export function CommentItem({
       }
     };
 
-    // Get the initial text
+    // Get the initial text only (no automatic updates)
     getCurrentTextForComment();
 
-    // Subscribe to editor updates
-    const updateHandler = () => {
-      getCurrentTextForComment();
-    };
-
-    // Add the event listener
-    editor.on('update', updateHandler);
-
-    // Clean up subscription
-    return () => {
-      editor.off('update', updateHandler);
-    };
+    // Note: Removed automatic editor update subscription to prevent 
+    // current text from changing when editor content is modified
   }, [editor, comment.id]);
+
+  // Track editor text selection when in selection mode
+  useEffect(() => {
+    if (!editor || !isInSelectionMode) return;
+
+    const handleSelectionUpdate = () => {
+      const { selection } = editor.state;
+      const { from, to } = selection;
+
+      if (from !== to) {
+        const selectedText = editor.state.doc.textBetween(from, to);
+        setSelectedEditorText(selectedText);
+      } else {
+        setSelectedEditorText('');
+      }
+    };
+
+    // Add selection update listener
+    editor.on('selectionUpdate', handleSelectionUpdate);
+
+    // Disable other editor functionality by making it read-only
+    editor.setEditable(false);
+
+    // Add CSS class to editor for selection mode cursor styling
+    const editorElement = editor.view.dom.closest('.ProseMirror') || editor.view.dom;
+    if (editorElement) {
+      editorElement.classList.add('text-selection-mode');
+    }
+
+    // Clean up
+    return () => {
+      editor.off('selectionUpdate', handleSelectionUpdate);
+      editor.setEditable(true);
+
+      // Remove CSS class
+      if (editorElement) {
+        editorElement.classList.remove('text-selection-mode');
+      }
+    };
+  }, [editor, isInSelectionMode]);
 
   // Reset copy state after 2 seconds
   useEffect(() => {
@@ -248,6 +284,12 @@ export function CommentItem({
 
   const scrollToCommentInEditor = () => {
     if (!editor) return;
+
+    // Don't scroll to comment in write mode for distraction-free writing
+    if (isWriteMode) {
+      console.log('Write mode active - not scrolling to comment for distraction-free writing');
+      return;
+    }
 
     let foundPos: { from: number; to: number } | null = null;
     editor.state.doc.descendants((node, pos) => {
@@ -450,12 +492,12 @@ export function CommentItem({
 
   const completionInfo = getCompletionInfo();
 
-  // Autoscroll to this comment when it becomes active
+  // Autoscroll to this comment when it becomes active (but not in write mode for distraction-free writing)
   useEffect(() => {
-    if (activeCommentId === comment.id && commentRef.current) {
+    if (activeCommentId === comment.id && commentRef.current && !isWriteMode) {
       commentRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
     }
-  }, [activeCommentId, comment.id]);
+  }, [activeCommentId, comment.id, isWriteMode]);
 
   const handleCurrentTextDoubleClick = () => {
     setEditingCurrentText(comment.id);
@@ -523,6 +565,115 @@ export function CommentItem({
       saveCurrentTextEdit();
     } else if (e.key === "Escape") {
       setEditingCurrentText(null);
+    }
+  };
+
+  // New handler to enter selection mode
+  const handleEnterSelectionMode = () => {
+    setIsInSelectionMode(true);
+    setSelectedEditorText('');
+    toast.info("Selection mode active", {
+      description: "Select text from the editor, then click Done",
+      duration: 3000
+    });
+  };
+
+  // Handler to cancel selection mode
+  const handleCancelSelection = () => {
+    setIsInSelectionMode(false);
+    setSelectedEditorText('');
+    toast.info("Selection mode cancelled", {
+      duration: 2000
+    });
+  };
+
+  // Handler when Done is clicked in selection mode
+  const handleDoneSelection = () => {
+    if (!selectedEditorText.trim()) {
+      toast.error("No text selected", {
+        description: "Please select text from the editor before clicking Done",
+        duration: 3000
+      });
+      setIsInSelectionMode(false);
+      setSelectedEditorText('');
+      return;
+    }
+
+    // Check if the selected text is the same as the current text
+    const currentText = historyIndex === totalHistoryItems - 1
+      ? (currentEditorText !== null ? currentEditorText : comment.suggestedEdit?.original || '')
+      : currentHistoryItem.currentText;
+
+    if (selectedEditorText.trim() === currentText?.trim()) {
+      toast.info("No changes needed", {
+        description: "Selected text is the same as current text",
+        duration: 2000
+      });
+      setIsInSelectionMode(false);
+      setSelectedEditorText('');
+      return;
+    }
+
+    // Update the editor content to reflect the new text immediately
+    if (editor && comment.id) {
+      // Find the comment mark
+      let foundPos: { from: number; to: number } | null = null;
+      editor.state.doc.descendants((node, pos) => {
+        const mark = node.marks.find(m =>
+          m.type.name === 'comment' &&
+          m.attrs.commentId === comment.id
+        );
+        if (mark) {
+          foundPos = { from: pos, to: pos + node.nodeSize };
+          return false;
+        }
+      });
+
+      if (foundPos) {
+        // Add type assertion to fix 'never' type error
+        const pos = foundPos as { from: number; to: number };
+
+        // Create a transaction to update the text and preserve the mark
+        const tr = editor.state.tr;
+        const commentMark = editor.schema.marks.comment.create({ commentId: comment.id });
+
+        // Replace the text while preserving the mark
+        tr.replaceWith(
+          pos.from,
+          pos.to,
+          editor.schema.text(selectedEditorText, [commentMark])
+        );
+
+        // Apply the transaction
+        editor.view.dispatch(tr);
+      }
+    }
+
+    // Update the comment's current text metadata
+    setComments(prev =>
+      prev.map(c =>
+        c.id === comment.id
+          ? {
+            ...c,
+            suggestedEdit: c.suggestedEdit
+              ? { ...c.suggestedEdit, original: selectedEditorText }
+              : c.suggestedEdit,
+          }
+          : c
+      )
+    );
+
+    // Exit selection mode
+    setIsInSelectionMode(false);
+    setSelectedEditorText('');
+
+    // Call refresh feedback with the new text
+    if (onRefreshFeedback) {
+      onRefreshFeedback(comment.id);
+      toast.success("Refreshing feedback", {
+        description: "Updating feedback with selected text",
+        duration: 2000
+      });
     }
   };
 
@@ -728,7 +879,7 @@ export function CommentItem({
   return (
     <div ref={commentRef}
       className={cn(
-        "bg-white dark:bg-background border border-border/40 rounded-md p-4 transition-all duration-200 relative cursor-pointer",
+        "bg-white dark:bg-background border border-border/40 rounded-md p-4 transition-all duration-200 relative cursor-pointer dark:bg-neutral-900",
         activeCommentId === comment.id && "ring-2 ring-blue-500",
         comment.isPinned && "border-yellow-400 dark:border-yellow-600",
         isCompleted && "opacity-80",
@@ -878,10 +1029,14 @@ export function CommentItem({
                           <summary className="suggest-edit-label cursor-pointer">Current Text</summary>
                           <ContextMenu>
                             <ContextMenuTrigger asChild>
-                              <div className={cn(
-                                "suggest-edit-deletion break-words mt-1",
-                                hasTextChanged() && "bg-red-50 dark:bg-red-900/20"
-                              )}>
+                              <div
+                                className={cn(
+                                  "suggest-edit-deletion break-words mt-1 relative",
+                                  hasTextChanged() && "bg-red-50 dark:bg-red-900/20"
+                                )}
+                                onMouseEnter={() => setIsCurrentTextHovered(true)}
+                                onMouseLeave={() => setIsCurrentTextHovered(false)}
+                              >
                                 {/* Double-click to edit current text */}
                                 {editingCurrentText === comment.id ? (
                                   <div
@@ -914,15 +1069,33 @@ export function CommentItem({
                                     </div>
                                   </div>
                                 ) : (
-                                  <div
-                                    onDoubleClick={handleCurrentTextDoubleClick}
-                                    title="Double-click to edit"
-                                    style={{ whiteSpace: "pre-wrap", cursor: "pointer" }}
-                                  >
-                                    {historyIndex === totalHistoryItems - 1
-                                      ? (currentEditorText !== null ? currentEditorText : comment.suggestedEdit?.original || '')
-                                      : currentHistoryItem.currentText}
-                                  </div>
+                                    <div className="relative">
+                                      <div
+                                        onDoubleClick={handleCurrentTextDoubleClick}
+                                        title="Double-click to edit"
+                                        style={{ whiteSpace: "pre-wrap", cursor: "pointer" }}
+                                      >
+                                        {historyIndex === totalHistoryItems - 1
+                                          ? (currentEditorText !== null ? currentEditorText : comment.suggestedEdit?.original || '')
+                                          : currentHistoryItem.currentText}
+                                      </div>
+
+                                      {/* Hover button */}
+                                      {isCurrentTextHovered && !isCompleted && !isInSelectionMode && (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="absolute top-2 right-2 h-7 w-7 p-0 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border shadow-md hover:shadow-lg transition-all duration-200"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleEnterSelectionMode();
+                                          }}
+                                          title="Select new text from editor"
+                                        >
+                                          <Pencil className="h-3.5 w-3.5" />
+                                        </Button>
+                                      )}
+                                    </div>
                                 )}
                               </div>
                             </ContextMenuTrigger>
@@ -938,6 +1111,59 @@ export function CommentItem({
                           </ContextMenu>
                         </details>
                       </div>
+
+                      {/* Selection mode UI */}
+                      {isInSelectionMode && (
+                        <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                              Text Selection Mode
+                            </h4>
+                          </div>
+                          <p className="text-xs text-blue-600 dark:text-blue-300 mb-3">
+                            Select text from the editor above, then click Done to update the current text and refresh feedback.
+                          </p>
+
+                          {selectedEditorText && (
+                            <div className="mb-3 p-2 bg-white dark:bg-gray-800 rounded border">
+                              <div className="text-xs text-muted-foreground mb-1">Selected text:</div>
+                              <div className="text-sm">
+                                {selectedEditorText.length > 100
+                                  ? `${selectedEditorText.substring(0, 100)}...`
+                                  : selectedEditorText
+                                }
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex justify-end space-x-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCancelSelection();
+                              }}
+                              className="h-8 px-3"
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDoneSelection();
+                              }}
+                              className="h-8 px-4 bg-blue-600 hover:bg-blue-700 text-white"
+                              disabled={!selectedEditorText.trim()}
+                            >
+                              Done
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
                       <div>
                         <details className="mt-1" open>
                           <summary className="suggest-edit-label cursor-pointer">Suggested Text</summary>
@@ -999,32 +1225,8 @@ export function CommentItem({
                       </div>
                       <div className="relative">
                         <div className="mt-1">
-                          <div className="suggest-edit-label cursor-pointer flex justify-between items-center">
-                            <div className="flex items-center">
-                              <span>Feedback</span>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              {!isCompleted && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleRefreshFeedback();
-                                  }}
-                                  title="Refresh feedback"
-                                  disabled={isRefreshing || historyIndex !== totalHistoryItems - 1}
-                                >
-                                  {isRefreshing ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  ) : (
-                                    <RefreshCw className="h-3.5 w-3.5" />
-                                  )}
-                                </Button>
-                              )}
-                            </div>
+                          <div className="suggest-edit-label cursor-pointer">
+                            <span>Feedback</span>
                           </div>
                           <div className="suggest-edit-explanation break-words mt-1">
                             {isRefreshing && historyIndex === totalHistoryItems - 1 ? (
@@ -1118,29 +1320,29 @@ export function CommentItem({
                     Restore
                   </Button>
                 </div>
-              ) : (
+              ) : !isInSelectionMode ? (
                 <div className="flex items-center justify-left mt-3 space-x-3">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 px-6"
+                      className="h-8 px-4"
                     onClick={handleIgnore}
                   >
-                    <X className="h-3.5 w-3.5 mr-2" />
+                      <X className="h-3.5 w-2.5 mr-1" />
                     Dismiss
-                  </Button>
+                    </Button>
 
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="h-8 px-6 pr-5 pl-3"
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="h-8 px-6 pr-4 pl-2 bg-blue-600 hover:bg-blue-700 dark:bg-neutral-600 dark:hover:bg-blue-700 text-white dark:text-white"
                     onClick={handleAcceptSuggestion}
                   >
                     <Check className="h-3.5 w-3.5 mr-2" />
                     Replace
                   </Button>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
         ) : (
