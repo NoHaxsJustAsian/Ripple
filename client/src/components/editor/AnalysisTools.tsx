@@ -6,7 +6,7 @@ import { ActionSelect, ActionItemType } from '../ui/multi-select';
 import { analyzeTextWithContext } from '@/lib/api';
 import { CommentType, AnalysisResult } from './types';
 import { HighlightingManager } from '@/lib/highlighting-manager';
-import { findAndExpandSentence, robustTextFind, expandToSentenceBoundaries } from '@/lib/prosemirror-text-utils';
+import { findAndExpandSentence, robustTextFind } from '@/lib/prosemirror-text-utils';
 
 interface AnalysisToolsProps {
   editor: Editor | null;
@@ -154,8 +154,15 @@ export function AnalysisTools({
 
         // Add flow highlights to the highlighting manager
         if (flowHighlightsWithPositions.length > 0) {
-          highlightingManager.addFlowHighlights(flowHighlightsWithPositions);
-          console.log('✅ Flow highlights added to HighlightingManager - they will be visible when flow mode is ON');
+          // For "all" analysis, replace flow highlights with fresh analysis
+          // For "custom" analysis, we'll skip flow highlights here and generate full flow after
+          if (analysisType === 'all') {
+            highlightingManager.addFlowHighlights(flowHighlightsWithPositions);
+            console.log('✅ Flow highlights replaced for full document analysis');
+          } else {
+            console.log('ℹ️ Skipping flow highlights for custom analysis - will generate full flow next');
+          }
+
           console.log('🔍 Flow highlights details:', flowHighlightsWithPositions.map(h => ({
             text: h.position ? editor.state.doc.textBetween(h.position.from, h.position.to) : 'no position',
             strength: h.connectionStrength,
@@ -209,6 +216,12 @@ export function AnalysisTools({
         setIsInsightsOpen(true);
       }
 
+      // For custom analysis, now generate full document flow highlights
+      if (analysisType === 'custom') {
+        console.log('🎯 Custom analysis complete, generating full document flow highlights...');
+        await generateFullFlowHighlights();
+      }
+
       // Clear any text selection after analysis completes
       if (editor) {
         editor.commands.focus('end');
@@ -222,6 +235,62 @@ export function AnalysisTools({
       setIsAnalysisRunning(false);
     }
   }, [editor, setComments, setIsInsightsOpen, flowPrompt, highlightingManager, setIsAnalysisRunning]);
+
+  // Function to generate flow highlights for the entire document
+  const generateFullFlowHighlights = useCallback(async () => {
+    if (!editor || !highlightingManager) return;
+
+    try {
+      console.log('🌊 Generating full document flow highlights...');
+
+      const fullContent = editor.state.doc.textContent;
+
+      // Call API for flow highlights only (not comments)
+      const response = await analyzeTextWithContext({
+        content: fullContent,
+        fullContext: fullContent,
+        targetType: 'flow', // Only generate flow highlights
+        flowPrompt: flowPrompt
+      });
+
+      if (response.data.flowHighlights && response.data.flowHighlights.length > 0) {
+        console.log('🟢 Processing full document flow highlights:', response.data.flowHighlights.length, 'highlights');
+
+        highlightingManager.setDocumentContext(fullContent);
+
+        const flowHighlightsWithPositions: Array<{
+          id: string;
+          connectionStrength: number;
+          connectedSentences: string[];
+          position: { from: number; to: number };
+        }> = [];
+
+        response.data.flowHighlights.forEach((highlight, index) => {
+          const textToFind = highlight.text;
+          const flowPosition = findAndExpandSentence(editor, textToFind);
+
+          if (flowPosition) {
+            const highlightData = {
+              id: `flow-full-${Date.now()}-${index}`,
+              connectionStrength: highlight.connectionStrength,
+              connectedSentences: [] as string[],
+              position: flowPosition
+            };
+
+            flowHighlightsWithPositions.push(highlightData);
+          }
+        });
+
+        // Replace all flow highlights with full document analysis
+        if (flowHighlightsWithPositions.length > 0) {
+          highlightingManager.addFlowHighlights(flowHighlightsWithPositions);
+          console.log('✅ Full document flow highlights generated and applied');
+        }
+      }
+    } catch (error) {
+      console.error('Error generating full flow highlights:', error);
+    }
+  }, [editor, highlightingManager, flowPrompt]);
 
   // Update the feedback items with appropriate structure for ActionSelect
   const feedback_items: ActionItemType[] = [

@@ -1,6 +1,6 @@
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
-import { X, GripVertical, Repeat2Icon, CornerDownLeftIcon, AlignLeft, FileText, ChevronDown, ChevronRight, Pencil, Loader2 } from 'lucide-react';
+import { X, GripVertical, CornerDownLeftIcon, AlignLeft, FileText, ChevronRight, Pencil, Loader2 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { toast } from "sonner";
 
@@ -325,9 +325,6 @@ export function SentenceFlowActionPanel({
                             )}
 
                             <div className="flex items-center gap-2 mt-3">
-                                {/* <div className="text-xs bg-gray-200 text-gray-800 px-2 py-1 rounded font-medium">
-                                Flow Level: {connectionStrength.toFixed(2)}
-                            </div> */}
                                 <div className="text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded font-medium">
                                     {connectedSentences.length} Connections
                                 </div>

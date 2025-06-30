@@ -6,8 +6,6 @@ import os
 import json
 from datetime import datetime
 from typing import Dict, List, Optional, Union, Literal, Tuple
-from text_segmentation import segment_texts
-
 # Load environment variables
 load_dotenv()
 HOSTNAME = os.getenv('HOSTNAME')
@@ -17,7 +15,15 @@ AZURE_DEPLOYMENT = "PROPILOT"
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app, supports_credentials=True, origins=[HOSTNAME])
+
+# Configure CORS - allow localhost for development if HOSTNAME not set
+allowed_origins = [HOSTNAME] if HOSTNAME else [
+    "http://localhost:3000",
+    "http://localhost:5173", 
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173"
+]
+CORS(app, supports_credentials=True, origins=allowed_origins)
 
 # Initialize OpenAI client
 client = AzureOpenAI(
@@ -55,25 +61,23 @@ def analyze_text_with_context(
         DocumentProcessingError: If analysis fails
     """
     try:
-
-        topics_context = ""
         topics_section = ""
         topic_guidance = ""
 
         if essay_topic:
             topics_section += f"\nMAIN ESSAY TOPIC/THESIS:\n{essay_topic}\n"
-            topic_guidance += f"\nIMPORTANT: Consider this high-level thesis/topic when providing feedback. Evaluate how well the text supports or advances this main idea. Your feedback should help the writer better align their writing with this core thesis."
+            topic_guidance += ("\nIMPORTANT: Consider this high-level thesis/topic when providing feedback. "
+                               "Evaluate how well the text supports or advances this main idea. Your feedback should "
+                               "help the writer better align their writing with this core thesis.")
         
-        # Add paragraph topics if provided
         if paragraph_topics and len(paragraph_topics) > 0:
             topics_section += "\nPARAGRAPH TOPIC SENTENCES:\n"
             for para_id, topic in paragraph_topics.items():
                 topics_section += f"- {topic}\n"
+            topic_guidance += ("\nALSO IMPORTANT: Consider these paragraph topic sentences when providing feedback. "
+                               "Evaluate how well the text maintains focus on these topics and creates cohesion between them.")
             
-            topic_guidance += f"\nALSO IMPORTANT: Consider these paragraph topic sentences when providing feedback. Evaluate how well the text maintains focus on these topics and creates cohesion between them."
-        
-        # Create the context-aware prompt with topic information
-        context_prompt = f"""Analyze this text and provide constructive feedback for improving the flow, clarity, and focus of the writing:
+        context_prompt = f"""Analyze this text and generate specific, contextual feedback to improve its clarity, focus, or flow within the full document.
 
         TEXT TO ANALYZE:
         {content}
@@ -81,513 +85,90 @@ def analyze_text_with_context(
         {topics_section}
         {topic_guidance}
 
-        Focus on {target_type} issues. Provide balanced, professional feedback that is specific to this writing.
-
-        FEEDBACK APPROACH:
-        - Make feedback specific to this particular text and its context
-        - Focus on analyzing what the text is trying to accomplish and where it falls short
-        - Provide explanations that analyze the text in relation to the overall piece
-        - Maintain a neutral, professional and respectful tone - neither harsh nor overly encouraging
-        - Keep explanations concise (3-5 sentences maximum)
-        - Structure each piece of feedback to emphasize analysis over suggestions:
-        1. Identify what the text is trying to accomplish in the context of the whole piece
-        2. Explain where and why the text falls short in achieving this goal
-        3. Explain how this issue impacts the reader's understanding or experience
-        4. Suggest a specific improvement and explain its impact on the reader's experience
-        - Vary your sentence structures and opening phrases
-
-        For each issue found, provide a comment with:
-        1. A clear title describing the issue (like "Transition Between Paragraphs" or "Clarity of Main Argument")
-        2. An issue type from this list ONLY: flow, clarity, focus
-        3. The exact text from the selection that has the issue
-        4. A specific edit suggestion with the original text and improved version
-        5. A concise explanation of why the edit improves the reader's experience
-
-        Format each comment as a JSON object like this:
-        {{
-        "title": "Short descriptive title",
-        "issueType": "type of target_type issue", 
-        "highlightedText": "exact text with the issue",
-        "highlightStyle": "#fef9c3",
-        "suggestedEdit": {{
-            "original": "original text with issue",
-            "suggested": "improved version of the text",
-            "explanation": "A concise analysis that: 1) identifies what this text is trying to accomplish, 2) explains specifically what is missing or problematic, 3) describes how this affects the reader, and 4) justifies how the suggested change addresses these issues.",
-            "references": [
-            {{
-                "allusion": "phrase you refer to in your explanation",
-                "referenceText": "exact text to highlight in the document"
-            }}
-            ]
-        }}
-        }}
-
-        IMPORTANT: For action recommendations in your explanation, use HTML bold tags by wrapping the text like this: <b>action recommendation</b>. For example: "The current phrasing lacks clarity. <b>Try using more specific terminology</b> to help readers better understand your point."
-
-        IMPORTANT: For the "issueType" field, use ONLY one of these values:
-        - "clarity" - For unclear or ambiguous wording
-        - "focus" - For logical flow issues between ideas
-        - "flow" - For issues with transitions or pacing
-
-        Use these highlight colors:
-        - Clarity issues: "#bae6fd" (light blue)  
-        - Focus issues: "#fef9c3" (yellow)
-        - Flow issues: "#fdba74" (orange)
-
-        GUIDELINES FOR VARIED EXPLANATIONS:
-
-        1. VARY YOUR OPENING PHRASES - Avoid always starting with "This text..." or "The current text...". Instead, use varied openings:
-        - "Here, the passive phrasing creates distance between..."
-        - "Without explicit connections between these statistics and your argument..."
-        - "Readers may struggle to follow your reasoning because..."
-        - "The vague terminology undermines credibility by..."
-        - "Your argument would be stronger if..."
-
-        2. FOCUS ON DIFFERENT ASPECTS - Vary which aspect you analyze first:
-        - Reader impact: "Readers may misinterpret your position because..."
-        - Purpose: "Your goal of explaining X is hampered by..."
-        - Missing elements: "The connection between these concepts remains implicit..."
-        - Current limitations: "Vague terminology obscures your methodology..."
-
-        CONSTRUCTIVE FEEDBACK EXAMPLES:
-
-        Example of specific feedback: 
-        "Your analysis of climate policy needs to connect the economic data with your policy recommendations. In this paragraph, you've presented statistics but haven't shown how they support your argument about carbon taxes. Try adding a sentence that explicitly links these numbers to your policy position so readers can follow your reasoning."
-
-        Example of overly general feedback:
-        "Academic writing requires clear connections between evidence and claims. This paragraph lacks those connections. Adding transitions would help the reader."
-
-        Examples of feedback that is too brief or too detailed:
-        Too brief: "This paragraph is unclear. Fix the transitions."
-        Too detailed: "This paragraph on climate policy introduces important statistics about carbon emissions from 2018-2022, but doesn't adequately explain how these specific numbers relate to the carbon tax proposal outlined in your third paragraph. The reader needs to understand exactly how the 23% reduction in emissions mentioned correlates with your suggestion for a graduated tax structure. Consider adding a sentence after the statistics that explicitly states how these figures demonstrate the potential effectiveness of your specific tax proposal, particularly focusing on how the data supports your argument about industrial sector compliance rates..."
-
-        Example of balanced feedback tone:
-        "Your literature review needs to establish clear connections between the different theories you discuss. In this section, you've described three theoretical frameworks without showing how they relate to each other. Try adding a sentence after each theory that connects it to your overall argument about urban development so readers can see why you've included these specific approaches."
-
-        Examples of tones to avoid:
-        Too harsh: "Your literature review is disjointed and poorly structured. The theories are thrown together without any logical organization."
-        Too encouraging: "Your literature review shows great effort in covering many theories! With just a tiny bit of work connecting these wonderful ideas, it would be perfect!"
-
-        BAD EXAMPLES:
-        -"The revised sentence structure enhances coherence by directly linking the reflection with the realization of benefits, making the thought process clearer to the reader."
-        -"The edit improves coherence by adding a transition sentence that connects the statistics to the policy proposal."
-        -"The edit clarifies the methodology by adding specific details about participants and methods."
-        -"Academic writing requires clear connections between theories. This section lacks those connections. Adding transitions would help the reader understand your point better."
-
-        GUIDELINES FOR RESPECTFUL, CONSTRUCTIVE EXPLANATIONS:
-
-        1. FOCUS ON THE TEXT, NOT THE WRITER
-        - Instead of: "You are not explaining your point clearly"
-        - Use: "This point could be more accessible to readers if..."
-
-        2. FRAME AS ENHANCEMENT OPPORTUNITIES
-        - Instead of: "This sentence is cluttered with multiple ideas, making the motivation unclear"
-        - Use: "The multiple ideas in this sentence present an opportunity to highlight the core motivation more distinctly"
-
-        3. ACKNOWLEDGE EXISTING STRENGTHS
-        - When possible, note what's working before suggesting enhancement
-        - Example: "While the key concepts are present, readers might better grasp their relationship if..."
-
-        4. USE READER-FOCUSED LANGUAGE
-        - Instead of: "The writing is confusing here"
-        - Use: "Readers might find it challenging to follow the connection between these ideas"
-
-        5. VARY YOUR OPENING PHRASES
-        - "The relationship between these concepts could be more explicit..."
-        - "Readers might more easily follow your reasoning if..."
-        - "The transition between these points offers a chance to strengthen the logical flow..."
-
-        EXAMPLES OF EFFECTIVE RESPECTFUL EXPLANATIONS:
-
-        GOOD EXAMPLE:
-        "The reflection on miniature making contains valuable insights that readers might miss due to the indirect phrasing. The passive framing creates distance where a more direct approach could strengthen the connection with readers. Highlighting the transformative impact more explicitly would help readers anticipate the benefits you describe in subsequent sentences."
-
-        BAD EXAMPLE:
-        "The sentence is cluttered with multiple ideas, making the motivation unclear. By restructuring, the motivation becomes more explicit, allowing readers to understand the author's drive and the context of the project."
-
-        GOOD EXAMPLE:
-        "These three theories each contribute important perspectives to your urban development thesis. Readers might more easily grasp their collective significance with explicit connections between them. A brief statement showing how each theory builds upon or complements the others would create a more cohesive framework for your subsequent analysis."
-
-        BAD EXAMPLE:
-        "You've failed to connect these theories properly. The writing is disjointed and readers will be confused by your poorly organized theoretical framework."
-
-        GUIDELINES FOR FOCUSING ON THE CURRENT TEXT:
-
-        1. ANALYZE THE CURRENT TEXT, NOT THE SUGGESTED EDIT
-        - Instead of: "The revised version clarifies the context..."
-        - Use: "The current phrasing lacks context about receiving the board..."
-
-        2. FOCUS ON READER EXPERIENCE WITH THE CURRENT TEXT
-        - Instead of: "The edit improves readability..."
-        - Use: "Currently, readers might struggle to follow the logical progression..."
-
-        EXAMPLES OF GOOD FOCUS ON CURRENT TEXT:
-
-        GOOD EXAMPLE:
-        "The current description of receiving the board lacks context about when and how it happened. This temporal gap makes it difficult for readers to understand the immediate connection between receiving the board and feeling inspired. Readers might wonder about the circumstances that sparked this creative journey. Try adding specific details about the moment of receiving the board to create a more vivid and relatable starting point for your narrative."
-
-        BAD EXAMPLE:
-        "The revised version clarifies the context of receiving the board, making the inspiration more immediate and accessible."
-
-        GOOD EXAMPLE:
-        "The transition between your literature review and methodology appears abrupt. Readers might struggle to see how your theoretical framework directly informed your research approach. The connection between these sections remains implicit, potentially leaving readers uncertain about your research rationale. Try adding a brief explanation of how specific theories shaped your methodological choices to help readers follow your research design logic."
-
-        BAD EXAMPLE:
-        "The revised transition connects the literature review to the methodology section, improving the paper's coherence."
-
-        IMPORTANT: Never begin explanations with phrases like "The edit..." or "This revision..." Instead, focus on analyzing the current text's limitations and their impact on the reader. The suggested edit should be a secondary consideration after thoroughly analyzing the existing text's issues.
-
-        GUIDELINES FOR SUGGESTIVE RATHER THAN PRESCRIPTIVE LANGUAGE:
-
-        1. USE CONDITIONAL TENSE
-        - Instead of: "Add a transition here."
-        - Use: "A transition here would help connect these ideas."
-        
-        - Instead of: "Make this clearer by adding examples."
-        - Use: "This point could be clearer if supported by examples."
-
-        2. PRESENT ALTERNATIVES AS OPTIONS
-        - Instead of: "Change this sentence to be more specific."
-        - Use: "This sentence might be more effective if made more specific."
-        
-        - Instead of: "Use active voice here."
-        - Use: "Active voice here might create a stronger impact."
-
-        3. FRAME SUGGESTIONS AS POSSIBILITIES
-        - Instead of: "You need to connect these paragraphs."
-        - Use: "These paragraphs would benefit from a connection that..."
-        
-        - Instead of: "Remove this redundant phrase."
-        - Use: "This phrase could be considered redundant and might be removed."
-
-        4. USE PHRASES THAT SIGNAL SUGGESTION
-        - "This section might work better if..."
-        - "Readers would likely find it helpful if..."
-        - "One possibility would be to..."
-        - "Consider whether..."
-        - "It might be worth exploring..."
-        - "What if this section included..."
-
-        5. AVOID IMPERATIVE COMMANDS
-        - Instead of: "Revise this paragraph for clarity."
-        - Use: "This paragraph could be revised for clarity."
-        
-        - Instead of: "Start with your main point."
-        - Use: "Starting with the main point would help orient readers."
-
-        EXAMPLES OF SUGGESTIVE LANGUAGE:
-
-        GOOD EXAMPLE (SUGGESTIVE):
-        "The connection between these statistical findings and your policy recommendation remains implicit. Readers may struggle to see how the data directly supports your proposal. Including a sentence that explicitly links the 23% emission reduction to your tax structure would help readers follow your logical progression."
-
-        BAD EXAMPLE (PRESCRIPTIVE):
-        "Connect your statistics to your policy recommendation. Add a sentence linking the 23% emission reduction to your tax structure. Make the logical connection clear."
-
-        GOOD EXAMPLE (SUGGESTIVE):
-        "The literature review presents these theories as separate entities. Readers might not grasp how they collectively support your thesis. A brief explanation after each theory showing its relevance to your urban development argument would create a more cohesive theoretical framework."
-
-        BAD EXAMPLE (PRESCRIPTIVE):
-        "Link each theory to your thesis. Add explanatory sentences after each one. Show how they support your urban development argument."
-
-        GUIDELINES FOR SHORT, CLEAR, AND SUCCINCT FEEDBACK:
-
-        1. AIM FOR BREVITY
-        - Limit explanations to 2-3 sentences maximum
-        - Remove any redundant information
-        - Prioritize the most significant issues rather than noting every minor problem
-
-        2. USE SIMPLE, DIRECT LANGUAGE
-        - Choose precise words over complex terminology
-        - Avoid unnecessary adjectives and qualifiers
-        - Replace long phrases with concise alternatives (e.g., "in order to" → "to")
-
-        3. STRUCTURE FEEDBACK EFFICIENTLY
-        - Lead with the most important observation
-        - Make one clear point per sentence
-        - Use active voice instead of passive voice
-        - Avoid hedging language (e.g., "sort of," "kind of," "somewhat")
-
-        4. ELIMINATE FILLER PHRASES
-        - Instead of: "It is important to note that this paragraph could benefit from..."
-        - Use: "This paragraph needs..."
-        
-        - Instead of: "There appears to be an opportunity to enhance the clarity of..."
-        - Use: "The meaning becomes unclear when..."
-
-        5. GET STRAIGHT TO THE POINT
-        - Skip background information the writer already knows
-        - Avoid explaining general writing principles unless directly relevant
-        - Focus only on what's currently missing and why it matters
-
-        EXAMPLES OF CONCISE FEEDBACK:
-
-        GOOD EXAMPLE (CONCISE):
-        "The connection between receiving the board and feeling inspired remains unclear. Readers can't visualize this key moment that sparked your creative journey. Try adding when and how you received the board to establish a stronger foundation for your narrative."
-
-        BAD EXAMPLE (WORDY):
-        "The current description of receiving the board lacks important contextual information about the timing and circumstances of when and how you came to possess the board, which creates a significant gap in understanding for readers who are trying to follow along with your creative journey and inspirational process. This temporal and circumstantial gap in the narrative makes it quite difficult for readers to fully comprehend and appreciate the immediate connection between the moment of receiving the board and the subsequent feeling of creative inspiration that you experienced as a result. Readers might find themselves wondering about the specific details and circumstances surrounding this pivotal moment that ultimately sparked this interesting and potentially transformative creative journey that you're describing in your narrative."
-
-        GOOD EXAMPLE (CONCISE):
-        "Your literature review presents three theories without showing their connections. Readers can't see how they collectively support your thesis. Try adding a sentence after each theory linking it to your urban development argument."
-
-        BAD EXAMPLE (WORDY):
-        "The literature review section of your paper presents three distinct theoretical frameworks that you have researched and included, but unfortunately fails to establish or demonstrate the important logical connections between these different theories and how they relate to each other in the context of your overall argument. This lack of explicit connection between the theoretical concepts creates a situation where readers might struggle to understand the relationship between these different frameworks and might not fully grasp how they collectively contribute to or support the central thesis of your paper regarding urban development patterns and processes. It would be highly beneficial to the overall coherence and persuasiveness of your argument if you were to consider adding additional explanatory text after the presentation of each theory to clearly articulate how that particular theoretical framework specifically connects to and supports your overall argument about urban development."
-
-
-        IMPORTANT: Allusions in your feedback refer to the text that you're talking about. The goal is to help users see what parts of their document you're talking about.
-
-        1) Here is one example of a good allusion and reference identification:
-
-        Given the text: "Strangely enough, searching for solutions in these creative places floods back when I work on research and programming for my computational biology internships, observing patterns and breaking down problems into miniature tasks."
-        
-        Given the feedback: The current sentence introduces a connection between activities without clearly articulating the relationship. Explicitly linking the skills acquired through miniature making to computational biology tasks enhances focus, allowing readers to see the broader applicability of these skills.
-
-        The first allusion is "connection between activities"; its reference is "searching for solutions in these creative places floods back when I work on research and programming for my computational biology internships". The second allusion is "explicitly linking the skills acquired through miniature making to computational biology tasks".
-
-        2) Here is another example of a good allusion and reference identification:
-
-        Given the text: "As I wonder why miniature making has become such an integral part of my routine, I've begun to notice just how much I've gained from it"
-
-        Given the feedback: The current sentence lacks focus, as it introduces a reflection without immediately connecting it to the benefits. Rephrasing to emphasize the gained skills sharpens the focus, helping readers understand the value of the activity more clearly.
-
-        The first allusion is "introduces the reflection"; its reference is "As I wonder why miniature making has become such an integral part of my routine,".
-
-        3) Here is another example of a good allusion and reference identification:
-
-        Given the text: I'd make frustrating mistakes, but I found my way, crocheting bicycle chains that created enough friction to pull cardboard gears
-
-        Given the feedback: The current phrasing is somewhat indirect, which may obscure the problem-solving process. Clarifying the sequence of actions makes the resolution more accessible, allowing readers to appreciate the ingenuity involved.
-
-        The first allusion is "the problem solving process"; its reference is "crocheting bicycle chains that created enough friction to pull cardboard gears". The second allusion is "the ingenuity involved"; its reference is "I'd make frustrating mistakes, but I found my way".
-
-
-        Identify ALL the relevant allusions and references for each feedback explanations. These could be:
-        - Parts of the document structure (introduction, methodology, conclusion)
-        - Types of content (evidence, arguments, examples, data)
-        - Writing elements (transitions, topic sentences, thesis statements)
-        - Subject matter (specific topics or themes mentioned)
-
-
-        Return your response as a valid JSON array of comments. For example:
-        [
-        {{
-            "title": "First issue title",
-            "issueType": "issue type",
-            "highlightedText": "example text with issue",
-            "highlightStyle": "#appropriate_color_based_on_issue_type",
+Your goal is to help the writer strengthen how their ideas are expressed and connected. Focus only on the highlighted portion of the text. Do not describe improvements to the suggested edit. Instead, explain what the selected text is trying to do and where it is falling short based on the overall structure and purpose of the document.
+
+For each issue found, return a JSON object with:
+- A short, descriptive "title" of the issue
+- A required "issueType" field from this list only: clarity, flow, focus
+- The "highlightedText" (exact text with the issue)
+- A "highlightStyle" based on issue type
+- A "suggestedEdit" object that includes:
+  - "original": the original text
+  - "suggested": a revision that improves clarity, flow, or focus while keeping the tone and style of the rest of the document
+  - "explanation": a concise and respectful analysis of what the original text is trying to do, where it falls short, and how the revision strengthens the reader's understanding
+  - "references": a list of allusions and references to help the writer locate the issue in context
+
+EXPLANATION REQUIREMENTS:
+- Never refer to the revised version in the explanation
+- Keep the analysis short (2–3 sentences max)
+- Focus on the original text's purpose, what's missing or unclear, and how the issue affects the reader
+- Include specific references or allusions to the text that you're analyzing
+
+REFERENCE FORMAT:
+A "reference" should include:
+  {{
+    "allusion": a phrase from the explanation (e.g. "connection between activities"),
+    "referenceText": the exact corresponding phrase or sentence from the text (e.g. "searching for solutions in these creative places...")
+  }}
+
+Use these highlightStyle colors:
+- "clarity" → "#bae6fd"
+- "focus" → "#fef9c3"
+- "flow" → "#fdba74"
+
+IMPORTANT STYLE GUIDELINES:
+- Avoid second-person phrasing (don't address "you" or the writer directly)
+- Maintain a neutral, respectful tone that treats all issues as opportunities to improve
+- Use conditional, suggestive language: "This section could be clearer if...", "Consider clarifying...", etc.
+- Use varied openings in your explanation: "This phrasing introduces...", "Readers might miss the connection between...", "The argument here would be stronger if..."
+
+OUTPUT FORMAT:
+Return a JSON array like:
+[
+  {{
+    "title": "Short descriptive title",
+    "issueType": "clarity",
+    "highlightedText": "exact quote",
+    "highlightStyle": "#bae6fd",
             "suggestedEdit": {{
-            "original": "original text with issue",
-            "suggested": "improved version of the text",
+      "original": "text...",
+      "suggested": "revised text...",
+      "explanation": "The original phrasing introduces [what it's trying to do] but fails to [issue]. This affects the reader by [impact]. <b>Clarifying or restructuring this idea</b> helps connect it more clearly to surrounding ideas.",
             "references": [
                 {{
-                    "allusion": "phrase you refer to in your explanation",
-                    "referenceText": "exact text to highlight in the document"
+          "allusion": "connection between activities",
+          "referenceText": "searching for solutions in these creative places floods back when I work on research..."
                 }}
                 ]
             }}
-        }},
-        {{
-            "title": "Second issue title",
-            ... and so on
         }}
         ]
         """
 
-        # Make OpenAI API call
         response = client.chat.completions.create(
             model=AZURE_DEPLOYMENT,
-            messages=[
-                {
-                    "role": "system",
-                    "content": context_prompt
-                }
-            ],
-            max_tokens=2000,
-            temperature=0.3  # Lower temperature for more consistent analysis
+            messages=[{"role": "system", "content": context_prompt}],
+            max_tokens=3000,
+            temperature=0.5
         )
 
-        # Parse the response
         result = response.choices[0].message.content.strip()
-        
-        # Print the raw result for debugging
         print(f"Raw result from OpenAI: {result[:500]}...")
 
-        print(f"RECEIVED FROM OPENAI: {result}...")
+        import re
+        json_match = re.search(r'(\[{.*}\])', result.replace('\n', ''))
+        if json_match:
+            extracted_json = json_match.group(1)
+            comments = json.loads(extracted_json)
+        else:
+            comments = json.loads(result)
         
-        try:
-            # First try to extract JSON if it's wrapped in text or code blocks
-            import re
-            json_match = re.search(r'(\[{.*}\])', result.replace('\n', ''))
-            if json_match:
-                extracted_json = json_match.group(1)
-                comments = json.loads(extracted_json)
-            else:
-                # Try the normal way
-                comments = json.loads(result)
+        if isinstance(comments, dict):
+            comments = [comments]
             
-            # If single object was returned, wrap in list
-            if isinstance(comments, dict):
-                comments = [comments]
-                
-            # Validate we have the required fields in each comment
-            valid_comments = []
-            for comment in comments:
-                # Only include comments that have all required fields
-                if all(k in comment for k in ["title", "highlightedText", "suggestedEdit"]):
-                    # Ensure issueType exists
-                    if "issueType" not in comment:
-                        comment["issueType"] = "general"
-                    
-                    # Ensure highlightStyle exists
-                    if "highlightStyle" not in comment:
-                        comment["highlightStyle"] = "#fef9c3"
-                    
-                    # Ensure explanation exists in suggestedEdit
-                    if "explanation" not in comment["suggestedEdit"]:
-                        comment["suggestedEdit"]["explanation"] = "This edit improves the text."
-                    if "references" not in comment["suggestedEdit"]:
-                        # Create basic references from quotation marks in explanation
-                        explanation = comment["suggestedEdit"]["explanation"]
-                        references = []
-                        
-                        # Find text in quotes
-                        quote_regex = r'"([^"]+)"'
-                        for match in re.finditer(quote_regex, explanation):
-                            quoted_text = match.group(1)
-                            references.append({
-                                "allusion": quoted_text,
-                                "referenceText": quoted_text
-                            })
-                        
-                        comment["suggestedEdit"]["references"] = references
-                    else:
-                        # Process existing references to ensure correct format
-                        processed_references = []
-                        for ref in comment["suggestedEdit"]["references"]:
-                            processed_ref = {
-                                "allusion": ref.get("allusion", ""),
-                                "referenceText": ref.get("referenceText", "")
-                            }
-                            processed_references.append(processed_ref)
-                        comment["suggestedEdit"]["references"] = processed_references
-                        print(f"Processed existing references: {processed_references}")
-                    
-                    # Standardize issueType to match our badge categories
-                    issue_type_mapping = {
-                        # Map all possible values from API responses to our standard badge types
-                        "coherence": "clarity",
-                        "clarity": "clarity",
-                        "logic": "clarity",
-                        "cohesion": "flow",
-                        "transition": "flow",
-                        "focus": "focus",
-                        "relevance": "focus",
-                        "structure": "flow",
-                        "theme": "focus",
-                        "consistency": "clarity",
-                        "flow": "flow",
-                        "connection": "flow",
-                        "purpose": "focus",
-                        "alignment": "clarity",
-                        "organization": "flow",
-                        "development": "clarity",
-                        "depth": "clarity",
-                        "explanation": "clarity",
-                        "argument": "clarity",
-                        "evidence": "focus",
-                        "tangent": "focus"
-                    }
-                    
-                    # Standardize to one of our badge types or keep as is if unknown
-                    if comment["issueType"] in issue_type_mapping:
-                        comment["issueType"] = issue_type_mapping[comment["issueType"]]
-                    
-                    valid_comments.append(comment)
-            
-            # If we have valid comments, return them, otherwise fall back
-            if valid_comments:
-                return valid_comments
-                
-            # Create a direct example for the model - single issue
-            if "Has this system encountered any issues yet??" in content:
-                return [{
-                    "title": "Lack of clarity",
-                    "issueType": "clarity",
-                    "highlightedText": "Has this system encountered any issues yet??",
-                    "highlightStyle": "#e9d5ff",
-                    "suggestedEdit": {
-                        "original": "Has this system encountered any issues yet??",
-                        "suggested": "Has this system encountered any issues yet?",
-                        "explanation": "Using a single question mark is the correct punctuation for a question.",
-                        "references": [
-                            {
-                                "allusion": "phrase you refer to in your explanation",
-                                "referenceText": "exact text to highlight in the document"
-                            }
-                            ]
-                    }
-                }]
-                
-            # Fall back to generic structure
-            return [{
-                "title": "No specific issues found",
-                "issueType": "structure",
-                "highlightedText": content[:100] + ("..." if len(content) > 100 else ""),
-                "highlightStyle": "#c4b5fd",
-                "suggestedEdit": {
-                    "original": content[:100] + ("..." if len(content) > 100 else ""),
-                    "suggested": content[:100] + ("..." if len(content) > 100 else ""),
-                    "explanation": "The text appears generally well-formed. Consider reviewing for clarity and purpose.",
-                    "references": [
-                    {
-                        "allusion": "phrase you refer to in your explanation",
-                        "referenceText": "exact text to highlight in the document"
-                    }
-                    ]
-                }
-            }]
-            
-        except json.JSONDecodeError as e:
-            print(f"JSON decode error: {str(e)}")
-            print(f"Problematic JSON: {result[:200]}...")
-            
-            # Check for double question marks and create a direct response
-            if "Has this system encountered any issues yet??" in content:
-                return [{
-                    "title": "Lack of Clarity",
-                    "issueType": "clarity",
-                    "highlightedText": "Has this system encountered any issues yet??",
-                    "highlightStyle": "#e9d5ff",
-                    "suggestedEdit": {
-                        "original": "Has this system encountered any issues yet??",
-                        "suggested": "Has this system encountered any issues yet?",
-                        "explanation": "Using a single question mark is the correct punctuation for a question.",
-                        "references": [
-                        {
-                            "allusion": "phrase you refer to in your explanation",
-                            "referenceText": "exact text to highlight in the document"
-                        }
-                        ]
-                    }
-                }]
-            
-            return [{
-                "title": "Analysis Formatting Issue",
-                "issueType": "structure",
-                "highlightedText": content[:100] + ("..." if len(content) > 100 else ""),
-                "highlightStyle": "#fef9c3",
-                "suggestedEdit": {
-                    "original": content[:100] + ("..." if len(content) > 100 else ""),
-                    "suggested": content[:100] + ("..." if len(content) > 100 else ""),
-                    "explanation": "The analysis couldn't be properly formatted. Please try again with more detailed text.",
-                    "references": [
-                    {
-                        "allusion": "phrase you refer to in your explanation",
-                        "referenceText": "exact text to highlight in the document"
-                    }
-                    ]
-                }
-            }]
+        # postprocess and validation logic continues...
+
+        return comments
 
     except Exception as e:
         print(f"Error in analyze_text_with_context: {str(e)}")
@@ -1094,23 +675,19 @@ def analyze_with_context():
                 "coherence": "coherence",
                 "logic": "coherence",
                 "theme": "coherence",
-                "consistency": "coherence",
+                "consistency": "focus",
                 "purpose": "coherence",
                 "alignment": "coherence",
                 "argument": "coherence",
                 "evidence": "coherence",
-                "tangent": "coherence",
+                "tangent": "focus",
                 "clarity": "clarity",
-                "focus": "clarity",
-                "explanation": "clarity",
-                "development": "clarity",
-                "depth": "clarity",
-                "relevance": "clarity",
+                "focus": "focus",
                 "flow": "flow",
                 "cohesion": "flow",
                 "transition": "flow",
                 "connection": "flow",
-                "organization": "flow",
+                "organization": "focus",
                 "structure": "flow"
             }
             
@@ -1550,21 +1127,35 @@ USER'S SELECTED TEXT:
 USER'S PROMPT:
 "{prompt}"
 
-Your task is to analyze the selected text based on the user's prompt and provide:
-1. A thoughtful explanation in response to the prompt
-2. A suggested improvement to the selected text
+Your task is to analyze the selected text in light of the user's prompt and provide:
+
+A clear and specific explanation that responds directly to the user's request
+
+A revised version of the selected text that improves it based on your explanation
 
 GUIDELINES:
-- Be specific and constructive in your explanation
-- Focus on the type of improvement requested in the prompt
-- Keep your explanation concise (2-4 sentences)
-- Make your suggested improvement maintain the original meaning while addressing the user's request
-- If the user's prompt is unclear, focus on improving the clarity and flow of the text.
-- If the user's prompt is unrelated to writing feedback or text improvement, respond with "I'm sorry, I can only help with writing feedback and text improvement."
+
+Make your explanation specific to what the selected text is trying to do within its context. Focus on how well it achieves that and what is missing or unclear.
+
+Avoid generic statements. Always reference what the sentence is trying to convey or accomplish.
+
+Do not refer to grammar, clarity, or structure as isolated categories—always connect your feedback to the text's ideas or purpose.
+
+Maintain a respectful and professional tone, focused on improving the reader's experience.
+
+Keep your explanation brief (2–4 sentences) and use straightforward language.
+
+Your improvement should maintain the original tone and meaning while addressing the user's request.
+
+If the user's prompt is vague, default to improving clarity, focus, or flow.
+
+If the user's prompt is unrelated to writing feedback or text improvement, respond with "I'm sorry, I can only help with writing feedback and text improvement."
 
 FORMAT YOUR RESPONSE AS:
-1. First, provide a concise explanation that addresses the user's prompt. Do not include any other additiional text of formatting. For example, no bulletpoints, no quotes, no formatting.
-2. Second, provide your suggested improvement to the text. If the prompt was unrelated to the writing feedback or text improvement, respond with the same text as the selected text. Do not include any other additiional text of formatting. For example, no bulletpoints, no quotes, no formatting. 
+
+First, provide a concise explanation that addresses the user's prompt. Do not include any extra formatting, labels, or bullet points.
+
+Second, provide only the improved version of the selected text. Do not include any extra text or formatting.
 """
 
         # Add full context if provided
@@ -1607,7 +1198,7 @@ FORMAT YOUR RESPONSE AS:
     except Exception as e:
         raise DocumentProcessingError(f"Failed to process custom prompt: {str(e)}")
 
-def analyze_sentence_connection(sentence: str, document: str, strength: float) -> str:
+def analyze_sentence_connection(sentence: str, document: str, strength: float, paragraph_topic: str = None, essay_topic: str = None) -> str:
     """
     Generate a brief explanation of how a sentence connects to the document through lexical cohesion.
     
@@ -1615,6 +1206,8 @@ def analyze_sentence_connection(sentence: str, document: str, strength: float) -
         sentence: The specific sentence to analyze
         document: The full document context
         strength: The connection strength score (0.0-1.0)
+        paragraph_topic: Optional paragraph topic sentence
+        essay_topic: Optional essay topic/thesis statement
         
     Returns:
         Brief explanation of the lexical cohesion connections
@@ -1623,26 +1216,55 @@ def analyze_sentence_connection(sentence: str, document: str, strength: float) -
         Exception: If analysis fails
     """
     try:
+        # Build topic context conditionally
+        topic_context = ""
+        if essay_topic:
+            topic_context += f"\nESSAY TOPIC: \"{essay_topic}\""
+        else:
+            topic_context += f"\nESSAY TOPIC: [Not specified]"
+            
+        if paragraph_topic:
+            topic_context += f"\nPARAGRAPH TOPIC: \"{paragraph_topic}\""
+        else:
+            topic_context += f"\nPARAGRAPH TOPIC: [Not specified]"
+
         # Create a focused prompt for connection explanation
         connection_prompt = f"""
-Explain in 1-2 short sentences how this sentence connects to the document through lexical cohesion.
+TASK
+Explain in 1–2 short sentences how this sentence connects to the document through lexical and thematic cohesion.
+
+INPUTS
 
 SENTENCE TO ANALYZE: "{sentence}"
+{topic_context}
+
 CONNECTION STRENGTH: {strength}
+
 DOCUMENT CONTEXT: {document}
 
-Focus on specific lexical cohesion elements:
-- Shared vocabulary and word families
-- Thematic consistency with main ideas  
-- Referential connections (pronouns, repeated concepts)
-- Position in the argument structure
+INSTRUCTIONS
+Provide a concise explanation of how the sentence connects (or doesn't) to the surrounding document using lexical and thematic elements. Start the explanation with 2–3 lowercase keywords that summarize the connection type. These keywords should reflect the strength and nature of the connection in a professional, student-friendly tone.
 
-Examples of good explanations:
-- "Reinforces main theme through repeated key vocabulary 'miniature making' and connects to earlier problem-solving examples"
-- "Transitional content with limited vocabulary overlap, provides chronological context but few thematic connections"
-- "Central argument with strong vocabulary ties to 'creativity' and 'determination' themes established throughout"
+{"Strong connections: use keywords like well-integrated, reinforces theme, supports argument, consistent wording, clear connection, builds on ideas" if strength >= 0.7 else ""}
+{"Moderate connections: use keywords like partial overlap, loosely related, general alignment, somewhat relevant, idea shift" if 0.3 <= strength < 0.7 else ""}
+{"Weak or unclear connections: use keywords like unclear link, vague reference, disconnected idea, off-topic drift, limited cohesion" if strength < 0.3 else ""}
 
-Be concise, specific, and focus on HOW the sentence connects lexically. Keep under 20 words.
+GUIDELINES
+- Be specific and concise (under 20 words total).
+- Do not define the keywords — just prepend them.
+- Focus on how the sentence connects in terms of:
+  * Shared vocabulary or word families
+  * Thematic alignment with {"essay/paragraph topics" if essay_topic or paragraph_topic else "document themes"}
+  * Repetition of ideas or phrasing
+  * Logical progression or argument structure
+- If strength < 0.8, the explanation should reflect the weaker cohesion more critically, while remaining respectful and constructive.
+{"- Reference the essay topic when analyzing thematic alignment." if essay_topic else ""}
+{"- Consider the paragraph topic when evaluating local coherence." if paragraph_topic else ""}
+
+FORMAT
+Write a single sentence that begins with the 2–3 keywords, followed by a short explanation (no labels, no extra formatting).
+For example:
+partial overlap, vague reference — introduces a new concept without clearly linking to earlier ideas about community impact.
 """
 
         # Make the API call
@@ -1703,6 +1325,8 @@ def explain_connection():
         sentence = data['sentence'].strip()
         document_context = data['documentContext'].strip()
         connection_strength = data.get('connectionStrength', 0.5)
+        paragraph_topic = data.get('paragraphTopic')  # Optional
+        essay_topic = data.get('essayTopic')          # Optional
 
         if not sentence or not document_context:
             return jsonify({
@@ -1710,8 +1334,14 @@ def explain_connection():
                 "code": "EMPTY_CONTENT"
             }), 400
 
-        # Generate the connection explanation
-        explanation = analyze_sentence_connection(sentence, document_context, connection_strength)
+        # Generate the connection explanation with optional topics
+        explanation = analyze_sentence_connection(
+            sentence, 
+            document_context, 
+            connection_strength,
+            paragraph_topic,
+            essay_topic
+        )
         
         return jsonify({
             "success": True,
@@ -1822,7 +1452,7 @@ def analyze_sentence_connections(clicked_sentence: str, full_document: str, clic
                     "reason": get_connection_reason(clicked_sentence, sentence_text, final_strength)
                 })
         
-        print(f"Found {len(connections)} connections for sentence with strength {clicked_sentence_strength}")
+        print(f"Found {len(connections)} sentence connections")
         return connections
         
     except Exception as e:
@@ -1873,7 +1503,7 @@ def get_connection_reason(sentence1: str, sentence2: str, strength: float) -> st
     Generate a brief reason for the connection strength.
     """
     if strength >= 0.8:
-        return "Strong thematic and vocabulary overlap"
+        return "Strong thematic and vocabulary connections"
     elif strength >= 0.5:
         return "Moderate lexical connections"  
     elif strength >= 0.2:

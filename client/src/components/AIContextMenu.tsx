@@ -1,6 +1,6 @@
-import { useState, Dispatch, SetStateAction, useEffect } from 'react';
+import { useState, Dispatch, SetStateAction, useEffect, useRef } from 'react';
 import { Editor } from '@tiptap/react';
-import { Wand2, Copy, Clipboard, RectangleEllipsis, FileText, MessageSquare, DropletIcon, Waves, CheckCheckIcon, FileCheck2, DockIcon, HighlighterIcon } from 'lucide-react';
+import { Wand2, Copy, Clipboard, RectangleEllipsis, FileText, MessageSquare, FileCheck2, HighlighterIcon, MousePointer2 } from 'lucide-react';
 import { InlineAIPrompt } from './InlineAIPrompt';
 import { InlineAIResponse } from './InlineAIResponse';
 import { sendCustomPrompt } from '../lib/api';
@@ -9,11 +9,11 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
-  ContextMenuLabel,
   ContextMenuSeparator,
 } from '@/components/ui/context-menu';
 import { Card, CardContent } from '@/components/ui/card';
 import { CommentType } from './editor/types';
+import { Button } from '@/components/ui/button';
 
 // Comment type re-exported for convenience
 export type { CommentType };
@@ -46,21 +46,38 @@ export function AIContextMenu({
   const [showInlinePrompt, setShowInlinePrompt] = useState(false);
   const [promptPosition, setPromptPosition] = useState({ x: 0, y: 0 });
   const [selectedText, setSelectedText] = useState('');
-  const [showContextMenu, setShowContextMenu] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [aiResponse, setAiResponse] = useState<{
     response: string;
     suggestedText: string
   } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [isSelectedTextHovered, setIsSelectedTextHovered] = useState(false);
+  const [originalSelection, setOriginalSelection] = useState<{ from: number; to: number } | null>(null);
+  const [isWaitingForReselection, setIsWaitingForReselection] = useState(false);
+  const activeMouseUpListener = useRef<((e: MouseEvent) => void) | null>(null);
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    startMouseX: number;
+    startMouseY: number
+  }>({
+    startX: 0,
+    startY: 0,
+    startMouseX: 0,
+    startMouseY: 0
+  });
 
   const handleAIAction = () => {
     if (!editor) return;
     const { from, to } = editor.state.selection;
     if (from === to) return; // No selection
 
-    // Store the selected text
+    // Store the selected text and original selection range
     const text = editor.state.doc.textBetween(from, to);
     setSelectedText(text);
+    setOriginalSelection({ from, to });
 
     const mouseEvent = window.event as MouseEvent;
 
@@ -69,7 +86,6 @@ export function AIContextMenu({
       y: Math.max(20, mouseEvent.clientY - 20)
     });
     setShowInlinePrompt(true);
-    setShowContextMenu(false); // Close context menu when showing prompt
     // Reset any previous responses
     setAiResponse(null);
   };
@@ -155,7 +171,118 @@ export function AIContextMenu({
   const handleClosePrompt = () => {
     setShowInlinePrompt(false);
     setAiResponse(null);
+    setDragOffset({ x: 0, y: 0 });
+    setOriginalSelection(null);
+    setIsSelectedTextHovered(false);
+    setIsWaitingForReselection(false);
+
+    // Clean up any active mouseup listener
+    if (activeMouseUpListener.current) {
+      document.removeEventListener('mouseup', activeMouseUpListener.current);
+      activeMouseUpListener.current = null;
+    }
   };
+
+  const handleReselectText = () => {
+    if (!editor || !originalSelection) return;
+
+    // Clean up any existing listener first
+    if (activeMouseUpListener.current) {
+      document.removeEventListener('mouseup', activeMouseUpListener.current);
+      activeMouseUpListener.current = null;
+    }
+
+    // Set waiting state
+    setIsWaitingForReselection(true);
+
+    // Reselect the original text in the editor
+    editor.commands.setTextSelection({
+      from: originalSelection.from,
+      to: originalSelection.to
+    });
+
+    // Focus the editor
+    editor.commands.focus();
+
+    // Set up a listener to detect when the user finishes making a new selection
+    const handleMouseUp = () => {
+      // Small delay to ensure selection is finalized
+      setTimeout(() => {
+        const { from, to } = editor.state.selection;
+        if (from !== to) {
+          // User made a new selection
+          const newText = editor.state.doc.textBetween(from, to);
+          if (newText !== selectedText && newText.trim().length > 0) {
+            // Update the selected text and original selection
+            setSelectedText(newText);
+            setOriginalSelection({ from, to });
+            setIsWaitingForReselection(false);
+
+            // Remove the listener after updating
+            document.removeEventListener('mouseup', handleMouseUp);
+            activeMouseUpListener.current = null;
+          }
+        }
+      }, 50); // Small delay to ensure selection is complete
+    };
+
+    // Store the listener reference and add it to the document
+    activeMouseUpListener.current = handleMouseUp;
+    document.addEventListener('mouseup', handleMouseUp);
+
+    // Clean up the listener after a timeout in case user doesn't make a new selection
+    setTimeout(() => {
+      if (activeMouseUpListener.current === handleMouseUp) {
+        document.removeEventListener('mouseup', handleMouseUp);
+        activeMouseUpListener.current = null;
+        setIsWaitingForReselection(false);
+      }
+    }, 10000); // 10 seconds timeout
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    // Don't start dragging if clicking on buttons, inputs, or textareas
+    if ((e.target as HTMLElement).closest('button, input, textarea')) {
+      return;
+    }
+
+    setIsDragging(true);
+    dragRef.current = {
+      startX: dragOffset.x,
+      startY: dragOffset.y,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY
+    };
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging) return;
+
+    const deltaX = e.clientX - dragRef.current.startMouseX;
+    const deltaY = e.clientY - dragRef.current.startMouseY;
+
+    setDragOffset({
+      x: dragRef.current.startX + deltaX,
+      y: dragRef.current.startY + deltaY
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging]);
 
   const handleUpdateComment = (commentId: string) => {
     if (!editor) return;
@@ -385,39 +512,76 @@ export function AIContextMenu({
       </div>
       {showInlinePrompt && (
         <div
+          className="select-none"
           style={{
             position: 'fixed',
-            left: `${promptPosition.x}px`,
-            top: `${promptPosition.y}px`,
-            zIndex: 100
+            left: `${promptPosition.x + dragOffset.x}px`,
+            top: `${promptPosition.y + dragOffset.y}px`,
+            zIndex: 100,
+            cursor: isDragging ? 'grabbing' : 'grab'
           }}
+          onMouseDown={handleMouseDown}
         >
-          {isLoading ? (
+          <div className="flex flex-col space-y-2">
+            <div
+              className={`text-xs text-gray-600 mb-2 p-2 bg-blue-50 border border-blue-200 rounded max-w-[300px] min-h-fit relative${isWaitingForReselection ? ' border-blue-400 bg-blue-100' : ''
+                }`}
+              onMouseEnter={() => setIsSelectedTextHovered(true)}
+              onMouseLeave={() => setIsSelectedTextHovered(false)}
+            >
+              <span className="italic break-words">"{selectedText}"</span>
+
+              {/* Waiting indicator */}
+              {isWaitingForReselection && (
+                <div className="absolute inset-0 flex items-center justify-center bg-blue-50/80 rounded">
+                  <span className="text-xs text-blue-600 font-medium">Select new text in editor...</span>
+                </div>
+              )}
+
+              {/* Hover button for reselection */}
+              {isSelectedTextHovered && !isWaitingForReselection && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`absolute top-1 right-1 h-6 w-6 p-0 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border shadow-md hover:shadow-lg transition-all duration-200`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleReselectText();
+                  }}
+                  title="Reselect this text in editor"
+                >
+                  <MousePointer2 className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+            {isLoading ? (
             // Loading state
-            <Card className="w-[400px] shadow-lg">
-              <CardContent className="p-3 flex justify-center items-center h-16">
-                <div className="text-sm">Processing your request...</div>
-              </CardContent>
-            </Card>
-          ) : aiResponse ? (
-            // AI response state
-            <InlineAIResponse
-              response={aiResponse.response}
-              suggestedText={aiResponse.suggestedText}
-              onClose={handleClosePrompt}
-              onInsert={handleInsertText}
-              onBackToMenu={handleBackToContextMenu}
-            />
-          ) : (
-            // Initial prompt state
-            <InlineAIPrompt
-              onSubmit={handleSubmitPrompt}
-              onClose={handleClosePrompt}
-              onBackToMenu={handleBackToContextMenu} // Add this line
-              title="AI Writing Assistant"
-              placeholder="Ask AI to help with your selected text..."
-            />
-          )}
+              <Card className="w-[300px] shadow-lg">
+                <CardContent className="p-3 flex justify-center items-center h-16">
+                  <div className="text-sm">Analyzing your request...</div>
+                </CardContent>
+              </Card>
+            ) : aiResponse ? (
+              // AI response state
+
+                <InlineAIResponse
+                  response={aiResponse.response}
+                  suggestedText={aiResponse.suggestedText}
+                  onClose={handleClosePrompt}
+                  onInsert={handleInsertText}
+                  onBackToMenu={handleBackToContextMenu}
+                />
+              ) : (
+                // Initial prompt state
+                <InlineAIPrompt
+                  onSubmit={handleSubmitPrompt}
+                  onClose={handleClosePrompt}
+                onBackToMenu={handleBackToContextMenu}
+                title="AI Writing Assistant"
+                placeholder="Ask AI to help with your selected text..."
+              />
+            )}
+          </div>
         </div>
       )}
     </>

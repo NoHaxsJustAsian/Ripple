@@ -37,10 +37,14 @@ export function InlineAIPrompt({
   };
 
   return (
-    <Card className="w-[400px] shadow-lg">
+    <Card
+      className="w-[300px] shadow-lg select-none"
+    >
       <CardContent className="p-3">
         <div className="flex flex-col space-y-2">
-          <div className="flex items-center justify-between">
+          <div
+            className="flex items-center justify-between cursor-grab active:cursor-grabbing"
+          >
             <div className="flex items-center space-x-2">
               <Wand2 className="h-4 w-4" />
               <span className="text-sm font-medium">{title}</span>

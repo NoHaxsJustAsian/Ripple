@@ -1,5 +1,5 @@
 // src/components/InlineAIResponse.tsx
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Wand2, X, Copy, Check, Menu } from 'lucide-react';
@@ -20,16 +20,81 @@ export function InlineAIResponse({
     onBackToMenu
 }: InlineAIResponseProps) {
     const [isHovered, setIsHovered] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
+    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const dragRef = useRef<{
+        startX: number;
+        startY: number;
+        startMouseX: number;
+        startMouseY: number
+    }>({
+        startX: 0,
+        startY: 0,
+        startMouseX: 0,
+        startMouseY: 0
+    });
 
     const handleCopySuggestion = () => {
         navigator.clipboard.writeText(suggestedText);
     };
 
+    const handleMouseDown = (e: React.MouseEvent) => {
+        if ((e.target as HTMLElement).closest('button')) {
+            return;
+        }
+
+        setIsDragging(true);
+        dragRef.current = {
+            startX: position.x,
+            startY: position.y,
+            startMouseX: e.clientX,
+            startMouseY: e.clientY
+        };
+        e.preventDefault();
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+        if (!isDragging) return;
+
+        const deltaX = e.clientX - dragRef.current.startMouseX;
+        const deltaY = e.clientY - dragRef.current.startMouseY;
+
+        setPosition({
+            x: dragRef.current.startX + deltaX,
+            y: dragRef.current.startY + deltaY
+        });
+    };
+
+    const handleMouseUp = () => {
+        setIsDragging(false);
+    };
+
+    useEffect(() => {
+        if (isDragging) {
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+
+            return () => {
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+            };
+        }
+    }, [isDragging]);
+
     return (
-        <Card className="w-[400px] shadow-lg">
+        <Card
+            className="w-[350px] shadow-lg select-none"
+            style={{
+                transform: `translate(${position.x}px, ${position.y}px)`,
+                cursor: isDragging ? 'grabbing' : 'default'
+            }}
+        >
             <CardContent className="p-3">
                 <div className="flex flex-col space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div
+                        className="flex items-center justify-between cursor-grab active:cursor-grabbing"
+                        onMouseDown={handleMouseDown}
+                    >
                         <div className="flex items-center space-x-2">
                             <Wand2 className="h-4 w-4" />
                             <span className="text-sm font-medium">AI Response</span>
@@ -99,7 +164,7 @@ export function InlineAIResponse({
                         <Button
                             size="sm"
                             onClick={() => onInsert(suggestedText)}
-                            className="h-6 px-2 text-xs"
+                            className="h-6 px-2 text-xs bg-blue-500 text-white"
                         >
                             <Check className="h-3 w-3 mr-1" />
                             Insert

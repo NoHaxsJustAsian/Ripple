@@ -1247,6 +1247,13 @@ export function EditorContainer({
     }
   }, [highlightingManager, paragraphTopicTexts]);
 
+  // Update highlighting manager with topics for hover functionality whenever they change
+  useEffect(() => {
+    if (highlightingManager) {
+      highlightingManager.updateTopicsForHover(paragraphTopicTexts, essayTopicText);
+    }
+  }, [highlightingManager, paragraphTopicTexts, essayTopicText]);
+
   return (
     <div className={cn("w-full h-full relative", className)}>
       <InsightsContext.Provider value={[insights, setInsights]}>

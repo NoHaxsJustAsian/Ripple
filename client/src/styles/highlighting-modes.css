@@ -74,7 +74,8 @@
 .flow-mode-highlight[data-connection-strength^="0.0"],
 .flow-mode-highlight[data-connection-strength^="0.1"],
 .flow-mode-highlight[data-connection-strength^="0.2"],
-.flow-mode-highlight[data-connection-strength^="0.3"] {
+.flow-mode-highlight[data-connection-strength^="0.3"],
+.flow-mode-highlight[data-connection-strength^="0.4"] {
     background-color: rgba(65, 167, 207, 0.20);
         border-bottom: 1px solid rgba(65, 167, 207, 0.4);
     border-radius: 2px;
@@ -82,7 +83,6 @@
 }
 
 /* Moderate cohesion: 0.4-0.7 range */
-.flow-mode-highlight[data-connection-strength^="0.4"],
 .flow-mode-highlight[data-connection-strength^="0.5"],
 .flow-mode-highlight[data-connection-strength^="0.6"],
 .flow-mode-highlight[data-connection-strength^="0.7"] {

@@ -306,6 +306,8 @@ export async function explainConnection(data: {
   sentence: string;
   documentContext: string;
   connectionStrength: number;
+  paragraphTopic?: string;  // Add optional paragraph topic
+  essayTopic?: string;      // Add optional essay topic
 }): Promise<{ explanation: string }> {
   if (!data.sentence.trim() || !data.documentContext.trim()) {
     throw new Error('Empty sentence or document context');

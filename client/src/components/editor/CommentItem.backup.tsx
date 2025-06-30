@@ -16,8 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   RotateCcw,
-  ListRestartIcon,
-  ExternalLink,
+  ListRestartIcon
 } from 'lucide-react';
 import { CommentType, Reference } from './types';
 import {

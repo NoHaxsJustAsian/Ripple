@@ -51,10 +51,19 @@ class FlowHoverManager {
     private explanationCache = new Map<string, string>();
     private loadingStates = new Set<string>();
     private documentContext: string = '';
+    private paragraphTopics: { [paragraphId: string]: string } = {};
+    private essayTopic: string = '';
 
     setDocumentContext(context: string) {
         this.documentContext = context;
         // Clear cache when document changes
+        this.explanationCache.clear();
+    }
+
+    setTopics(paragraphTopics: { [paragraphId: string]: string }, essayTopic: string) {
+        this.paragraphTopics = paragraphTopics;
+        this.essayTopic = essayTopic;
+        // Clear cache when topics change
         this.explanationCache.clear();
     }
 
@@ -73,10 +82,15 @@ class FlowHoverManager {
         this.loadingStates.add(sentenceText);
 
         try {
+            // Find paragraph topic for this sentence
+            const paragraphTopic = this.findParagraphTopicForSentence(sentenceText);
+
             const response = await explainConnection({
                 sentence: sentenceText,
                 documentContext: this.documentContext,
-                connectionStrength: connectionStrength
+                connectionStrength: connectionStrength,
+                paragraphTopic: paragraphTopic,
+                essayTopic: this.essayTopic || undefined
             });
 
             const explanation = response.explanation;
@@ -103,6 +117,28 @@ class FlowHoverManager {
         } finally {
             this.loadingStates.delete(sentenceText);
         }
+    }
+
+    private findParagraphTopicForSentence(sentenceText: string): string | undefined {
+        // Find which paragraph contains the sentence
+        const documentText = this.documentContext; // Get current document text
+        const paragraphs: string[] = documentText.split(/\n\s*\n/).filter((p: string) => p.trim());
+
+        for (let i = 0; i < paragraphs.length; i++) {
+            const paragraph = paragraphs[i];
+            if (paragraph.includes(sentenceText)) {
+                const paragraphId = `paragraph-${i}`;
+                const topic = this.paragraphTopics[paragraphId];
+                if (topic) {
+                    console.log(`📍 Found paragraph topic for sentence: "${topic}"`);
+                    return topic;
+                }
+                break; // Stop searching once we find the paragraph
+            }
+        }
+
+        console.log('📍 No paragraph topic found for this sentence');
+        return undefined;
     }
 
     isLoading(sentenceText: string): boolean {
@@ -454,6 +490,10 @@ export class HighlightingManager {
     // Flow Hover Methods
     setDocumentContext(context: string): void {
         this.flowHoverManager.setDocumentContext(context);
+    }
+
+    updateTopicsForHover(paragraphTopics: { [paragraphId: string]: string }, essayTopic: string): void {
+        this.flowHoverManager.setTopics(paragraphTopics, essayTopic);
     }
 
     async handleFlowHover(sentenceText: string, connectionStrength: number): Promise<string | null> {
@@ -860,10 +900,7 @@ export class HighlightingManager {
             });
 
             console.log(`✅ Added connection highlight: ${connection.text.substring(0, 30)}... (strength: ${connection.connectionStrength})`);
-        });
-
-        // Debug: Test CSS rules
-        this.debugCSSRules();
+        })
 
         // Debug: Check what elements exist in the DOM after applying marks
         setTimeout(() => {
@@ -1113,41 +1150,6 @@ export class HighlightingManager {
         }
     }
 
-    // Debug helper to test CSS rules
-    private debugCSSRules(): void {
-        console.log('🎨 Testing CSS rules for sentence connections...');
-
-        // Create a test element to check CSS
-        const testElement = document.createElement('span');
-        testElement.className = 'sentence-connection sentence-connection-strong';
-        testElement.setAttribute('data-connection-id', 'test');
-        testElement.setAttribute('data-connection-strength', '0.8');
-        testElement.textContent = 'Test sentence connection';
-
-        // Append to editor container to test CSS
-        const editorContainer = this.editor.view.dom.closest('.editor-container') as HTMLElement;
-        if (editorContainer) {
-            editorContainer.appendChild(testElement);
-
-            // Check computed styles
-            const computedStyle = window.getComputedStyle(testElement);
-            console.log('🎨 Test element computed styles:', {
-                backgroundColor: computedStyle.backgroundColor,
-                borderBottom: computedStyle.borderBottom,
-                display: computedStyle.display,
-                visibility: computedStyle.visibility
-            });
-
-            // Check if container has the right mode
-            console.log('🎨 Container mode:', editorContainer.getAttribute('data-highlighting-mode'));
-
-            // Remove test element
-            setTimeout(() => {
-                editorContainer.removeChild(testElement);
-            }, 1000);
-        }
-    }
-
     private captureSentenceContext(sentenceText: string, documentText: string): {
         originalText: string;
         documentSnapshot: string;
@@ -1305,17 +1307,18 @@ export class HighlightingManager {
 
     private findParagraphTopicForSentence(sentenceText: string, documentText: string): string | undefined {
         // Find which paragraph contains the sentence
-        const paragraphs = documentText.split(/\n\s*\n/).filter(p => p.trim());
+        const paragraphs: string[] = documentText.split(/\n\s*\n/).filter((p: string) => p.trim());
 
         for (let i = 0; i < paragraphs.length; i++) {
-            if (paragraphs[i].includes(sentenceText.trim())) {
+            const paragraph = paragraphs[i];
+            if (paragraph.includes(sentenceText.trim())) {
                 const paragraphId = `paragraph-${i}`;
                 const topic = this.paragraphTopics[paragraphId];
                 if (topic) {
                     console.log(`📍 Found paragraph topic for sentence: "${topic}"`);
                     return topic;
                 }
-                break;
+                break; // Stop searching once we find the paragraph
             }
         }
 
