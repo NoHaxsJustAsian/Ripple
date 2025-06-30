@@ -1104,7 +1104,6 @@ export function EditorContainer({
       const isCommentItem = target.closest('[data-comment-item]') || target.closest('.cursor-pointer');
 
       // Check if the click is inside the comments sidebar
-      const isInCommentsSidebar = target.closest('[data-comments-sidebar]');
 
       // Check if the click is on any interactive element that shouldn't trigger unfocus
       const isInteractiveElement = target.closest('button, input, textarea, select, [role="button"]');
@@ -1213,23 +1212,6 @@ export function EditorContainer({
     }
   }, [highlightingManager, editor, handleAddComment]);
 
-  const handleAnalyzeConnections = useCallback(() => {
-    // Re-run the sentence flow analysis
-    if (highlightingManager && editor) {
-      const selectedElement = editor.view.dom.querySelector('.flow-sentence-selected');
-      if (selectedElement) {
-        // Trigger a new analysis by simulating a click on the selected sentence
-        const clickEvent = new MouseEvent('click', {
-          view: window,
-          bubbles: true,
-          cancelable: true
-        });
-        selectedElement.dispatchEvent(clickEvent);
-        highlightingManager.hideSentenceFlowPopover();
-        toast.info("Re-analyzing sentence connections...");
-      }
-    }
-  }, [highlightingManager, editor]);
 
   const handleExplainSentence = useCallback(() => {
     const popoverState = highlightingManager?.getSentenceFlowPopoverState();

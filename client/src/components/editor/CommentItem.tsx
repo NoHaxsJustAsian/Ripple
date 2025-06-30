@@ -15,8 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   RotateCcw,
-  ListRestartIcon,
-  ExternalLink,
+  ListRestartIcon
 } from 'lucide-react';
 import { CommentType, Reference } from './types';
 import {
@@ -26,7 +25,6 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { toast } from "sonner";
-import styles from './CommentItem.module.css';
 
 interface CommentItemProps {
   comment: CommentType;
@@ -396,14 +394,6 @@ export function CommentItem({
     }
   };
 
-  const handleRefreshFeedback = () => {
-    if (onRefreshFeedback) {
-      // Call the refresh function provided by the parent
-      onRefreshFeedback(comment.id);
-      // The parent component will handle updating the feedback content
-      // and refreshing the lastRefreshedTime
-    }
-  };
 
   const handleRegenerateSuggestion = () => {
     if (onRegenerateSuggestion) {
@@ -559,14 +549,6 @@ export function CommentItem({
     setEditingCurrentText(null);
   };
 
-  const handleCurrentTextAreaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      saveCurrentTextEdit();
-    } else if (e.key === "Escape") {
-      setEditingCurrentText(null);
-    }
-  };
 
   // New handler to enter selection mode
   const handleEnterSelectionMode = () => {

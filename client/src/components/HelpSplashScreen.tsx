@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, Play, Info, PenTool, Lightbulb, MessageSquare, Award, FileText, WavesIcon, DropletIcon, CheckCheckIcon, FileCheck2Icon, BookCheckIcon } from 'lucide-react';
+import { X, Play, WavesIcon, DropletIcon, FileCheck2Icon, BookCheckIcon } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { Button } from './ui/button';
 import { CursorArrowIcon, MagicWandIcon } from '@radix-ui/react-icons';

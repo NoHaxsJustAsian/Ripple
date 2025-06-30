@@ -156,18 +156,8 @@ export class HighlightingManager {
     private state: HighlightingState;
     private onModeChange?: (mode: HighlightingMode) => void;
     private flowHoverManager: FlowHoverManager;
-    private selectedFlowSentenceId: string | null = null;
     private sentenceConnectionHighlights: Map<string, any> = new Map();
-    private isAnalyzing: boolean = false;
     private lastAnalyzedSentence: string | null = null;
-    private lastAnalyzedSentenceContext: {
-        originalText: string;
-        documentSnapshot: string;
-        paragraphIndex: number;
-        sentenceIndexInParagraph: number;
-        timestamp: number;
-        semanticKeywords: string[];
-    } | null = null;
 
     // Add sentence tracking for flow analysis (similar to CommentItem)
     private selectedSentenceTracker: {
@@ -240,7 +230,7 @@ export class HighlightingManager {
 
     // Mode Management
     switchMode(mode: HighlightingMode): void {
-        const previousMode = this.state.currentMode;
+        // const previousMode = this.state.currentMode;
         this.state.currentMode = mode;
 
         // Update DOM attribute for CSS switching
@@ -261,8 +251,6 @@ export class HighlightingManager {
 
         if (this.state.currentMode === 'flow-sentence') {
 
-            // Clear the selected sentence
-            this.selectedFlowSentenceId = null;
 
             // Hide popover and action panel
             this.hideSentenceFlowPopover();
@@ -720,7 +708,6 @@ export class HighlightingManager {
                 }
             }
 
-            this.selectedFlowSentenceId = selectedSentenceId;
 
             // Remove selected class from any previously selected sentences
             const previousSelected = this.editor.view.dom.querySelector('.flow-sentence-selected');
@@ -742,8 +729,6 @@ export class HighlightingManager {
 
             // Store the analyzed sentence for redo functionality
             this.lastAnalyzedSentence = sentenceText;
-            // Store enhanced context for robust sentence tracking
-            this.lastAnalyzedSentenceContext = this.captureSentenceContext(sentenceText, documentText);
 
             // Initialize sentence tracker for this selected sentence
             this.selectedSentenceTracker = this.initializeSentenceTracker(sentenceText, selectedSentenceId);
@@ -1143,54 +1128,12 @@ export class HighlightingManager {
     }
 
     private setAnalyzing(analyzing: boolean) {
-        this.isAnalyzing = analyzing;
         const editorContainer = this.editor.view.dom.closest('.editor-container');
         if (editorContainer) {
             editorContainer.setAttribute('data-analyzing', analyzing.toString());
         }
     }
 
-    private captureSentenceContext(sentenceText: string, documentText: string): {
-        originalText: string;
-        documentSnapshot: string;
-        paragraphIndex: number;
-        sentenceIndexInParagraph: number;
-        timestamp: number;
-        semanticKeywords: string[];
-    } {
-        const paragraphs = documentText.split(/\n\s*\n/).filter(p => p.trim());
-        let paragraphIndex = -1;
-        let sentenceIndexInParagraph = -1;
-
-        // Find which paragraph contains the sentence
-        for (let i = 0; i < paragraphs.length; i++) {
-            const sentences = paragraphs[i].split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
-            const sentenceIndex = sentences.findIndex(s => s === sentenceText.trim());
-            if (sentenceIndex !== -1) {
-                paragraphIndex = i;
-                sentenceIndexInParagraph = sentenceIndex;
-                break;
-            }
-        }
-
-        // Extract semantic keywords (important words that define the sentence meaning)
-        const commonWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those']);
-
-        const semanticKeywords = sentenceText.toLowerCase()
-            .replace(/[^\w\s]/g, ' ')
-            .split(/\s+/)
-            .filter(word => word.length > 2 && !commonWords.has(word))
-            .slice(0, 10); // Keep top 10 keywords
-
-        return {
-            originalText: sentenceText,
-            documentSnapshot: documentText,
-            paragraphIndex,
-            sentenceIndexInParagraph,
-            timestamp: Date.now(),
-            semanticKeywords
-        };
-    }
 
     private initializeSentenceTracker(sentenceText: string, sentenceId: string): {
         originalText: string;

@@ -29,17 +29,10 @@ interface SentenceFlowActionPanelProps {
 }
 
 export function SentenceFlowActionPanel({
-    position,
     sentenceText,
-    connectionStrength,
     connectedSentences,
     paragraphCohesion,
     documentCohesion,
-    onExitFlowMode,
-    onAddComment,
-    onCopySentence,
-    onRedoAnalysis,
-    onExplainSentence,
     onClose,
     onUpdateSentence,
     editor,

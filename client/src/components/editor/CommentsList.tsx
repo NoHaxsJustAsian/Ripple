@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { Editor } from '@tiptap/react';
 import { cn } from "@/lib/utils";
-import { ArrowRightToLine, ChevronDown, ChevronUp, FileCheck, RefreshCw, XCircle } from 'lucide-react';
+import { ArrowRightToLine, ChevronDown, ChevronUp, FileCheck, XCircle } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MultiSelect } from '@/components/ui/multi-select';
 import { CommentType } from './types';
@@ -39,9 +39,6 @@ export function CommentsList({
 }: CommentsListProps) {
   const commentsSectionRef = useRef<HTMLDivElement | null>(null);
 
-  // Track the last refreshed times for each comment
-  const [lastRefreshedTimes, setLastRefreshedTimes] = useState<{ [commentId: string]: Date }>({});
-
   // Track loading states for comments
   const [refreshingComments, setRefreshingComments] = useState<{ [commentId: string]: boolean }>({});
   const [regeneratingComments, setRegeneratingComments] = useState<{ [commentId: string]: boolean }>({});
@@ -52,29 +49,6 @@ export function CommentsList({
   // State for collapsed sections
   const [isReplacedOpen, setIsReplacedOpen] = useState<boolean>(false);
   const [isDismissedOpen, setIsDismissedOpen] = useState<boolean>(false);
-
-  // Helper function to get the current text from the editor for a comment
-  const getCurrentTextForComment = (commentId: string) => {
-    if (!editor) return null;
-
-    let foundPos: { from: number; to: number } | null = null;
-    editor.state.doc.descendants((node, pos) => {
-      const mark = node.marks.find(m =>
-        m.type.name === 'comment' &&
-        m.attrs.commentId === commentId
-      );
-      if (mark) {
-        foundPos = { from: pos, to: pos + node.nodeSize };
-        return false;
-      }
-    });
-
-    if (foundPos) {
-      return editor.state.doc.textBetween(foundPos.from, foundPos.to);
-    }
-
-    return null;
-  };
 
   // This function will be called when a user clicks the refresh button on a comment
   const handleRefreshFeedback = async (commentId: string) => {
@@ -98,12 +72,13 @@ export function CommentsList({
         foundPos = { from: pos, to: pos + node.nodeSize };
         return false;
       }
+      return true;
     });
 
     if (!foundPos) return;
 
     // Get the current text content at the comment location
-    const currentText = editor.state.doc.textBetween(foundPos.from, foundPos.to);
+    const currentText = editor.state.doc.textBetween((foundPos as { from: number; to: number }).from, (foundPos as { from: number; to: number }).to);
 
     // Set loading state for this comment
     setRefreshingComments(prev => ({
@@ -141,7 +116,7 @@ export function CommentsList({
               suggested: commentToRefresh.suggestedEdit.suggested || '',
               explanation: commentToRefresh.suggestedEdit.explanation || '',
               issueType: commentToRefresh.issueType,
-              references: commentToRefresh.suggestedEdit.references
+              references: commentToRefresh.suggestedEdit.references || []
             });
           }
 
@@ -153,7 +128,7 @@ export function CommentsList({
             suggested: commentToRefresh.suggestedEdit.suggested || '',
             explanation: response.data.updatedFeedback,
             issueType: commentToRefresh.issueType,
-            references: commentToRefresh.suggestedEdit.references
+            references: commentToRefresh.suggestedEdit.references || []
           };
 
           // Update the comment with new feedback and the updated history
@@ -208,7 +183,7 @@ export function CommentsList({
             suggested: commentToRefresh.suggestedEdit.suggested || '',
             explanation: commentToRefresh.suggestedEdit.explanation || '',
             issueType: commentToRefresh.issueType,
-            references: commentToRefresh.suggestedEdit.references
+            references: commentToRefresh.suggestedEdit.references || []
           });
         }
 
@@ -220,7 +195,7 @@ export function CommentsList({
           suggested: commentToRefresh.suggestedEdit?.suggested || commentToRefresh.quotedText || '',
           explanation: updatedFeedbackText,
           issueType: commentToRefresh.issueType,
-          references: commentToRefresh.suggestedEdit?.references
+          references: commentToRefresh.suggestedEdit?.references || []
         };
 
         // Update the comment with new feedback
@@ -239,7 +214,7 @@ export function CommentsList({
                     original: c.quotedText || '',
                     suggested: c.quotedText || '',
                     explanation: updatedFeedbackText,
-                    references: c.suggestedEdit?.references
+                    references: []
                   },
                 feedbackHistory: [...previousHistory, newHistoryEntry]
               }
@@ -247,12 +222,6 @@ export function CommentsList({
           )
         );
       }
-
-      // Update the last refreshed timestamp
-      setLastRefreshedTimes(prev => ({
-        ...prev,
-        [commentId]: new Date()
-      }));
 
     } catch (error) {
       console.error("Error refreshing feedback:", error);
@@ -290,12 +259,13 @@ export function CommentsList({
         foundPos = { from: pos, to: pos + node.nodeSize };
         return false;
       }
+      return true;
     });
 
     if (!foundPos) return;
 
     // Get the current text content at the comment location
-    const currentText = editor.state.doc.textBetween(foundPos.from, foundPos.to);
+    const currentText = editor.state.doc.textBetween((foundPos as { from: number; to: number }).from, (foundPos as { from: number; to: number }).to);
 
     // Set loading state for this comment
     setRegeneratingComments(prev => ({
@@ -331,7 +301,7 @@ export function CommentsList({
             suggested: commentToRegenerate.suggestedEdit.suggested || '',
             explanation: commentToRegenerate.suggestedEdit.explanation || '',
             issueType: commentToRegenerate.issueType,
-            references: commentToRegenerate.suggestedEdit.references
+            references: commentToRegenerate.suggestedEdit.references || []
           });
         }
 
@@ -343,7 +313,7 @@ export function CommentsList({
           suggested: response.data.suggestedEdit.suggested,
           explanation: response.data.suggestedEdit.explanation,
           issueType: commentToRegenerate.issueType,
-          references: response.data.suggestedEdit.references
+          references: (response.data.suggestedEdit as any).references || []
         };
 
         // Update the comment with the new suggestion
@@ -357,7 +327,7 @@ export function CommentsList({
                   original: commentToRegenerate.suggestedEdit?.original || commentToRegenerate.quotedText || '',
                   suggested: response.data.suggestedEdit.suggested,
                   explanation: response.data.suggestedEdit.explanation,
-                  references: response.data.suggestedEdit.references
+                  references: (response.data.suggestedEdit as any).references || []
                 },
                 feedbackHistory: [...previousHistory, newHistoryEntry]
               }
@@ -484,9 +454,8 @@ export function CommentsList({
         if (a.quotedText === b.quotedText) {
           return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         }
-
-        const aPos = textPositions.get(a.quotedText) || 0;
-        const bPos = textPositions.get(b.quotedText) || 0;
+        const aPos = textPositions.get(a.quotedText || '') || 0;
+        const bPos = textPositions.get(b.quotedText || '') || 0;
 
         return aPos - bPos;
       });

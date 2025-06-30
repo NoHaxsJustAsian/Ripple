@@ -285,20 +285,6 @@ export async function sendCustomPrompt(data: CustomPromptRequest): Promise<Custo
   }
 }
 
-// Interface for explain connection request
-interface ExplainConnectionRequest {
-  sentence: string;            // The specific sentence text
-  documentContext: string;     // Full document text
-  connectionStrength: number;  // The connection strength score
-}
-
-// Interface for explain connection response
-interface ExplainConnectionResponse {
-  success: boolean;
-  explanation: string;
-  processedAt: string;
-}
-
 /**
  * Makes a request to explain how a sentence connects to the document through lexical cohesion
  */

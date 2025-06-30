@@ -2,7 +2,7 @@ import { useCallback, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ModeToggle } from '@/components/ui/mode-toggle';
 import { ToggleSwitch } from '@/components/ui/toggle-switch';
-import { Save, FileDown, HelpCircle, FileCheck2, Droplet, PencilIcon, Pencil, PencilOffIcon } from 'lucide-react';
+import { Save, FileDown, HelpCircle, FileCheck2, Droplet, PencilIcon, PencilOffIcon } from 'lucide-react';
 import { toast } from "sonner";
 import { AnalysisTools } from './AnalysisTools';
 import { CommentType } from './types';

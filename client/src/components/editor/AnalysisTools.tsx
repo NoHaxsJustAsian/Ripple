@@ -26,9 +26,9 @@ export function AnalysisTools({
   setIsAnalysisRunning: externalSetIsAnalysisRunning
 }: AnalysisToolsProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [lastAnalysisTime, setLastAnalysisTime] = useState<Date | null>(null);
-  const [flowPrompt, setFlowPrompt] = useState<string>('Highlight important arguments with high emphasis, supporting details with medium emphasis, and transitions with low emphasis');
+  const [flowPrompt] = useState<string>('Highlight important arguments with high emphasis, supporting details with medium emphasis, and transitions with low emphasis');
 
   // Use external analysis running state if provided, otherwise use internal state
   const isAnalysisRunning = externalIsAnalysisRunning !== undefined ? externalIsAnalysisRunning : isAnalyzing;

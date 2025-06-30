@@ -50,8 +50,6 @@ export function findTextWithProseMirrorSearch(editor: Editor, textToFind: string
  */
 export function expandToSentenceBoundaries(doc: Node, from: number, to: number): TextPosition {
     try {
-        const $start = doc.resolve(from);
-        const $end = doc.resolve(to);
 
         // Expand backwards to sentence start
         let sentenceStart = from;

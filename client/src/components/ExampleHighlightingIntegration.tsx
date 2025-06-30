@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Editor } from '@tiptap/react';
 import { HighlightingManager, HighlightingMode } from '@/lib/highlighting-manager';
 import { HighlightingModeSwitcher } from './HighlightingModeSwitcher';

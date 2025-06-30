@@ -8,8 +8,6 @@ from .services import (
 )
 from .exceptions import DocumentProcessingError
 from . import bp  # Import blueprint from __init__.py
-from text_segmentation import segment_texts, basic_segmentation
-
 
 @bp.route("/analyze", methods=["POST"])
 def analyze_document():

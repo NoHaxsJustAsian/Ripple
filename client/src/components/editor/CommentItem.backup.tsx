@@ -26,7 +26,6 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { toast } from "sonner";
-import styles from './CommentItem.module.css';
 
 interface CommentItemProps {
   comment: CommentType;
@@ -513,14 +512,6 @@ export function CommentItem({
     setEditingCurrentText(null);
   };
 
-  const handleCurrentTextAreaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      saveCurrentTextEdit();
-    } else if (e.key === "Escape") {
-      setEditingCurrentText(null);
-    }
-  };
 
   // Show references if available
   {

@@ -6,7 +6,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { Check, ChevronDown, MessageSquare, FileText, RectangleEllipsis, Eye, EyeOff } from 'lucide-react';
+import { Check, ChevronDown, MessageSquare, FileText, RectangleEllipsis } from 'lucide-react';
 // impor/ { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
