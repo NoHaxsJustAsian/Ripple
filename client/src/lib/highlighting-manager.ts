@@ -1,6 +1,7 @@
 import { Editor } from '@tiptap/react';
 import { CommentType } from '@/components/editor/types';
 import { explainConnection, analyzeSentenceFlow } from './api';
+import { logEvent, EventType } from './event-logger';
 
 export type HighlightingMode = 'comments' | 'flow' | 'flow-sentence' | 'write';
 
@@ -158,6 +159,8 @@ export class HighlightingManager {
     private flowHoverManager: FlowHoverManager;
     private sentenceConnectionHighlights: Map<string, any> = new Map();
     private lastAnalyzedSentence: string | null = null;
+    private userId?: string;
+    private fileId?: string;
 
     // Add sentence tracking for flow analysis (similar to CommentItem)
     private selectedSentenceTracker: {
@@ -213,9 +216,11 @@ export class HighlightingManager {
     private popoverTimeout: NodeJS.Timeout | null = null;
     private popoverHideTimeout: NodeJS.Timeout | null = null;
 
-    constructor(editor: Editor, onModeChange?: (mode: HighlightingMode) => void) {
+    constructor(editor: Editor, onModeChange?: (mode: HighlightingMode) => void, userId?: string, fileId?: string) {
         this.editor = editor;
         this.onModeChange = onModeChange;
+        this.userId = userId;
+        this.fileId = fileId;
         this.state = {
             currentMode: 'comments',
             commentHighlights: new Map(),
@@ -244,6 +249,12 @@ export class HighlightingManager {
 
     getCurrentMode(): HighlightingMode {
         return this.state.currentMode;
+    }
+
+    // Update user and file context for logging
+    updateUserContext(userId?: string, fileId?: string): void {
+        this.userId = userId;
+        this.fileId = fileId;
     }
 
     // Method to exit flow-sentence mode and return to flow mode
@@ -615,6 +626,27 @@ export class HighlightingManager {
                 console.warn('⚠️ No stored highlight found, using DOM text:', sentenceText.substring(0, 50));
             }
 
+            // Log the hover event
+            if (this.userId) {
+                console.log('🎯 Flow hover detected - logging event...', {
+                    sentencePreview: sentenceText.substring(0, 50),
+                    connectionStrength,
+                    userId: this.userId.substring(0, 8) + '...',
+                    fileId: this.fileId ? this.fileId.substring(0, 8) + '...' : 'none'
+                });
+
+                await logEvent(this.userId, EventType.FLOW_SENTENCE_HOVER, {
+                    sentence_text: sentenceText,
+                    sentence_id: sentenceId,
+                    connection_strength: connectionStrength,
+                    hover_time: new Date().toISOString(),
+                    sentence_length: sentenceText.length,
+                    sentence_preview: sentenceText.substring(0, 100) // First 100 chars for quick review
+                }, this.fileId);
+            } else {
+                console.warn('⚠️ Flow hover detected but no userId available for logging');
+            }
+
             try {
                 // Fetch explanation asynchronously using complete sentence text
                 const explanation = await this.flowHoverManager.handleHover(sentenceText, connectionStrength);
@@ -677,12 +709,35 @@ export class HighlightingManager {
             // Get the clicked sentence text using stored content
             let sentenceText = target.textContent || '';
             let selectedSentenceId = target.getAttribute('data-sentence-id') || '';
+            const connectionStrength = parseFloat(target.getAttribute('data-connection-strength') || '0');
             const storedHighlight = this.state.flowHighlights.get(selectedSentenceId);
             if (storedHighlight) {
                 sentenceText = storedHighlight.content;
                 console.log('🔍 Using stored complete sentence for analysis:', sentenceText.substring(0, 50));
             } else {
                 console.warn('⚠️ No stored highlight found for analysis, using DOM text:', sentenceText.substring(0, 50));
+            }
+
+            // Log the click event
+            if (this.userId) {
+                console.log('🖱️ Flow click detected - logging event...', {
+                    sentencePreview: sentenceText.substring(0, 50),
+                    connectionStrength,
+                    userId: this.userId.substring(0, 8) + '...',
+                    fileId: this.fileId ? this.fileId.substring(0, 8) + '...' : 'none'
+                });
+
+                await logEvent(this.userId, EventType.FLOW_SENTENCE_CLICK, {
+                    sentence_text: sentenceText,
+                    sentence_id: selectedSentenceId,
+                    connection_strength: connectionStrength,
+                    click_time: new Date().toISOString(),
+                    sentence_length: sentenceText.length,
+                    sentence_preview: sentenceText.substring(0, 100), // First 100 chars for quick review
+                    action: 'enter_flow_sentence_mode' // What the click action does
+                }, this.fileId);
+            } else {
+                console.warn('⚠️ Flow click detected but no userId available for logging');
             }
 
             // Get the full document context

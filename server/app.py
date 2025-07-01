@@ -16,14 +16,48 @@ AZURE_DEPLOYMENT = "PROPILOT"
 # Initialize Flask app
 app = Flask(__name__)
 
-# Configure CORS - allow localhost for development if HOSTNAME not set
-allowed_origins = [HOSTNAME] if HOSTNAME else [
+# Configure CORS - allow production and development origins
+allowed_origins = []
+
+# Add production hostname if set
+if HOSTNAME:
+    allowed_origins.extend([
+        HOSTNAME,
+        HOSTNAME.replace('http://', 'https://'),  # Support both http and https
+        HOSTNAME.rstrip('/')  # Remove trailing slash if present
+    ])
+
+# Add Render domain if we can detect it
+render_url = os.getenv('RENDER_EXTERNAL_URL')
+if render_url:
+    allowed_origins.append(render_url)
+
+# Add development origins
+allowed_origins.extend([
     "http://localhost:3000",
     "http://localhost:5173", 
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173"
-]
+])
+
+# Remove duplicates and None values
+allowed_origins = list(set(filter(None, allowed_origins)))
+
+print(f"🌐 CORS allowed origins: {allowed_origins}")
+
 CORS(app, supports_credentials=True, origins=allowed_origins)
+
+# Log startup configuration for debugging
+print("=" * 50)
+print("🚀 RIPPLE NLP API STARTING UP")
+print("=" * 50)
+print(f"📍 Environment: {os.getenv('FLASK_ENV', 'production')}")
+print(f"🌐 Hostname: {HOSTNAME}")
+print(f"🌐 Render URL: {os.getenv('RENDER_EXTERNAL_URL', 'Not set')}")
+print(f"🔑 Azure OpenAI Key: {'✅ Set' if AZURE_OPENAI_KEY else '❌ Missing'}")
+print(f"🔗 Azure OpenAI Endpoint: {'✅ Set' if AZURE_OPENAI_ENDPOINT else '❌ Missing'}")
+print(f"🌐 CORS Origins: {len(allowed_origins)} configured")
+print("=" * 50)
 
 # Initialize OpenAI client
 client = AzureOpenAI(
@@ -592,11 +626,65 @@ def handle_chat_message(message: str, document_context: Optional[str] = None) ->
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """
-    Health check endpoint to verify API status.
+    Enhanced health check endpoint to verify API status and configuration.
+    """
+    try:
+        # Test Azure OpenAI connection
+        openai_status = "ok"
+        try:
+            if client and AZURE_OPENAI_KEY:
+                # Quick test call to verify connection (don't use tokens unnecessarily)
+                openai_status = "configured"
+            else:
+                openai_status = "not_configured"
+        except Exception as e:
+            openai_status = f"error: {str(e)[:50]}"
+        
+        return jsonify({
+            "status": "ok",
+            "version": "1.0.0",
+            "timestamp": datetime.utcnow().isoformat(),
+            "config": {
+                "cors_origins": len(allowed_origins),
+                "azure_openai": openai_status,
+                "environment": os.getenv('FLASK_ENV', 'production'),
+                "port": os.getenv('PORT', '5000')
+            },
+            "environment_vars": {
+                "HOSTNAME": bool(os.getenv('HOSTNAME')),
+                "RENDER_EXTERNAL_URL": bool(os.getenv('RENDER_EXTERNAL_URL')),
+                "AZURE_OPENAI_KEY": bool(AZURE_OPENAI_KEY),
+                "AZURE_OPENAI_ENDPOINT": bool(AZURE_OPENAI_ENDPOINT)
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+                 }), 500
+
+@app.route('/api/debug/info', methods=['GET'])
+def debug_info():
+    """
+    Debug endpoint to check configuration and environment
     """
     return jsonify({
-        "status": "ok",
-        "version": "1.0.0"
+        "environment": {
+            "FLASK_ENV": os.getenv('FLASK_ENV'),
+            "PORT": os.getenv('PORT'),
+            "HOST": os.getenv('HOST'),
+            "HOSTNAME": os.getenv('HOSTNAME'),
+            "RENDER_EXTERNAL_URL": os.getenv('RENDER_EXTERNAL_URL')
+        },
+        "azure_config": {
+            "endpoint_set": bool(AZURE_OPENAI_ENDPOINT),
+            "key_set": bool(AZURE_OPENAI_KEY),
+            "deployment": AZURE_DEPLOYMENT
+        },
+        "cors_origins": allowed_origins,
+        "python_version": sys.version,
+        "working_directory": os.getcwd()
     })
 
 @app.route("/api/analyze-context", methods=["POST"])
@@ -1887,5 +1975,12 @@ if __name__ == "__main__":
     # Validate configuration before starting
     if not AZURE_OPENAI_KEY:
         print("ERROR: AZURE_OPENAI_KEY not set in .env file!")
-    else:
-        app.run(host='127.0.0.1', port=5000, debug=True)
+        exit(1)
+    
+    # Production vs development configuration
+    port = int(os.getenv('PORT', 5000))
+    host = os.getenv('HOST', '0.0.0.0')  # Use 0.0.0.0 for production
+    debug = os.getenv('FLASK_ENV', 'production') == 'development'
+    
+    print(f"🚀 Starting Flask app on {host}:{port} (debug={debug})")
+    app.run(host=host, port=port, debug=debug)

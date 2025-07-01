@@ -31,6 +31,7 @@ interface EditorHeaderProps {
   highlightingManager?: HighlightingManager | null;
   isAnalysisRunning?: boolean;
   setIsAnalysisRunning?: (running: boolean) => void;
+  userId?: string;
 }
 
 export function EditorHeader({
@@ -49,7 +50,8 @@ export function EditorHeader({
   onLoadFile,
   highlightingManager,
   isAnalysisRunning,
-  setIsAnalysisRunning
+  setIsAnalysisRunning,
+  userId
 }: EditorHeaderProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isFilePickerOpen, setIsFilePickerOpen] = useState(false);
@@ -418,6 +420,8 @@ export function EditorHeader({
               highlightingManager={highlightingManager || undefined}
               isAnalysisRunning={isAnalysisRunning}
               setIsAnalysisRunning={setIsAnalysisRunning}
+              userId={userId}
+              fileId={currentFileId || undefined}
             />
             <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
 

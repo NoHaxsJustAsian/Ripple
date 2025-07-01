@@ -1146,7 +1146,7 @@ export function EditorContainer({
         console.log(`📊 Highlighting Manager: Mode changed to ${mode}`);
         // Force a re-render when highlighting manager state changes
         setPopoverTrigger(prev => prev + 1);
-      });
+      }, user?.id, currentFileId || undefined);
       setHighlightingManager(manager);
 
       // Expose globally for debugging
@@ -1236,6 +1236,13 @@ export function EditorContainer({
     }
   }, [highlightingManager, paragraphTopicTexts, essayTopicText]);
 
+  // Update highlighting manager user context when user or file changes
+  useEffect(() => {
+    if (highlightingManager) {
+      highlightingManager.updateUserContext(user?.id, currentFileId || undefined);
+    }
+  }, [highlightingManager, user?.id, currentFileId]);
+
   return (
     <div className={cn("w-full h-full relative", className)}>
       <InsightsContext.Provider value={[insights, setInsights]}>
@@ -1258,6 +1265,7 @@ export function EditorContainer({
                 highlightingManager={highlightingManager}
                 isAnalysisRunning={isAnalysisRunning}
                 setIsAnalysisRunning={setIsAnalysisRunning}
+                userId={user?.id}
                 onLoadFile={(file) => {
                   setCurrentFileId(file.id);
                   setDocumentTitle(file.title);

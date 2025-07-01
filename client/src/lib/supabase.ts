@@ -46,6 +46,12 @@ export interface CommentType {
   original_text?: string;
   suggested_text?: string;
   explanation?: string;
+  completion_info?: Array<{
+    action: 'active' | 'dismissed' | 'replaced' | 'accepted' | 'ignored';
+    timestamp: string;
+    reason?: string;
+  }>;
+  completion_status?: string; // Computed column from database
 }
 
 export interface FileData {

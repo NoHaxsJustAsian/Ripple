@@ -105,7 +105,8 @@ export function uiCommentToDbComment(comment: CommentType, fileId: string, userI
     resolved: comment.resolved || false,
     // Add suggestion-specific fields if available
     is_ai_feedback: comment.isAIFeedback || !!comment.suggestedEdit,
-    issue_type: comment.issueType
+    issue_type: comment.issueType,
+    completion_info: comment.completionInfo || []
   };
   
   // Add suggestion-specific fields if they exist
@@ -165,7 +166,8 @@ export function dbCommentToUiComment(dbComment: DBCommentType): CommentType {
       quotedText: dbComment.original_text || '',  // Use original_text as quotedText if available
       isAIFeedback: dbComment.is_ai_feedback,
       issueType: dbComment.issue_type,
-      suggestedEdit
+      suggestedEdit,
+      completionInfo: dbComment.completion_info || []
     };
     
     console.log('DB comment converted to UI format:', uiComment);

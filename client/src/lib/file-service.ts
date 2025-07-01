@@ -243,7 +243,8 @@ export class FileService {
           position_start: positionStart,
           position_end: positionEnd,
           created_at: now,
-          updated_at: now
+          updated_at: now,
+          completion_info: [] // Initialize as active (empty array)
         }])
         .select()
         .single();

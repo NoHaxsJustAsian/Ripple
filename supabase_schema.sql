@@ -30,7 +30,8 @@ CREATE TABLE comments (
   issue_type TEXT,
   original_text TEXT,
   suggested_text TEXT,
-  explanation TEXT
+  explanation TEXT,
+  completion_info JSONB DEFAULT '[]'::jsonb
 );
 
 -- Create user_events table for logging
@@ -52,6 +53,16 @@ CREATE INDEX idx_files_user_id ON files(user_id);
 CREATE INDEX idx_files_updated_at ON files(updated_at);
 CREATE INDEX idx_comments_file_id ON comments(file_id);
 CREATE INDEX idx_comments_user_id ON comments(user_id);
+CREATE INDEX idx_comments_completion_info ON comments USING GIN (completion_info);
+
+-- Add a computed column for quick status checks
+ALTER TABLE comments 
+ADD COLUMN completion_status TEXT GENERATED ALWAYS AS (
+  CASE 
+    WHEN jsonb_array_length(completion_info) = 0 THEN 'active'
+    ELSE completion_info->-1->>'action'
+  END
+) STORED;
 
 -- Create a view for easier analysis of user events 
 CREATE VIEW user_activity_summary AS

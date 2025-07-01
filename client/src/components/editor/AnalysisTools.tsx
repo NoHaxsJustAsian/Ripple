@@ -7,6 +7,7 @@ import { analyzeTextWithContext } from '@/lib/api';
 import { CommentType, AnalysisResult } from './types';
 import { HighlightingManager } from '@/lib/highlighting-manager';
 import { findAndExpandSentence, robustTextFind } from '@/lib/prosemirror-text-utils';
+import { logEvent, EventType } from '@/lib/event-logger';
 
 interface AnalysisToolsProps {
   editor: Editor | null;
@@ -15,6 +16,8 @@ interface AnalysisToolsProps {
   highlightingManager?: HighlightingManager;
   isAnalysisRunning?: boolean;
   setIsAnalysisRunning?: (running: boolean) => void;
+  userId?: string;
+  fileId?: string;
 }
 
 export function AnalysisTools({
@@ -23,7 +26,9 @@ export function AnalysisTools({
   setIsInsightsOpen,
   highlightingManager,
   isAnalysisRunning: externalIsAnalysisRunning,
-  setIsAnalysisRunning: externalSetIsAnalysisRunning
+  setIsAnalysisRunning: externalSetIsAnalysisRunning,
+  userId,
+  fileId
 }: AnalysisToolsProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [, setAnalysisResult] = useState<AnalysisResult | null>(null);
@@ -48,9 +53,24 @@ export function AnalysisTools({
   const runContextualAnalysis = useCallback(async (analysisType: 'all' | 'paragraph' | 'custom') => {
     if (!editor) return;
 
+    // Log the feedback request
+    if (userId) {
+      await logEvent(userId, EventType.FEEDBACK_REQUEST, {
+        analysis_type: analysisType,
+        request_time: new Date().toISOString()
+      }, fileId);
+    }
+
     setIsAnalysisRunning(true);
 
     try {
+      // Log analysis start
+      if (userId) {
+        await logEvent(userId, EventType.FEEDBACK_ANALYSIS_START, {
+          analysis_type: analysisType,
+          start_time: new Date().toISOString()
+        }, fileId);
+      }
       let selectedContent = '';
       let targetType: 'flow' | 'clarity' | 'focus' | 'all' = 'all';
 
@@ -222,6 +242,17 @@ export function AnalysisTools({
         await generateFullFlowHighlights();
       }
 
+      // Log successful completion
+      if (userId) {
+        await logEvent(userId, EventType.FEEDBACK_ANALYSIS_COMPLETE, {
+          analysis_type: analysisType,
+          completion_time: new Date().toISOString(),
+          comments_generated: response.data.comments?.length || 0,
+          flow_highlights_generated: response.data.flowHighlights?.length || 0,
+          success: true
+        }, fileId);
+      }
+
       // Clear any text selection after analysis completes
       if (editor) {
         editor.commands.focus('end');
@@ -231,6 +262,16 @@ export function AnalysisTools({
       console.error('Error running contextual analysis:', error);
       toast.error("Analysis failed. Please try again.");
       setAnalysisResult(null);
+
+      // Log analysis failure
+      if (userId) {
+        await logEvent(userId, EventType.FEEDBACK_ANALYSIS_COMPLETE, {
+          analysis_type: analysisType,
+          completion_time: new Date().toISOString(),
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }, fileId);
+      }
     } finally {
       setIsAnalysisRunning(false);
     }
