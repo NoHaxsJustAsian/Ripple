@@ -3,7 +3,7 @@ services:
     name: ripple-nlp-api
     env: python
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 60 --keep-alive 2 --max-requests 1000 wsgi:application"
+    startCommand: "gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 120 wsgi:application"
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.19

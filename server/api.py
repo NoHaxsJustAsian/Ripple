@@ -4,7 +4,8 @@ from typing import Optional, Dict
 from .services import (
     analyze_text,
     analyze_text_with_context,
-    handle_chat_message
+    handle_chat_message,
+    process_custom_prompt
 )
 from .exceptions import DocumentProcessingError
 from . import bp  # Import blueprint from __init__.py
