@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: ripple-nlp-api
+    env: python
+    repo: https://github.com/NoHaxsJustAsian/Ripple
+    branch: render
+    rootDir: server
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 120 wsgi:application"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.19
+      - key: PYTHONUNBUFFERED
+        value: 1
+      - key: FLASK_ENV
+        value: production
+      - key: AZURE_OPENAI_KEY
+        sync: false
+      - key: AZURE_OPENAI_ENDPOINT
+        sync: false
+    healthCheckPath: /api/health 
