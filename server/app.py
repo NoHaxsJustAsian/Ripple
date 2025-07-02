@@ -1959,13 +1959,17 @@ def analyze_sentence_flow():
         print(f"❌ Error in analyze_sentence_flow: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-# Add frontend route handler if needed
+# Add frontend route handler if needed - exclude API routes
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
     """
-    Serve frontend static files if configured
+    Serve frontend static files if configured, but exclude API routes
     """
+    # Don't serve static files for API routes
+    if path and path.startswith('api/'):
+        return jsonify({"error": "API endpoint not found"}), 404
+    
     static_folder = os.getenv('STATIC_FOLDER', '../client/dist')
     if path and os.path.exists(os.path.join(static_folder, path)):
         return send_from_directory(static_folder, path)
