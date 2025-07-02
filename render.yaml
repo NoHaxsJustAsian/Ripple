@@ -13,7 +13,7 @@ services:
       - key: PYTHONUNBUFFERED
         value: 1
       - key: FLASK_ENV
-        value: production
+        value: development
       - key: AZURE_OPENAI_KEY
         sync: false
       - key: AZURE_OPENAI_ENDPOINT
