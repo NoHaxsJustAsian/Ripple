@@ -246,9 +246,5 @@ def chat():
 
 @bp.route("/health", methods=["GET"])
 def health_check():
-    """Health check endpoint"""
-    return jsonify({
-        "status": "ok",
-        "version": "1.0.0",
-        "timestamp": datetime.utcnow().isoformat()
-    })
+    """Health check endpoint for Render deployment"""
+    return jsonify({"status": "ok"})

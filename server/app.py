@@ -626,43 +626,9 @@ def handle_chat_message(message: str, document_context: Optional[str] = None) ->
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """
-    Enhanced health check endpoint to verify API status and configuration.
+    Simple health check endpoint for Render monitoring
     """
-    try:
-        # Test Azure OpenAI connection
-        openai_status = "ok"
-        try:
-            if client and AZURE_OPENAI_KEY:
-                # Quick test call to verify connection (don't use tokens unnecessarily)
-                openai_status = "configured"
-            else:
-                openai_status = "not_configured"
-        except Exception as e:
-            openai_status = f"error: {str(e)[:50]}"
-        
-        return jsonify({
-            "status": "ok",
-            "version": "1.0.0",
-            "timestamp": datetime.utcnow().isoformat(),
-            "config": {
-                "cors_origins": len(allowed_origins),
-                "azure_openai": openai_status,
-                "environment": os.getenv('FLASK_ENV', 'production'),
-                "port": os.getenv('PORT', '5000')
-            },
-            "environment_vars": {
-                "HOSTNAME": bool(os.getenv('HOSTNAME')),
-                "RENDER_EXTERNAL_URL": bool(os.getenv('RENDER_EXTERNAL_URL')),
-                "AZURE_OPENAI_KEY": bool(AZURE_OPENAI_KEY),
-                "AZURE_OPENAI_ENDPOINT": bool(AZURE_OPENAI_ENDPOINT)
-            }
-        })
-    except Exception as e:
-        return jsonify({
-            "status": "error",
-            "error": str(e),
-            "timestamp": datetime.utcnow().isoformat()
-                 }), 500
+    return jsonify({"status": "ok"})
 
 @app.route('/api/debug/info', methods=['GET'])
 def debug_info():
