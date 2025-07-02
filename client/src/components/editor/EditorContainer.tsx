@@ -29,7 +29,7 @@ import { FileService } from '@/lib/file-service';
 import { EventType } from '@/lib/event-logger';
 import { logEvent } from '@/lib/event-logger';
 import { analyzeTextWithContext } from '@/lib/api';
-import { highlightDebugger } from '@/lib/highlighting-debug';
+
 import '@/lib/test-prosemirror-search'; // Import to make test functions globally available
 
 // Create a context for insights
@@ -535,17 +535,6 @@ export function EditorContainer({
     }
   }, [editor, showEssayTopics]);  // Remove toggleTopicSentencesVisibility from deps array to prevent infinite loops
 
-  // Add debug utilities to window for manual testing
-  useEffect(() => {
-    if (editor && typeof window !== 'undefined') {
-      (window as any).rippleDebug = {
-        debugText: (text: string) => highlightDebugger.quickDebug(editor, text),
-        debugComment: (comment: any) => highlightDebugger.debugComment(editor, comment, editor.state.doc.textContent),
-        editor: editor
-      };
-    }
-  }, [editor]);
-
   // Now add the selection handlers after the toggle state variables
   const handleSelectAsParagraphTopic = useCallback(() => {
     if (!editor) return;
@@ -780,14 +769,10 @@ export function EditorContainer({
       if (response.data.comments?.length > 0) {
         const newComments: CommentType[] = [];
 
-        response.data.comments.forEach((comment, index) => {
+        response.data.comments.forEach((comment) => {
           const textToFind = comment.highlightedText;
 
           // Debug the first few comments to understand what's happening
-          if (index < 3) {
-            console.log(`\n🔍 DEBUGGING COMMENT ${index + 1}:`);
-            highlightDebugger.debugComment(editor, comment, fullContent);
-          }
 
           let commentPosition = null;
 
@@ -1146,7 +1131,7 @@ export function EditorContainer({
         console.log(`📊 Highlighting Manager: Mode changed to ${mode}`);
         // Force a re-render when highlighting manager state changes
         setPopoverTrigger(prev => prev + 1);
-      }, user?.id, currentFileId || undefined);
+      });
       setHighlightingManager(manager);
 
       // Expose globally for debugging
@@ -1236,13 +1221,6 @@ export function EditorContainer({
     }
   }, [highlightingManager, paragraphTopicTexts, essayTopicText]);
 
-  // Update highlighting manager user context when user or file changes
-  useEffect(() => {
-    if (highlightingManager) {
-      highlightingManager.updateUserContext(user?.id, currentFileId || undefined);
-    }
-  }, [highlightingManager, user?.id, currentFileId]);
-
   return (
     <div className={cn("w-full h-full relative", className)}>
       <InsightsContext.Provider value={[insights, setInsights]}>
@@ -1265,7 +1243,6 @@ export function EditorContainer({
                 highlightingManager={highlightingManager}
                 isAnalysisRunning={isAnalysisRunning}
                 setIsAnalysisRunning={setIsAnalysisRunning}
-                userId={user?.id}
                 onLoadFile={(file) => {
                   setCurrentFileId(file.id);
                   setDocumentTitle(file.title);
