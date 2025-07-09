@@ -41,6 +41,9 @@ allowed_origins.extend([
     "http://127.0.0.1:5173"
 ])
 
+# Add GitHub Pages deployment
+allowed_origins.append("https://nohaxsjustasian.github.io")
+
 # Remove duplicates and None values
 allowed_origins = list(set(filter(None, allowed_origins)))
 
