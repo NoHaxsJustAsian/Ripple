@@ -19,7 +19,7 @@ export const supabase = createClient(
 // Add warning AFTER export to ensure the client is always created
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn(
-    'Missing Supabase environment variables. Check your .env file. Using placeholder values for development.'
+    'Missing Supabase environment variables. File saving and user authentication disabled. Using placeholder values for development.'
   );
 }
 
