@@ -51,9 +51,24 @@ CORS(app, supports_credentials=True, origins=allowed_origins)
 
 # Initialize OpenAI client
 import anthropic
-client = anthropic.Anthropic(
-    api_key=os.getenv("ANTHROPIC_API_KEY")
-)
+
+# Initialize Anthropic client with error handling for deployment environments
+try:
+    client = anthropic.Anthropic(
+        api_key=os.getenv("ANTHROPIC_API_KEY")
+    )
+except Exception as e:
+    print(f"Warning: Failed to initialize Anthropic client: {e}")
+    # Fallback initialization for environments with proxy issues
+    try:
+        client = anthropic.Anthropic(
+            api_key=os.getenv("ANTHROPIC_API_KEY"),
+            # Explicitly set http_client to avoid proxy configuration issues
+            http_client=None
+        )
+    except Exception as e2:
+        print(f"Error: Could not initialize Anthropic client: {e2}")
+        client = None
 
 
 # Custom exceptions
@@ -83,6 +98,10 @@ def analyze_text_with_context(
         DocumentProcessingError: If analysis fails
     """
     try:
+        # Check if Anthropic client is available
+        if client is None:
+            raise DocumentProcessingError("Anthropic client not available - API key may be missing or client failed to initialize")
+            
         topics_section = ""
         topic_guidance = ""
 
