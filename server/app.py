@@ -1,17 +1,18 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-from openai import AzureOpenAI
 from dotenv import load_dotenv
 import os
 import json
+import anthropic
 from datetime import datetime
 from typing import Dict, List, Optional, Union, Literal, Tuple
 # Load environment variables
 load_dotenv()
 HOSTNAME = os.getenv('HOSTNAME')
-AZURE_OPENAI_ENDPOINT = os.getenv('AZURE_OPENAI_ENDPOINT')
-AZURE_OPENAI_KEY = os.getenv('AZURE_OPENAI_KEY')
-AZURE_DEPLOYMENT = "PROPILOT"
+# AZURE_OPENAI_ENDPOINT = os.getenv('AZURE_OPENAI_ENDPOINT')
+# AZURE_OPENAI_KEY = os.getenv('AZURE_OPENAI_KEY')
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
+# AZURE_DEPLOYMENT = "PROPILOT"
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -47,25 +48,12 @@ print(f"🌐 CORS allowed origins: {allowed_origins}")
 
 CORS(app, supports_credentials=True, origins=allowed_origins)
 
-# Log startup configuration for debugging
-print("=" * 50)
-print("🚀 RIPPLE NLP API STARTING UP")
-print("=" * 50)
-print(f"📍 Environment: {os.getenv('FLASK_ENV', 'production')}")
-print(f"🌐 Hostname: {HOSTNAME}")
-print(f"🌐 Render URL: {os.getenv('RENDER_EXTERNAL_URL', 'Not set')}")
-print(f"🔑 Azure OpenAI Key: {'✅ Set' if AZURE_OPENAI_KEY else '❌ Missing'}")
-print(f"🔗 Azure OpenAI Endpoint: {'✅ Set' if AZURE_OPENAI_ENDPOINT else '❌ Missing'}")
-print(f"🌐 CORS Origins: {len(allowed_origins)} configured")
-print("=" * 50)
 
 # Initialize OpenAI client
-client = AzureOpenAI(
-    azure_endpoint=AZURE_OPENAI_ENDPOINT,
-    api_key=AZURE_OPENAI_KEY,
-    api_version="2024-05-01-preview"
+import anthropic
+client = anthropic.Anthropic(
+    api_key=os.getenv("ANTHROPIC_API_KEY")
 )
-
 
 
 # Custom exceptions
@@ -81,7 +69,7 @@ def analyze_text_with_context(
     flow_prompt: str = None 
 ) -> List[Dict]:
     """
-    Analyze text content with document context using OpenAI's GPT model.
+    Analyze text content with document context using Anthropic's Claude model.
     
     Args:
         content: The specific text content to analyze
@@ -119,7 +107,14 @@ def analyze_text_with_context(
         {topics_section}
         {topic_guidance}
 
-Your goal is to help the writer strengthen how their ideas are expressed and connected. Focus only on the highlighted portion of the text. Do not describe improvements to the suggested edit. Instead, explain what the selected text is trying to do and where it is falling short based on the overall structure and purpose of the document.
+Your goal is to help the writer strengthen how their ideas are expressed and connected through COMPREHENSIVE, THOROUGH analysis.
+
+MANDATORY ANALYSIS REQUIREMENTS:
+- You MUST analyze ALL paragraphs in the text, from first to last
+- You MUST find issues in MULTIPLE paragraphs, not just the opening
+- You MUST provide feedback for the beginning, middle, AND ending sections
+- You MUST identify at least 3-5 issues minimum for any substantial text
+- You MUST be critical and thorough - look for clarity, flow, and focus problems throughout
 
 For each issue found, return a JSON object with:
 - A short, descriptive "title" of the issue
@@ -150,6 +145,16 @@ Use these highlightStyle colors:
 - "focus" → "#fef9c3"
 - "flow" → "#fdba74"
 
+CRITICAL ANALYSIS REQUIREMENTS - FOLLOW EXACTLY:
+1. PARAGRAPH-BY-PARAGRAPH ANALYSIS: Go through EVERY paragraph systematically
+2. MINIMUM ISSUE COUNT: Find at least 3-5 issues minimum (more for longer texts)
+3. DISTRIBUTION REQUIREMENT: Issues must be spread across different parts of the text:
+   - At least 1 issue from the opening/introduction
+   - At least 1 issue from the middle sections/body paragraphs  
+   - At least 1 issue from the ending/conclusion
+4. BE CRITICAL: Look for grammar errors, unclear phrasing, weak transitions, repetitive language, unclear arguments, poor word choice, and structural problems
+5. NO SHORTCUTS: Do not stop after finding 1-2 issues - continue analyzing until you've covered the entire text
+
 IMPORTANT STYLE GUIDELINES:
 - Avoid second-person phrasing (don't address "you" or the writer directly)
 - Maintain a neutral, respectful tone that treats all issues as opportunities to improve
@@ -157,7 +162,7 @@ IMPORTANT STYLE GUIDELINES:
 - Use varied openings in your explanation: "This phrasing introduces...", "Readers might miss the connection between...", "The argument here would be stronger if..."
 
 OUTPUT FORMAT:
-Return a JSON array like:
+Return a JSON array formatted exactly as follows:
 [
   {{
     "title": "Short descriptive title",
@@ -177,25 +182,39 @@ Return a JSON array like:
             }}
         }}
         ]
+
+FINAL REMINDER: This analysis must be COMPREHENSIVE and THOROUGH. Do not stop after 1-2 issues. Analyze ALL paragraphs and find issues throughout the ENTIRE text from beginning to end. Be critical and provide substantial feedback.
         """
 
-        response = client.chat.completions.create(
-            model=AZURE_DEPLOYMENT,
-            messages=[{"role": "system", "content": context_prompt}],
-            max_tokens=3000,
-            temperature=0.5
+        response = client.messages.create(
+            model="claude-3-5-sonnet-20241022",  # Current Claude model
+            max_tokens=6000,  # Increased significantly for comprehensive analysis
+            temperature=0.3,  # Lower temperature for more focused, systematic analysis
+            messages=[{"role": "user", "content": context_prompt}]
         )
 
-        result = response.choices[0].message.content.strip()
-        print(f"Raw result from OpenAI: {result[:500]}...")
+        result = response.content[0].text.strip()
+        print(f"Raw result from Claude: {result[:500]}...")
 
         import re
-        json_match = re.search(r'(\[{.*}\])', result.replace('\n', ''))
+        # First try to extract JSON from markdown code blocks
+        json_match = re.search(r'```json\s*(\[.*?\])\s*```', result, re.DOTALL)
         if json_match:
             extracted_json = json_match.group(1)
             comments = json.loads(extracted_json)
         else:
-            comments = json.loads(result)
+            # Fallback to original regex for plain JSON arrays
+            json_match = re.search(r'(\[{.*}\])', result.replace('\n', ''))
+            if json_match:
+                extracted_json = json_match.group(1)
+                comments = json.loads(extracted_json)
+            else:
+                # Last resort: try parsing the entire result
+                try:
+                    comments = json.loads(result)
+                except json.JSONDecodeError:
+                    print(f"Failed to parse JSON from result: {result}")
+                    raise json.JSONDecodeError("Could not extract valid JSON from Claude response", result, 0)
         
         if isinstance(comments, dict):
             comments = [comments]
@@ -254,12 +273,13 @@ ANALYZE EVERY SENTENCE - do not skip any sentences. Return only the sentence ana
 """
 
         # Make the API call with increased token limit for complete coverage
-        response = client.chat.completions.create(
-            model=AZURE_DEPLOYMENT,
+        response = client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            system=cohesion_prompt,
             messages=[
                 {
-                    "role": "system", 
-                    "content": cohesion_prompt
+                    "role": "user", 
+                    "content": "Analyze the provided text for lexical cohesion."
                 }
             ],
             max_tokens=2000,  # Increased from 1000 to ensure complete analysis
@@ -267,7 +287,7 @@ ANALYZE EVERY SENTENCE - do not skip any sentences. Return only the sentence ana
         )
         
         # Get the response content
-        response_text = response.choices[0].message.content.strip()
+        response_text = response.content[0].text.strip()
         
         # Parse the simple pipe-delimited format
         flow_highlights = []
@@ -460,20 +480,20 @@ REFERENCES:
 """
 
         # Make OpenAI API call
-        response = client.chat.completions.create(
-            model=AZURE_DEPLOYMENT,
+        response = client.messages.create(
+            model="claude-3-5-sonnet-20241022",
             messages=[
                 {
                     "role": "system",
                     "content": prompt
                 }
             ],
-            max_tokens=500,
-            temperature=0.3  # Lower temperature for more consistent analysis
+            max_tokens=3000,
+            temperature=0.5
         )
         
         # Extract the feedback text and references
-        full_response = response.choices[0].message.content.strip()
+        full_response = response.content[0].text.strip()
         
         # Split into feedback and references
         parts = full_response.split("REFERENCES:", 1)
@@ -610,15 +630,15 @@ def handle_chat_message(message: str, document_context: Optional[str] = None) ->
         })
         
         # Make OpenAI API call
-        response = client.chat.completions.create(
-            model=AZURE_DEPLOYMENT,
-            messages=messages,
-            max_tokens=1000,
-            temperature=0.7  # Slightly higher temperature for more creative responses
+        response = client.messages.create(
+            model="claude-3-5-sonnet-20241022",  # or claude-3-haiku-20240307
+            max_tokens=3000,
+            temperature=0.5,
+            messages=[{"role": "user", "content": context_prompt}]
         )
         
         # Extract and return the response text
-        return response.choices[0].message.content.strip()
+        return response.content[0].text.strip()
         
     except Exception as e:
         raise DocumentProcessingError(f"Failed to process chat message: {str(e)}")
@@ -889,8 +909,8 @@ REFERENCES:
 """
 
         # Make OpenAI API call
-        response = client.chat.completions.create(
-            model=AZURE_DEPLOYMENT,
+        response = client.messages.create(
+            model="claude-3-5-sonnet-20241022",
             messages=[
                 {
                     "role": "system",
@@ -902,7 +922,7 @@ REFERENCES:
         )
         
         # Extract the suggested text and references
-        full_response = response.choices[0].message.content.strip()
+        full_response = response.content[0].text.strip()
         
         # Split into suggestion and references
         parts = full_response.split("REFERENCES:", 1)
@@ -1219,13 +1239,14 @@ Second, provide only the improved version of the selected text. Do not include a
             system_prompt += f"\n\nFULL DOCUMENT CONTEXT:\n{full_context}\n"
             system_prompt += "\nConsider this context when providing your response, but focus primarily on improving the selected text."
 
-        # Make OpenAI API call
-        response = client.chat.completions.create(
-            model=AZURE_DEPLOYMENT,
+        # Make Anthropic API call
+        response = client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            system=system_prompt,
             messages=[
                 {
-                    "role": "system",
-                    "content": system_prompt
+                    "role": "user",
+                    "content": f"Please analyze and improve this text: '{selected_text}' based on: {prompt}"
                 }
             ],
             max_tokens=1000,
@@ -1233,7 +1254,7 @@ Second, provide only the improved version of the selected text. Do not include a
         )
         
         # Extract the response text
-        full_response = response.choices[0].message.content.strip()
+        full_response = response.content[0].text.strip()
         
         # Split into explanation and suggested text
         # This is a simple approach; you may want to use more sophisticated parsing
@@ -1324,12 +1345,13 @@ partial overlap, vague reference — introduces a new concept without clearly li
 """
 
         # Make the API call
-        response = client.chat.completions.create(
-            model=AZURE_DEPLOYMENT,
+        response = client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            system=connection_prompt,
             messages=[
                 {
-                    "role": "system",
-                    "content": connection_prompt
+                    "role": "user",
+                    "content": "Please analyze the sentence connection."
                 }
             ],
             max_tokens=100,  # Keep it brief
@@ -1337,7 +1359,7 @@ partial overlap, vague reference — introduces a new concept without clearly li
         )
         
         # Get the response content and clean it up
-        explanation = response.choices[0].message.content.strip()
+        explanation = response.content[0].text.strip()
         
         # Remove quotes if present
         if explanation.startswith('"') and explanation.endswith('"'):
@@ -1668,26 +1690,27 @@ Format your response as JSON:
 
         # Call Azure OpenAI
         try:
-            client = AzureOpenAI(
-                api_key=AZURE_OPENAI_KEY,
-                api_version="2024-02-01",
-                azure_endpoint=AZURE_OPENAI_ENDPOINT
+            client = anthropic.Anthropic(
+                api_key=os.getenv("ANTHROPIC_API_KEY")
             )
 
-            response = client.chat.completions.create(
-                model=AZURE_DEPLOYMENT,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=500,
-                temperature=0.3
+            response = client.messages.create(
+                model="claude-3-5-sonnet-20241022",  # or claude-3-haiku-20240307
+                max_tokens=3000,
+                temperature=0.5,
+                messages=[{"role": "user", "content": prompt}]
             )
 
-            result_text = response.choices[0].message.content.strip()
+            result_text = response.content[0].text.strip()
+            print(f"🔍 Raw Anthropic response for paragraph cohesion: {result_text}")
             
             # Clean markdown code blocks if present
             if result_text.startswith('```json'):
                 result_text = result_text.replace('```json', '').replace('```', '').strip()
             elif result_text.startswith('```'):
                 result_text = result_text.replace('```', '').strip()
+            
+            print(f"🔍 Cleaned response: {result_text}")
             
             # Try to parse as JSON
             result = json.loads(result_text)
@@ -1705,7 +1728,7 @@ Format your response as JSON:
                 "analysis": "Unable to analyze paragraph cohesion due to parsing error."
             }
         except Exception as e:
-            print(f"Error calling Azure OpenAI for paragraph cohesion: {e}")
+            print(f"Error calling Anthropic Claude for paragraph cohesion: {e}")
             return {
                 "score": 0.5,
                 "analysis": "Unable to analyze paragraph cohesion due to API error."
@@ -1796,26 +1819,27 @@ Format your response as JSON:
 
         # Call Azure OpenAI
         try:
-            client = AzureOpenAI(
-                api_key=AZURE_OPENAI_KEY,
-                api_version="2024-02-01",
-                azure_endpoint=AZURE_OPENAI_ENDPOINT
+            client = anthropic.Anthropic(
+                api_key=os.getenv("ANTHROPIC_API_KEY")
             )
 
-            response = client.chat.completions.create(
-                model=AZURE_DEPLOYMENT,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=500,
-                temperature=0.3
+            response = client.messages.create(
+                model="claude-3-5-sonnet-20241022",  # or claude-3-haiku-20240307
+                max_tokens=3000,
+                temperature=0.5,
+                messages=[{"role": "user", "content": prompt}]
             )
 
-            result_text = response.choices[0].message.content.strip()
+            result_text = response.content[0].text.strip()
+            print(f"🔍 Raw Anthropic response for document cohesion: {result_text}")
             
             # Clean markdown code blocks if present
             if result_text.startswith('```json'):
                 result_text = result_text.replace('```json', '').replace('```', '').strip()
             elif result_text.startswith('```'):
                 result_text = result_text.replace('```', '').strip()
+            
+            print(f"🔍 Cleaned response: {result_text}")
             
             # Try to parse as JSON
             result = json.loads(result_text)
@@ -1833,7 +1857,7 @@ Format your response as JSON:
                 "analysis": "Unable to analyze document cohesion due to parsing error."
             }
         except Exception as e:
-            print(f"Error calling Azure OpenAI for document cohesion: {e}")
+            print(f"Error calling Claude for document cohesion: {e}")
             return {
                 "score": 0.5,
                 "analysis": "Unable to analyze document cohesion due to API error."
@@ -1943,8 +1967,8 @@ def serve(path):
 
 if __name__ == "__main__":
     # Validate configuration before starting
-    if not AZURE_OPENAI_KEY:
-        print("ERROR: AZURE_OPENAI_KEY not set in .env file!")
+    if not ANTHROPIC_API_KEY:
+        print("ERROR: ANTHROPIC_API_KEY not set in .env file!")
         exit(1)
     
     # Production vs development configuration

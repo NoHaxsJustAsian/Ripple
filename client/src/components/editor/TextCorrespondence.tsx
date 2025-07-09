@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { SuggestedEdit, Reference } from './types';
 
 interface TextCorrespondenceProps {

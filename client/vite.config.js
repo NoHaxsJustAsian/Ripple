@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 export default defineConfig({
     plugins: [react()],
-    base: "/",
+    base: "/Ripple/",
     optimizeDeps: {
         force: true,
         include: ['@supabase/supabase-js']

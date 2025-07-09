@@ -259,26 +259,24 @@ export class HighlightingManager {
 
     // Method to exit flow-sentence mode and return to flow mode
     exitFlowSentenceMode(): void {
+        // Always hide popover and action panel regardless of current mode
+        // This ensures the X button always works
+        this.hideSentenceFlowPopover();
+        this.hideSentenceFlowActionPanel();
 
-        if (this.state.currentMode === 'flow-sentence') {
+        // Always remove selected sentence classes and clear connection highlights
+        // This cleanup should happen regardless of current mode
+        const selectedElements = this.editor.view.dom.querySelectorAll('.flow-sentence-selected');
+        selectedElements.forEach(el => {
+            el.classList.remove('flow-sentence-selected');
+        });
 
+        // Clear all sentence connection highlights
+        this.clearSentenceConnectionHighlights();
 
-            // Hide popover and action panel
-            this.hideSentenceFlowPopover();
-            this.hideSentenceFlowActionPanel();
-
-            // Remove selected class from any selected sentences
-            const selectedElements = this.editor.view.dom.querySelectorAll('.flow-sentence-selected');
-            selectedElements.forEach(el => {
-                el.classList.remove('flow-sentence-selected');
-            });
-
-            // Clear all sentence connection highlights
-            this.clearSentenceConnectionHighlights();
-
-            // Switch back to flow mode
-            this.switchMode('flow');
-        }
+        // Always switch back to flow mode when exiting flow sentence analysis
+        // This ensures clicking on sentences works again after closing the panel
+        this.switchMode('flow');
     }
 
     // Sentence Flow Popover Methods

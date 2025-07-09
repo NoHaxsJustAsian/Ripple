@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { CheckCircle, ArrowRight, Building, Shield, Clock, CheckIcon, Lock, Database, MessageSquare, Sparkles, Bot } from "lucide-react"
+import { CheckCircle, ArrowRight, Shield, CheckIcon, Lock, Database, MessageSquare, Sparkles, Bot } from "lucide-react"
 import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import { 
