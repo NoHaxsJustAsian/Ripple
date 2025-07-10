@@ -27,7 +27,7 @@ export const sortComments = (
             if (a.quotedText === b.quotedText) {
                 return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
             }
-            return (textPositions.get(a.quotedText) || 0) - (textPositions.get(b.quotedText) || 0);
+            return (textPositions.get(a.quotedText || '') || 0) - (textPositions.get(b.quotedText || '') || 0);
         });
     } else { // default
         const docText = editor?.state.doc.textContent || '';

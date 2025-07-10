@@ -76,7 +76,7 @@ export function TextCorrespondence({ suggestedEdit }: TextCorrespondenceProps) {
     const getSegmentReferences = (segment: string, isOriginal: boolean) => {
         if (!suggestedEdit.references) return null;
         return suggestedEdit.references.filter(ref => {
-            const text = isOriginal ? ref.text : ref.referenceText;
+            const text = isOriginal ? ref.allusion : ref.referenceText;
             return segment.includes(text);
         });
     };
@@ -164,13 +164,8 @@ export function TextCorrespondence({ suggestedEdit }: TextCorrespondenceProps) {
                                 onMouseEnter={() => setHoveredReference(ref)}
                                 onMouseLeave={() => setHoveredReference(null)}
                             >
-                                <div className="font-medium">{ref.text}</div>
+                                <div className="font-medium">{ref.allusion}</div>
                                 <div className="text-muted-foreground">{ref.referenceText}</div>
-                                {ref.source && (
-                                    <div className="text-xs text-muted-foreground mt-1">
-                                        Source: {ref.source}
-                                    </div>
-                                )}
                             </div>
                         ))}
                     </div>
