@@ -102,8 +102,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const bypassLogin = async () => {
     try {
-      // Create a mock user ID without trying to access the database
-      const tempId = `test_${Date.now()}`;
+      // Create a mock user ID using proper UUID format for database compatibility
+      const tempId = crypto.randomUUID();
       const tempProlificId = `test_${Date.now()}`;
       
       // Create a test user object directly
