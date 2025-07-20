@@ -2,7 +2,7 @@ import { Reference } from '@/components/editor/types';
 
 // API utility functions for communicating with the backend
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://ripple-dfmp.onrender.com';
 
 // Interface for analysis request
 interface AnalysisRequest {
