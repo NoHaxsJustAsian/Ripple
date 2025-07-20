@@ -3,6 +3,7 @@ import { Button } from './ui/button';
 import { X, GripVertical, CornerDownLeftIcon, AlignLeft, FileText, ChevronRight, Pencil, Loader2 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { toast } from "sonner";
+import { logEvent } from '@/lib/event-logger';
 
 interface SentenceFlowActionPanelProps {
     position: { x: number; y: number };
@@ -26,6 +27,8 @@ interface SentenceFlowActionPanelProps {
     onUpdateSentence?: (newSentenceText: string) => void;
     editor?: any; // TipTap editor instance
     isAnalyzing?: boolean;
+    userId?: string;
+    fileId?: string;
 }
 
 export function SentenceFlowActionPanel({
@@ -36,7 +39,9 @@ export function SentenceFlowActionPanel({
     onClose,
     onUpdateSentence,
     editor,
-    isAnalyzing = false
+    isAnalyzing = false,
+    userId,
+    fileId
 }: SentenceFlowActionPanelProps) {
     // Draggable state
     const [panelPosition, setPanelPosition] = useState({ x: 70, y: window.innerHeight * 0.15 });
@@ -198,6 +203,16 @@ export function SentenceFlowActionPanel({
         }
     };
 
+    const handleClose = () => {
+        if (userId) {
+            logEvent(userId, 'sentence_flow_exit', {
+                file_id: fileId,
+                sentence_text: sentenceText.substring(0, 100) // Truncate for logging
+            });
+        }
+        onClose();
+    };
+
     return (
         <div
             ref={panelRef}
@@ -226,7 +241,7 @@ export function SentenceFlowActionPanel({
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={onClose}
+                            onClick={handleClose}
                             className="h-6 w-6 p-0 text-gray-600 hover:text-gray-800"
                             onMouseDown={(e) => e.stopPropagation()} // Prevent drag when clicking close
                         >
@@ -440,7 +455,7 @@ export function SentenceFlowActionPanel({
                             <Button
                                 variant="default"
                                 size="sm"
-                                onClick={onClose}
+                                onClick={handleClose}
                                 className="w-full flex items-center gap-2 text-xs h-9 bg-blue-500 hover:bg-blue-700 text-white border-blue-600 shadow-sm"
                                 onMouseDown={(e) => e.stopPropagation()} // Prevent drag when clicking close
                                 disabled={isAnalyzing}

@@ -73,6 +73,62 @@ except Exception as e:
         print(f"Error: Could not initialize Anthropic client: {e2}")
         client = None
 
+# Model Configuration - Simple two-model approach
+# 
+# SONNET (claude-3-5-sonnet-20241022) - High-quality for complex tasks:
+#   - analyze_text_with_context: Main document analysis
+#   - analyze_lexical_cohesion_simple: Structured analysis output  
+#   - refresh_feedback: Important feedback quality
+#   - handle_chat_message: User-facing chat
+#   - process_custom_prompt: User-facing custom prompts
+#   - analyze_document_cohesion: Complex document understanding
+#
+# HAIKU (claude-3-haiku-20240307) - Fast & efficient for simple tasks:
+#   - regenerate_suggestion: Quick regeneration
+#   - analyze_sentence_connection: Simple connection explanations
+#   - analyze_paragraph_cohesion: Single paragraph analysis
+#
+MODEL_CONFIG = {
+    'sonnet': {
+        'model': 'claude-3-5-sonnet-20241022',
+        'max_tokens': 6000,
+        'temperature': 0.3,
+        'description': 'High-quality analysis for complex tasks'
+    },
+    'haiku': {
+        'model': 'claude-3-haiku-20240307', 
+        'max_tokens': 2000,
+        'temperature': 0.2,
+        'description': 'Fast and efficient for simple tasks'
+    }
+}
+
+def get_model_config(model_type: str) -> dict:
+    """Get the model configuration for sonnet or haiku."""
+    return MODEL_CONFIG.get(model_type, MODEL_CONFIG['sonnet'])  # Default to sonnet
+
+def make_claude_request(model_type: str, messages: list, system_prompt: str = None, custom_max_tokens: int = None, custom_temperature: float = None) -> str:
+    """Make a Claude request with the specified model type."""
+    if not client:
+        raise Exception("Anthropic client not initialized")
+    
+    config = get_model_config(model_type)
+    
+    request_params = {
+        'model': config['model'],
+        'max_tokens': custom_max_tokens or config['max_tokens'],
+        'temperature': custom_temperature or config['temperature'],
+        'messages': messages
+    }
+    
+    if system_prompt:
+        request_params['system'] = system_prompt
+    
+    print(f"🤖 Using {config['model']} for {model_type} task")
+    
+    response = client.messages.create(**request_params)
+    return response.content[0].text.strip()
+
 
 # Custom exceptions
 class DocumentProcessingError(Exception):
@@ -123,20 +179,25 @@ def analyze_text_with_context(
             
         context_prompt = f"""Analyze this text and generate specific, contextual feedback to improve its clarity, focus, or flow within the full document.
 
-        TEXT TO ANALYZE:
-        {content}
 
-        {topics_section}
-        {topic_guidance}
+       TEXT TO ANALYZE:
+       {content}
+
+
+       {topics_section}
+       {topic_guidance}
+
 
 Your goal is to help the writer strengthen how their ideas are expressed and connected through COMPREHENSIVE, THOROUGH analysis.
 
+
 MANDATORY ANALYSIS REQUIREMENTS:
 - You MUST analyze ALL paragraphs in the text, from first to last
-- You MUST find issues in MULTIPLE paragraphs, not just the opening
+- You MUST find issues in EACH of the MULTIPLE paragraphs, not just the opening
 - You MUST provide feedback for the beginning, middle, AND ending sections
 - You MUST identify at least 3-5 issues minimum for any substantial text
 - You MUST be critical and thorough - look for clarity, flow, and focus problems throughout
+
 
 For each issue found, return a JSON object with:
 - A short, descriptive "title" of the issue
@@ -144,38 +205,53 @@ For each issue found, return a JSON object with:
 - The "highlightedText" (exact text with the issue)
 - A "highlightStyle" based on issue type
 - A "suggestedEdit" object that includes:
-  - "original": the original text
-  - "suggested": a revision that improves clarity, flow, or focus while keeping the tone and style of the rest of the document
-  - "explanation": a concise and respectful analysis of what the original text is trying to do, where it falls short, and how the revision strengthens the reader's understanding
-  - "references": a list of allusions and references to help the writer locate the issue in context
+ - "original": the original text
+ - "suggested": a revision that improves clarity, flow, or focus while keeping the tone, style, verbosity, and writing level of the rest of the document
+ - "explanation": a concise, professional, respectful analysis of what the original text is trying to do, where it falls short, and how the revision strengthens the reader's understanding
+ - "references": a list of allusions and references to help the writer locate the issue in context
+
+
+SUGGESTION REQUIREMENTS
+- Automatically and intuitively correct all relevant grammar, spelling, or punctuation mistakes
+- Maintain the author’s original tone, style, verbosity, and writing level of the rest of the document
+- Never compromise clarity, focus, or flow for the writing quality or grammar
+- Always provide grammatically correct AND coherent suggestions that are cohesive with the immediate paragraph’s message
+
 
 EXPLANATION REQUIREMENTS:
 - Never refer to the revised version in the explanation
+- NEVER explain the grammar, punctuation, or spelling mistakes in the explanation
 - Keep the analysis short (2–3 sentences max)
 - Focus on the original text's purpose, what's missing or unclear, and how the issue affects the reader
+- Be SPECIFIC about why cohesion and coherence issues are present by using keywords and phrasing present in the original text
 - Include specific references or allusions to the text that you're analyzing
+- Never refer to parts of the original text (e.g., introduction, conclusion, thesis, argument framework, etc.) vaguely or abstractly without embedding allusions, keywords, or references pointing to the intent and content of the original text
+
 
 REFERENCE FORMAT:
 A "reference" should include:
-  {{
-    "allusion": a phrase from the explanation (e.g. "connection between activities"),
-    "referenceText": the exact corresponding phrase or sentence from the text (e.g. "searching for solutions in these creative places...")
-  }}
+ {{
+   "allusion": a phrase from the explanation (e.g. "connection between activities"),
+   "referenceText": the exact corresponding phrase or sentence from the text (e.g. "searching for solutions in these creative places...")
+ }}
+
 
 Use these highlightStyle colors:
 - "clarity" → "#bae6fd"
 - "focus" → "#fef9c3"
 - "flow" → "#fdba74"
 
+
 CRITICAL ANALYSIS REQUIREMENTS - FOLLOW EXACTLY:
 1. PARAGRAPH-BY-PARAGRAPH ANALYSIS: Go through EVERY paragraph systematically
 2. MINIMUM ISSUE COUNT: Find at least 3-5 issues minimum (more for longer texts)
 3. DISTRIBUTION REQUIREMENT: Issues must be spread across different parts of the text:
-   - At least 1 issue from the opening/introduction
-   - At least 1 issue from the middle sections/body paragraphs  
-   - At least 1 issue from the ending/conclusion
+  - At least 1 issue from the opening/introduction
+  - At least 1 issue from the middle sections/body paragraphs 
+  - At least 1 issue from the ending/conclusion
 4. BE CRITICAL: Look for grammar errors, unclear phrasing, weak transitions, repetitive language, unclear arguments, poor word choice, and structural problems
 5. NO SHORTCUTS: Do not stop after finding 1-2 issues - continue analyzing until you've covered the entire text
+
 
 IMPORTANT STYLE GUIDELINES:
 - Avoid second-person phrasing (don't address "you" or the writer directly)
@@ -183,39 +259,38 @@ IMPORTANT STYLE GUIDELINES:
 - Use conditional, suggestive language: "This section could be clearer if...", "Consider clarifying...", etc.
 - Use varied openings in your explanation: "This phrasing introduces...", "Readers might miss the connection between...", "The argument here would be stronger if..."
 
+
 OUTPUT FORMAT:
 Return a JSON array formatted exactly as follows:
 [
-  {{
-    "title": "Short descriptive title",
-    "issueType": "clarity",
-    "highlightedText": "exact quote",
-    "highlightStyle": "#bae6fd",
-            "suggestedEdit": {{
-      "original": "text...",
-      "suggested": "revised text...",
-      "explanation": "The original phrasing introduces [what it's trying to do] but fails to [issue]. This affects the reader by [impact]. <b>Clarifying or restructuring this idea</b> helps connect it more clearly to surrounding ideas.",
-            "references": [
-                {{
-          "allusion": "connection between activities",
-          "referenceText": "searching for solutions in these creative places floods back when I work on research..."
-                }}
-                ]
-            }}
-        }}
-        ]
+ {{
+   "title": "Short descriptive title",
+   "issueType": "clarity",
+   "highlightedText": "exact quote",
+   "highlightStyle": "#bae6fd",
+           "suggestedEdit": {{
+     "original": "text...",
+     "suggested": "revised text...",
+     "explanation": "The original phrasing introduces [what it's trying to do] but fails to [issue]. This affects the reader by [impact]. <b>Clarifying or restructuring this idea</b> helps connect it more clearly to surrounding ideas.",
+           "references": [
+               {{
+         "allusion": "connection between activities",
+         "referenceText": "searching for solutions in these creative places floods back when I work on research..."
+               }}
+               ]
+           }}
+       }}
+       ]
+
 
 FINAL REMINDER: This analysis must be COMPREHENSIVE and THOROUGH. Do not stop after 1-2 issues. Analyze ALL paragraphs and find issues throughout the ENTIRE text from beginning to end. Be critical and provide substantial feedback.
-        """
 
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",  # Current Claude model
-            max_tokens=6000,  # Increased significantly for comprehensive analysis
-            temperature=0.3,  # Lower temperature for more focused, systematic analysis
+"""
+
+        result = make_claude_request(
+            model_type="sonnet",  # High-quality analysis for complex document analysis
             messages=[{"role": "user", "content": context_prompt}]
         )
-
-        result = response.content[0].text.strip()
         print(f"Raw result from Claude: {result[:500]}...")
 
         import re
@@ -225,11 +300,35 @@ FINAL REMINDER: This analysis must be COMPREHENSIVE and THOROUGH. Do not stop af
             extracted_json = json_match.group(1)
             comments = json.loads(extracted_json)
         else:
-            # Fallback to original regex for plain JSON arrays
-            json_match = re.search(r'(\[{.*}\])', result.replace('\n', ''))
+            # Try to find JSON array in the response (improved regex for nested structures)
+            json_match = re.search(r'(\[(?:[^[\]]|\[[^\]]*\])*\])', result, re.DOTALL)
             if json_match:
                 extracted_json = json_match.group(1)
-                comments = json.loads(extracted_json)
+                try:
+                    comments = json.loads(extracted_json)
+                except json.JSONDecodeError:
+                    # If that fails, try to find the start of the array and extract to the end
+                    start_pos = result.find('[')
+                    if start_pos != -1:
+                        json_part = result[start_pos:]
+                        # Find the matching closing bracket
+                        bracket_count = 0
+                        end_pos = 0
+                        for i, char in enumerate(json_part):
+                            if char == '[':
+                                bracket_count += 1
+                            elif char == ']':
+                                bracket_count -= 1
+                                if bracket_count == 0:
+                                    end_pos = i + 1
+                                    break
+                        if end_pos > 0:
+                            extracted_json = json_part[:end_pos]
+                            comments = json.loads(extracted_json)
+                        else:
+                            raise json.JSONDecodeError("Could not find matching closing bracket", result, start_pos)
+                    else:
+                        raise json.JSONDecodeError("Could not find JSON array start", result, 0)
             else:
                 # Last resort: try parsing the entire result
                 try:
@@ -251,7 +350,7 @@ FINAL REMINDER: This analysis must be COMPREHENSIVE and THOROUGH. Do not stop af
     
 def analyze_lexical_cohesion_simple(content: str) -> List[Dict]:
     """
-    Analyze lexical cohesion using a simple, reliable parsing format.
+Analyze lexical cohesion using a simple, reliable parsing format.
     
     Args:
         content: The text content to analyze for lexical cohesion
@@ -295,21 +394,18 @@ ANALYZE EVERY SENTENCE - do not skip any sentences. Return only the sentence ana
 """
 
         # Make the API call with increased token limit for complete coverage
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            system=cohesion_prompt,
+        response_text = make_claude_request(
+            model_type="sonnet",  # Structured output needs high-quality model
             messages=[
                 {
                     "role": "user", 
                     "content": "Analyze the provided text for lexical cohesion."
                 }
             ],
-            max_tokens=2000,  # Increased from 1000 to ensure complete analysis
-            temperature=0.2  # Low temperature for consistent analysis
+            system_prompt=cohesion_prompt,
+            custom_max_tokens=2000,  # Increased from 1000 to ensure complete analysis
+            custom_temperature=0.1  # Very low temperature for consistent structured output
         )
-        
-        # Get the response content
-        response_text = response.content[0].text.strip()
         
         # Parse the simple pipe-delimited format
         flow_highlights = []
@@ -502,20 +598,14 @@ REFERENCES:
 """
 
         # Make OpenAI API call
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            messages=[
-                {
-                    "role": "system",
-                    "content": prompt
-                }
-            ],
-            max_tokens=3000,
-            temperature=0.5
-        )
-        
         # Extract the feedback text and references
-        full_response = response.content[0].text.strip()
+        full_response = make_claude_request(
+            model_type="sonnet",  # High-quality feedback refresh needs sonnet
+            messages=[{"role": "user", "content": "Please provide the refreshed feedback."}],
+            system_prompt=prompt,
+            custom_max_tokens=3000,
+            custom_temperature=0.5
+        )
         
         # Split into feedback and references
         parts = full_response.split("REFERENCES:", 1)
@@ -651,16 +741,13 @@ def handle_chat_message(message: str, document_context: Optional[str] = None) ->
             "content": message
         })
         
-        # Make OpenAI API call
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",  # or claude-3-haiku-20240307
-            max_tokens=3000,
-            temperature=0.5,
-            messages=[{"role": "user", "content": context_prompt}]
+        # Make Claude API call
+        return make_claude_request(
+            model_type="sonnet",  # User-facing chat needs high-quality responses
+            messages=[{"role": "user", "content": context_prompt}],
+            custom_max_tokens=3000,
+            custom_temperature=0.6  # Slightly higher for more conversational responses
         )
-        
-        # Extract and return the response text
-        return response.content[0].text.strip()
         
     except Exception as e:
         raise DocumentProcessingError(f"Failed to process chat message: {str(e)}")
@@ -930,21 +1017,14 @@ REFERENCES:
   referenceText: "the data reveals compelling patterns that warrant further investigation"
 """
 
-        # Make OpenAI API call
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            messages=[
-                {
-                    "role": "system",
-                    "content": prompt
-                }
-            ],
-            max_tokens=800,
-            temperature=0.7  # Slightly higher temperature for creative suggestions
+        # Make Claude API call
+        full_response = make_claude_request(
+            model_type="haiku",  # Quick regeneration can use faster model
+            messages=[{"role": "user", "content": "Please provide the regenerated suggestion."}],
+            system_prompt=prompt,
+            custom_max_tokens=1000,  # Slightly increased
+            custom_temperature=0.7  # Slightly higher temperature for creative suggestions
         )
-        
-        # Extract the suggested text and references
-        full_response = response.content[0].text.strip()
         
         # Split into suggestion and references
         parts = full_response.split("REFERENCES:", 1)
@@ -1262,21 +1342,18 @@ Second, provide only the improved version of the selected text. Do not include a
             system_prompt += "\nConsider this context when providing your response, but focus primarily on improving the selected text."
 
         # Make Anthropic API call
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            system=system_prompt,
+        full_response = make_claude_request(
+            model_type="sonnet",  # User-facing custom prompts need high-quality responses
             messages=[
                 {
                     "role": "user",
                     "content": f"Please analyze and improve this text: '{selected_text}' based on: {prompt}"
                 }
             ],
-            max_tokens=1000,
-            temperature=0.7  # Slightly higher temperature for creative suggestions
+            system_prompt=system_prompt,
+            custom_max_tokens=1500,  # Slightly increased for better responses
+            custom_temperature=0.7  # Slightly higher temperature for creative suggestions
         )
-        
-        # Extract the response text
-        full_response = response.content[0].text.strip()
         
         # Split into explanation and suggested text
         # This is a simple approach; you may want to use more sophisticated parsing
@@ -1367,21 +1444,18 @@ partial overlap, vague reference — introduces a new concept without clearly li
 """
 
         # Make the API call
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            system=connection_prompt,
+        explanation = make_claude_request(
+            model_type="haiku",  # Simple connection explanations can use fast model
             messages=[
                 {
                     "role": "user",
                     "content": "Please analyze the sentence connection."
                 }
             ],
-            max_tokens=100,  # Keep it brief
-            temperature=0.3  # Low temperature for consistent analysis
+            system_prompt=connection_prompt,
+            custom_max_tokens=150,  # Slightly increased for better explanations
+            custom_temperature=0.3  # Low temperature for consistent analysis
         )
-        
-        # Get the response content and clean it up
-        explanation = response.content[0].text.strip()
         
         # Remove quotes if present
         if explanation.startswith('"') and explanation.endswith('"'):
@@ -1710,21 +1784,15 @@ Format your response as JSON:
 }}
 """
 
-        # Call Azure OpenAI
+        # Call Claude API
         try:
-            client = anthropic.Anthropic(
-                api_key=os.getenv("ANTHROPIC_API_KEY")
+            result_text = make_claude_request(
+                model_type="haiku",  # Single paragraph analysis can use fast model
+                messages=[{"role": "user", "content": prompt}],
+                custom_max_tokens=1500,  # Reduced for paragraph-level task
+                custom_temperature=0.4  # Balanced for analysis
             )
-
-            response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",  # or claude-3-haiku-20240307
-                max_tokens=3000,
-                temperature=0.5,
-                messages=[{"role": "user", "content": prompt}]
-            )
-
-            result_text = response.content[0].text.strip()
-            print(f"🔍 Raw Anthropic response for paragraph cohesion: {result_text}")
+            print(f"🔍 Raw Claude response for paragraph cohesion: {result_text}")
             
             # Clean markdown code blocks if present
             if result_text.startswith('```json'):
@@ -1841,19 +1909,13 @@ Format your response as JSON:
 
         # Call Azure OpenAI
         try:
-            client = anthropic.Anthropic(
-                api_key=os.getenv("ANTHROPIC_API_KEY")
+            result_text = make_claude_request(
+                model_type="sonnet",  # Complex document understanding needs high-quality model
+                messages=[{"role": "user", "content": prompt}],
+                custom_max_tokens=3000,
+                custom_temperature=0.4  # Balanced for analysis
             )
-
-            response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",  # or claude-3-haiku-20240307
-                max_tokens=3000,
-                temperature=0.5,
-                messages=[{"role": "user", "content": prompt}]
-            )
-
-            result_text = response.content[0].text.strip()
-            print(f"🔍 Raw Anthropic response for document cohesion: {result_text}")
+            print(f"🔍 Raw Claude response for document cohesion: {result_text}")
             
             # Clean markdown code blocks if present
             if result_text.startswith('```json'):

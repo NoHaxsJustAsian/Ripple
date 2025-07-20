@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, Play, WavesIcon, DropletIcon, FileCheck2Icon, BookCheckIcon } from 'lucide-react';
+import { X, WavesIcon, DropletIcon, FileCheck2Icon, BookCheckIcon } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { Button } from './ui/button';
 import { CursorArrowIcon, MagicWandIcon } from '@radix-ui/react-icons';
@@ -21,6 +21,8 @@ interface HelpSplashScreenProps {
 export function HelpSplashScreen({ isOpen, onClose }: HelpSplashScreenProps) {
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
   const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
+  const [expandedIds, setExpandedIds] = useState<string[]>([]);
+  const [checkedIds, setCheckedIds] = useState<string[]>([]);
   
   const [isVisible, setIsVisible] = useState(false);
   const [position, setPosition] = useState("-translate-x-full");
@@ -149,62 +151,59 @@ export function HelpSplashScreen({ isOpen, onClose }: HelpSplashScreenProps) {
       {/* Content */}
       <div className="overflow-auto h-[calc(100vh-56px)]">
         <div className="p-3">
-          <p className="text-sm text-muted-foreground mb-5">
-            Hover over any tutorial to preview the video.
-          </p>
-          
           <div className="space-y-5">
-            {videoTiles.map(video => (
-              <div 
-                key={video.id}
-                className="relative rounded-lg overflow-hidden shadow-md border border-border/40 hover:shadow-lg transition-all"
-                onMouseEnter={() => handleMouseEnter(video.id)}
-                onMouseLeave={() => handleMouseLeave(video.id)}
-              >
-                <div className="aspect-video relative">
-                  {/* Video thumbnail when not active */}
-                  {activeVideoId !== video.id && (
-                    <>
-                      <img 
-                        src={video.thumbnailUrl} 
-                        alt={video.title}
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                        <div className="bg-white/90 dark:bg-black/90 rounded-full p-3">
-                          <Play className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                        </div>
-                      </div>
-                    </>
-                  )}
-                  
-                  {/* Video player - hidden initially but shows on hover */}
-                  <video
-                    ref={el => videoRefs.current[video.id] = el}
-                    src={video.videoUrl}
-                    className={cn(
-                      "absolute inset-0 w-full h-full object-cover transition-opacity",
-                      activeVideoId === video.id ? "opacity-100" : "opacity-0"
-                    )}
-                    muted
-                    playsInline
-                    loop
-                  />
-                </div>
-                
-                <div className="p-3 bg-card">
-                  <div className="flex items-center gap-2 mb-1">
+            {videoTiles.map(video => {
+              const isChecked = checkedIds.includes(video.id);
+              const isExpanded = expandedIds.includes(video.id);
+              const handleClick = () => {
+                setExpandedIds(prev =>
+                  isExpanded ? prev.filter(id => id !== video.id) : [...prev, video.id]
+                );
+                if (!isChecked && !isExpanded) {
+                  setCheckedIds(prev => [...prev, video.id]);
+                }
+              };
+              return (
+                <div
+                  key={video.id}
+                  className="relative rounded-lg overflow-hidden shadow-md border border-border/40 hover:shadow-lg transition-all"
+                  onMouseEnter={() => handleMouseEnter(video.id)}
+                  onMouseLeave={() => handleMouseLeave(video.id)}
+                >
+                  <div
+                    className="flex items-center gap-2 mb-0 cursor-pointer select-none p-5 bg-card"
+                    onClick={handleClick}
+                  >
                     <div className="p-1 rounded-full bg-blue-100 dark:bg-blue-900/30">
                       {video.icon}
                     </div>
-                    <h3 className="font-medium text-sm">{video.title}</h3>
+                    <h3 className="font-medium text-sm flex-1">{video.title}</h3>
+                    {isChecked ? (
+                      // Check mark
+                      <svg className="h-4 w-4 ml-2 text-green-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                        <path d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      // Down arrow
+                      <svg className="h-4 w-4 ml-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {video.description}
-                  </p>
+                  <div
+                    className={`px-5 transition-all duration-300 ease-in-out overflow-hidden text-sm text-muted-foreground
+                      ${isExpanded ? 'pb-5 pt-1 max-h-40 opacity-100' : 'pb-0 pt-0 max-h-0 opacity-0'}`}
+                    style={{
+                      transitionProperty: 'max-height, opacity, padding',
+                    }}
+                  >
+                    {isExpanded && (
+                      <p>{video.description}</p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

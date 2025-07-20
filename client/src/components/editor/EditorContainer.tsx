@@ -403,7 +403,7 @@ export function EditorContainer({
       // Show paragraph topics
       Object.entries(paragraphTopicHighlights).forEach(([, { from, to }]) => {
         editor.commands.setTextSelection({ from, to });
-        editor.commands.setHighlight({ color: '#93c5fd' });
+        editor.commands.setHighlight({ color: '#ffb700' });
       });
     }
     else if (topicType === 'paragraph_hide') {
@@ -419,7 +419,7 @@ export function EditorContainer({
           from: essayTopicHighlight.from,
           to: essayTopicHighlight.to
         });
-        editor.commands.setHighlight({ color: '#c4b5fd' });
+        editor.commands.setHighlight({ color: '#ffff00' });
       }
     }
     else if (topicType === 'document') {
@@ -429,7 +429,7 @@ export function EditorContainer({
           from: essayTopicHighlight.from,
           to: essayTopicHighlight.to
         });
-        editor.commands.setHighlight({ color: '#c4b5fd' });
+        editor.commands.setHighlight({ color: '#ffff00' });
       }
     }
     else if (topicType === 'document_hide') {
@@ -446,7 +446,7 @@ export function EditorContainer({
       if (showParagraphTopics) {
         Object.entries(paragraphTopicHighlights).forEach(([, { from, to }]) => {
           editor.commands.setTextSelection({ from, to });
-          editor.commands.setHighlight({ color: '#93c5fd' });
+          editor.commands.setHighlight({ color: '#ffb700' });
         });
       }
     }
@@ -573,7 +573,7 @@ export function EditorContainer({
       // Apply the new highlight if topics are shown
       if (showParagraphTopics) {
         editor.chain()
-          .setHighlight({ color: '#93c5fd' })
+          .setHighlight({ color: '#ffb700' })
           .setTextSelection(to)
           .run();
       }
@@ -629,7 +629,7 @@ export function EditorContainer({
     // Apply the new highlight if topics are shown
     if (showEssayTopics) {
       editor.chain()
-        .setHighlight({ color: '#c4b5fd' })
+        .setHighlight({ color: '#ffff00' })
         .setTextSelection(to)
         .run();
     }
@@ -914,6 +914,7 @@ export function EditorContainer({
   }, [editor]);
 
   // Check if this is the user's first visit
+  /*
   useEffect(() => {
     const hasVisitedBefore = localStorage.getItem('ripple-has-visited');
     if (!hasVisitedBefore) {
@@ -926,6 +927,7 @@ export function EditorContainer({
       }, 1000);
     }
   }, []);
+  */
 
   // Save document content
   const handleSave = useCallback(async () => {
@@ -1443,6 +1445,8 @@ export function EditorContainer({
               }}
               editor={editor}
               isAnalyzing={isSentenceFlowAnalyzing}
+              userId={user?.id}
+              fileId={currentFileId || undefined}
             />
           );
         })()}

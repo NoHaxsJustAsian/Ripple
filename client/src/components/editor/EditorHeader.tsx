@@ -9,7 +9,7 @@ import { CommentType } from './types';
 import { Editor } from '@tiptap/react';
 import { useAuth } from '@/lib/auth-context';
 import { FileService } from '@/lib/file-service';
-import { EventType } from '@/lib/event-logger';
+import { logEvent, EventType } from '@/lib/event-logger';
 import { FilePicker } from '@/components/FilePicker';
 import { FileData } from '@/lib/supabase';
 import { HighlightingManager } from '@/lib/highlighting-manager';
@@ -284,16 +284,20 @@ export function EditorHeader({
     setIsFlowMode(checked);
 
     if (highlightingManager) {
-      // Don't change highlighting mode if Write Mode is currently active
-      if (isWriteMode) {
-        console.log('🌊 Flow mode state updated but Write Mode is active - keeping write mode');
-        return;
-      }
-
       if (checked) {
         // Flow mode ON: Switch to flow highlighting, hide comments
         console.log('🌊 FLOW MODE ACTIVATED - Switching to flow highlights');
         highlightingManager.switchMode('flow');
+
+        // Log flow mode entry
+        if (user?.id) {
+          logEvent(user.id, 'flow_mode_enter', {
+            file_id: currentFileId
+          });
+          logEvent(user.id, 'feedback_mode_exit', {
+            file_id: currentFileId
+          });
+        }
 
         // Check if there are no flow highlights yet
         const flowHighlights = highlightingManager.getHighlightData('flow');
@@ -304,6 +308,16 @@ export function EditorHeader({
         }
       } else {
         highlightingManager.switchMode('comments');
+
+        // Log flow mode exit
+        if (user?.id) {
+          logEvent(user.id, 'flow_mode_exit', {
+            file_id: currentFileId
+          });
+          logEvent(user.id, 'feedback_mode_enter', {
+            file_id: currentFileId
+          });
+        }
       }
     } else {
       console.warn('HighlightingManager not available for flow toggle');
@@ -320,6 +334,14 @@ export function EditorHeader({
         // Write mode ON: Switch to write mode, hide all highlights
         console.log('✍️ WRITE MODE ACTIVATED - Switching to write mode, hiding all highlights');
         highlightingManager.switchMode('write');
+
+        // Log write mode entry
+        if (user?.id) {
+          logEvent(user.id, 'write_mode_enter', {
+            file_id: currentFileId
+          });
+        }
+
         toast.info("Write mode activated - Focus on your writing!", {
           duration: 3000,
         });
@@ -331,6 +353,14 @@ export function EditorHeader({
         } else {
           highlightingManager.switchMode('comments');
         }
+
+        // Log write mode exit
+        if (user?.id) {
+          logEvent(user.id, 'write_mode_exit', {
+            file_id: currentFileId
+          });
+        }
+
         toast.info("Write mode deactivated", {
           duration: 2000,
         });
