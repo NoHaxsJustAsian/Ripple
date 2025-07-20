@@ -44,7 +44,7 @@ export function EditorContainer({
   const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
   const [isInsightsOpen, setIsInsightsOpen] = useState(true);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
-  const [isFirstVisit, setIsFirstVisit] = useState(false);
+  const [isFirstVisit, _setIsFirstVisit] = useState(false);
   const [documentTitle, setDocumentTitle] = useState('Untitled document');
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);

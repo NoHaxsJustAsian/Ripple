@@ -19,7 +19,7 @@ interface HelpSplashScreenProps {
 }
 
 export function HelpSplashScreen({ isOpen, onClose }: HelpSplashScreenProps) {
-  const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
+  const [_activeVideoId, setActiveVideoId] = useState<string | null>(null);
   const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
   const [checkedIds, setCheckedIds] = useState<string[]>([]);
