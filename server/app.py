@@ -2033,27 +2033,20 @@ def analyze_sentence_flow():
         print(f"❌ Error in analyze_sentence_flow: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-# Add frontend route handler - only for non-API routes
-@app.route('/')
-def serve_index():
-    """Serve the frontend index.html"""
-    static_folder = os.getenv('STATIC_FOLDER', '../client/dist')
-    return send_from_directory(static_folder, 'index.html')
-
-# Only serve static files for frontend assets  
-@app.route('/<path:path>')  
-def serve_static(path):
-    """Serve frontend static files for SPA routing"""
-    # Skip API routes entirely - they should never reach here
-    if path.startswith('api/'):
-        # This indicates a routing problem - API routes should be handled by specific handlers
-        return jsonify({"error": "API routing error - endpoint not found"}), 404
-        
-    static_folder = os.getenv('STATIC_FOLDER', '../client/dist')
-    if os.path.exists(os.path.join(static_folder, path)):
-        return send_from_directory(static_folder, path)
+# Add frontend route handler if needed - exclude API routes
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve(path):
+    """
+    Serve frontend static files if configured, but exclude API routes
+    """
+    # Don't serve static files for API routes
+    if path and path.startswith('api/'):
+        return jsonify({"error": "API endpoint not found"}), 404
     
-    # For SPA routing, serve index.html for any non-API, non-static-file routes
+    static_folder = os.getenv('STATIC_FOLDER', '../client/dist')
+    if path and os.path.exists(os.path.join(static_folder, path)):
+        return send_from_directory(static_folder, path)
     return send_from_directory(static_folder, 'index.html')
 
 if __name__ == "__main__":

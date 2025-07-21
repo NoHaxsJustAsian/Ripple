@@ -477,13 +477,13 @@ export function AIContextMenu({
               <HighlighterIcon className="mr-2 h-4 w-4" />
               <span>Check Custom Selection</span>
             </ContextMenuItem>
-            <ContextMenuItem
+            {/* <ContextMenuItem
               onSelect={handleAIAction}
               className="flex items-center"
             >
               <Wand2 className="mr-2 h-4 w-4" />
               <span>Get Instant AI Feedback</span>
-            </ContextMenuItem>
+            </ContextMenuItem> */}
             <ContextMenuSeparator />
             <ContextMenuItem
               onSelect={onSelectAsParagraphTopic}

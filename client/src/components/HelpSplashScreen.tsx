@@ -101,15 +101,16 @@ export function HelpSplashScreen({ isOpen, onClose }: HelpSplashScreenProps) {
       thumbnailUrl: '/tutorial-thumbnails/ai-features.jpg',
       videoUrl: 'https://example.com/videos/ai-features.mp4',
       icon: <DropletIcon className="h-5 w-5" />,
-    },
-    {
-      id: 'instant-ai-feedback',
-      title: 'Getting Instant AI Feedback',
-      description: 'Quickly ask an AI for sentence-specific feedback by right clicking and selecting \'Ask AI\' then typing your question.',
-      thumbnailUrl: '/tutorial-thumbnails/ai-feedback.jpg',
-      videoUrl: 'https://example.com/videos/ai-feedback.mp4',
-      icon: <MagicWandIcon className="h-5 w-5" />,
     }
+    // ,
+    // {
+    //   id: 'instant-ai-feedback',
+    //   title: 'Getting Instant AI Feedback',
+    //   description: 'Quickly ask an AI for sentence-specific feedback by right clicking and selecting \'Ask AI\' then typing your question.',
+    //   thumbnailUrl: '/tutorial-thumbnails/ai-feedback.jpg',
+    //   videoUrl: 'https://example.com/videos/ai-feedback.mp4',
+    //   icon: <MagicWandIcon className="h-5 w-5" />,
+    // }
   ];
 
   const handleMouseEnter = (videoId: string) => {

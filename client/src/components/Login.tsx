@@ -95,6 +95,7 @@ export function Login() {
               className="w-full" 
               onClick={handleBypass}
               disabled={isLoading}
+              style={{ display: 'none' }}
             >
               Bypass Login (Testing)
             </Button>
