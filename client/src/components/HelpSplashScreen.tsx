@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { X, WavesIcon, DropletIcon, FileCheck2Icon, BookCheckIcon } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { Button } from './ui/button';
-import { CursorArrowIcon, MagicWandIcon } from '@radix-ui/react-icons';
+import { CursorArrowIcon } from '@radix-ui/react-icons';
 
 interface VideoTile {
   id: string;

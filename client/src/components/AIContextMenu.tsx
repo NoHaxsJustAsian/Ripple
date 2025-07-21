@@ -1,6 +1,6 @@
 import { useState, Dispatch, SetStateAction, useEffect, useRef } from 'react';
 import { Editor } from '@tiptap/react';
-import { Wand2, Copy, Clipboard, RectangleEllipsis, FileText, MessageSquare, FileCheck2, HighlighterIcon, MousePointer2 } from 'lucide-react';
+import { Copy, Clipboard, RectangleEllipsis, FileText, MessageSquare, FileCheck2, HighlighterIcon, MousePointer2 } from 'lucide-react';
 import { InlineAIPrompt } from './InlineAIPrompt';
 import { InlineAIResponse } from './InlineAIResponse';
 import { sendCustomPrompt } from '../lib/api';
@@ -44,7 +44,7 @@ export function AIContextMenu({
   runContextualAnalysis
 }: AIContextMenuProps) {
   const [showInlinePrompt, setShowInlinePrompt] = useState(false);
-  const [promptPosition, setPromptPosition] = useState({ x: 0, y: 0 });
+  const [promptPosition] = useState({ x: 0, y: 0 });
   const [selectedText, setSelectedText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [aiResponse, setAiResponse] = useState<{
@@ -69,26 +69,7 @@ export function AIContextMenu({
     startMouseY: 0
   });
 
-  const handleAIAction = () => {
-    if (!editor) return;
-    const { from, to } = editor.state.selection;
-    if (from === to) return; // No selection
 
-    // Store the selected text and original selection range
-    const text = editor.state.doc.textBetween(from, to);
-    setSelectedText(text);
-    setOriginalSelection({ from, to });
-
-    const mouseEvent = window.event as MouseEvent;
-
-    setPromptPosition({
-      x: Math.max(20, Math.min(mouseEvent.clientX, window.innerWidth - 420)),
-      y: Math.max(20, mouseEvent.clientY - 20)
-    });
-    setShowInlinePrompt(true);
-    // Reset any previous responses
-    setAiResponse(null);
-  };
 
   const handleBackToContextMenu = () => {
     setShowInlinePrompt(false);
