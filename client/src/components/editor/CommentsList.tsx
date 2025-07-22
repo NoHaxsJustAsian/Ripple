@@ -22,6 +22,7 @@ interface CommentsListProps {
   setFocusedCommentId: (id: string | null) => void;
   sortCommentsRef?: React.MutableRefObject<(() => void) | null>;
   highlightingManager?: HighlightingManager | null;
+  isAnyAnalysisRunning?: boolean;
 }
 
 export function CommentsList({
@@ -35,7 +36,8 @@ export function CommentsList({
   focusedCommentId,
   setFocusedCommentId,
   sortCommentsRef,
-  highlightingManager
+  highlightingManager,
+  isAnyAnalysisRunning
 }: CommentsListProps) {
   const commentsSectionRef = useRef<HTMLDivElement | null>(null);
 
@@ -583,8 +585,10 @@ export function CommentsList({
           "absolute left-0 top-1/4 -translate-y-1/2 -translate-x-full",
           "bg-background border border-border/40 border-r-0",
           "px-2 py-3 rounded-l-md",
-          "transition-colors hover:bg-accent"
+          "transition-colors hover:bg-accent",
+          isAnyAnalysisRunning ? "opacity-50 cursor-not-allowed" : ""
         )}
+        disabled={isAnyAnalysisRunning}
       >
         <div className="flex flex-col items-center gap-2">
           {isOpen ? (

@@ -1749,7 +1749,7 @@ def analyze_paragraph_cohesion(sentence: str, document: str, paragraph_topic: st
         - **Specific Sentence Connections**: Show how the target sentence relates to particular other sentences in the paragraph
         - **Word/Theme Analysis**: Point out specific words or concepts that connect, clash, or are missing between sentences
         - **Context References**: Use brief quotes (3-8 words) from other sentences to show these specific relationships
-        - **Concise Analysis**: Limit feedback to exactly 2-3 sentences maximum
+        - **Concise Analysis**: Limit feedback to exactly 2-3 sentences maximum and only devote 1 sentence to summarizing the sentence's perceived purpose.
         - **Helpful Suggestions**: Frame suggestions as ways to strengthen connections between specific sentences using <b>bold tags</b>
 
         ### Language Style
@@ -1874,6 +1874,7 @@ Evaluate these aspects:
 - **Specific Document Connections**: Show how the target sentence relates to particular other sections, arguments, or themes in the document
 - **Word/Concept Analysis**: Point out specific words or concepts that connect, clash, or are missing between this sentence and other parts
 - **Context References**: Use brief quotes (3-8 words) from other parts of the document to show these specific relationships
+- **Critical Analysis**: You should rarely classify a sentence to be "excellent" or "moderate" in the document cohesion analysis. You should only do this if the sentence is very clearly a strong support or counterpoint to the overall argument of the document.
 - **Concise Analysis**: Limit feedback to exactly 2 sentences maximum
 - **Helpful Suggestions**: Frame suggestions as ways to strengthen connections within the overall document using <b>bold tags</b>
 
@@ -1885,8 +1886,8 @@ Evaluate these aspects:
 
 **Score Scale:**
 - 0.9-1.0: Excellent connection, clearly advances document's main message
-- 0.7-0.8: Good connection with minor gaps in supporting the overall argument
-- 0.5-0.6: Moderate connection, some unclear relationships to document themes
+- 0.7-0.8: Moderate connection with minor gaps in supporting the overall argument
+- 0.5-0.6: Fair connection, some unclear relationships to document themes
 - 0.3-0.4: Weak connection, limited tie to main arguments or thesis
 - 0.0-0.2: Poor connection, disrupts or contradicts document's main message
 

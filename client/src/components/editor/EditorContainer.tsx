@@ -42,7 +42,7 @@ export function EditorContainer({
 }: EditorProps): JSX.Element | null {
   const { user } = useAuth();
   const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
-  const [isInsightsOpen, setIsInsightsOpen] = useState(true);
+  const [isInsightsOpen, setIsInsightsOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isFirstVisit, _setIsFirstVisit] = useState(false);
   const [documentTitle, setDocumentTitle] = useState('Untitled document');
@@ -818,7 +818,11 @@ export function EditorContainer({
         });
 
         setComments(prev => [...prev, ...newComments]);
-        setIsInsightsOpen(true);
+
+        // Only open comments panel if currently in comments mode
+        if (highlightingManager?.getCurrentMode() === 'comments') {
+          setIsInsightsOpen(true);
+        }
 
         // Trigger comment sorting to include new comments
         setTimeout(() => {
@@ -1245,6 +1249,7 @@ export function EditorContainer({
                 highlightingManager={highlightingManager}
                 isAnalysisRunning={isAnalysisRunning}
                 setIsAnalysisRunning={setIsAnalysisRunning}
+                isAnyAnalysisRunning={isAnyAnalysisRunning}
                 onLoadFile={(file) => {
                   setCurrentFileId(file.id);
                   setDocumentTitle(file.title);
@@ -1374,6 +1379,7 @@ export function EditorContainer({
                 setFocusedCommentId={setFocusedCommentId}
                 sortCommentsRef={sortCommentsRef}
                 highlightingManager={highlightingManager}
+                isAnyAnalysisRunning={isAnyAnalysisRunning}
               />
             </div>
           </div>

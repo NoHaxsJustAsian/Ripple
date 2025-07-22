@@ -1,8 +1,8 @@
 import { useCallback, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ModeToggle } from '@/components/ui/mode-toggle';
-import { ToggleSwitch } from '@/components/ui/toggle-switch';
-import { Save, FileDown, HelpCircle, FileCheck2, Droplet, PencilIcon, PencilOffIcon } from 'lucide-react';
+import { EditorModeToggle, EditorMode } from '@/components/ui/editor-mode-toggle';
+import { Save, FileDown, HelpCircle, FileCheck2 } from 'lucide-react';
 import { toast } from "sonner";
 import { AnalysisTools } from './AnalysisTools';
 import { CommentType } from './types';
@@ -32,6 +32,7 @@ interface EditorHeaderProps {
   isAnalysisRunning?: boolean;
   setIsAnalysisRunning?: (running: boolean) => void;
   userId?: string;
+  isAnyAnalysisRunning?: boolean;
 }
 
 export function EditorHeader({
@@ -51,33 +52,17 @@ export function EditorHeader({
   highlightingManager,
   isAnalysisRunning,
   setIsAnalysisRunning,
-  userId
+  userId,
+  isAnyAnalysisRunning
 }: EditorHeaderProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isFilePickerOpen, setIsFilePickerOpen] = useState(false);
-  const [isFlowMode, setIsFlowMode] = useState(true);
-  const [isWriteMode, setIsWriteMode] = useState(false);
+  const [editorMode, setEditorMode] = useState<EditorMode>('flow');
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   const { user } = useAuth();
   const [fileService, setFileService] = useState<FileService | null>(null);
 
-  // Custom DropletOff component
-  const DropletOffIcon = () => (
-    <svg
-      width="10"
-      height="10"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M18.715 13.186C18.29 11.858 17.384 10.607 16 9.5c-2-1.6-3.5-4-4-6.5a10.7 10.7 0 0 1-.884 2.586" />
-      <path d="m2 2 20 20" />
-      <path d="M8.795 8.797A11 11 0 0 1 8 9.5C6 11.1 5 13 5 15a7 7 0 0 0 13.222 3.208" />
-    </svg>
-  );
+
 
   // Initialize file service when user changes
   useEffect(() => {
@@ -90,12 +75,12 @@ export function EditorHeader({
 
   // Sync highlighting manager with initial UI state
   useEffect(() => {
-    if (highlightingManager && isFlowMode) {
-      // Set highlighting manager to flow mode to match the default UI state
-      console.log('🔄 Syncing highlighting manager with initial flow mode state');
-      highlightingManager.switchMode('flow');
+    if (highlightingManager) {
+      // Set highlighting manager to match the default UI state
+      console.log('🔄 Syncing highlighting manager with initial editor mode state:', editorMode);
+      highlightingManager.switchMode(editorMode);
     }
-  }, [highlightingManager]); // Only run when highlighting manager becomes available
+  }, [highlightingManager, editorMode]); // Run when highlighting manager becomes available or mode changes
 
   const handleSave = useCallback(async () => {
     if (!editor || !user) return;
@@ -280,25 +265,45 @@ export function EditorHeader({
     }
   };
 
-  const handleFlowToggle = (checked: boolean) => {
-    setIsFlowMode(checked);
+  const handleModeChange = (newMode: EditorMode) => {
+    setEditorMode(newMode);
+
+    // Automatically control comments list visibility based on mode
+    if (newMode === 'comments') {
+      // Open comments list when in feedback mode
+      setIsInsightsOpen(true);
+    } else {
+      // Close comments list when in write or flow mode
+      setIsInsightsOpen(false);
+    }
 
     if (highlightingManager) {
-      if (checked) {
-        // Flow mode ON: Switch to flow highlighting, hide comments
-        console.log('🌊 FLOW MODE ACTIVATED - Switching to flow highlights');
-        highlightingManager.switchMode('flow');
+      console.log(`🔄 MODE SWITCH - Switching to ${newMode} mode`);
+      highlightingManager.switchMode(newMode);
 
-        // Log flow mode entry
-        if (user?.id) {
-          logEvent(user.id, 'flow_mode_enter', {
-            file_id: currentFileId
-          });
-          logEvent(user.id, 'feedback_mode_exit', {
-            file_id: currentFileId
-          });
+      // Log mode changes
+      if (user?.id) {
+        // Log exit from current mode
+        if (editorMode === 'flow') {
+          logEvent(user.id, 'flow_mode_exit', { file_id: currentFileId });
+        } else if (editorMode === 'write') {
+          logEvent(user.id, 'write_mode_exit', { file_id: currentFileId });
+        } else if (editorMode === 'comments') {
+          logEvent(user.id, 'feedback_mode_exit', { file_id: currentFileId });
         }
 
+        // Log entry to new mode
+        if (newMode === 'flow') {
+          logEvent(user.id, 'flow_mode_enter', { file_id: currentFileId });
+        } else if (newMode === 'write') {
+          logEvent(user.id, 'write_mode_enter', { file_id: currentFileId });
+        } else if (newMode === 'comments') {
+          logEvent(user.id, 'feedback_mode_enter', { file_id: currentFileId });
+        }
+      }
+
+      // Mode-specific actions
+      if (newMode === 'flow') {
         // Check if there are no flow highlights yet
         const flowHighlights = highlightingManager.getHighlightData('flow');
         if (flowHighlights.size === 0) {
@@ -306,70 +311,20 @@ export function EditorHeader({
             duration: 4000,
           });
         }
-      } else {
-        highlightingManager.switchMode('comments');
-
-        // Log flow mode exit
-        if (user?.id) {
-          logEvent(user.id, 'flow_mode_exit', {
-            file_id: currentFileId
-          });
-          logEvent(user.id, 'feedback_mode_enter', {
-            file_id: currentFileId
-          });
-        }
-      }
-    } else {
-      console.warn('HighlightingManager not available for flow toggle');
-    }
-
-    console.log('Flow mode:', checked ? 'enabled' : 'disabled');
-  };
-
-  const handleWriteModeToggle = (checked: boolean) => {
-    setIsWriteMode(checked);
-
-    if (highlightingManager) {
-      if (checked) {
-        // Write mode ON: Switch to write mode, hide all highlights
-        console.log('✍️ WRITE MODE ACTIVATED - Switching to write mode, hiding all highlights');
-        highlightingManager.switchMode('write');
-
-        // Log write mode entry
-        if (user?.id) {
-          logEvent(user.id, 'write_mode_enter', {
-            file_id: currentFileId
-          });
-        }
-
+      } else if (newMode === 'write') {
         toast.info("Write mode activated - Focus on your writing!", {
           duration: 3000,
         });
-      } else {
-        // Write mode OFF: Restore appropriate mode based on Flow Mode state
-        console.log('✍️ WRITE MODE DEACTIVATED - Restoring normal mode');
-        if (isFlowMode) {
-          highlightingManager.switchMode('flow');
-        } else {
-          highlightingManager.switchMode('comments');
-        }
-
-        // Log write mode exit
-        if (user?.id) {
-          logEvent(user.id, 'write_mode_exit', {
-            file_id: currentFileId
-          });
-        }
-
-        toast.info("Write mode deactivated", {
+      } else if (newMode === 'comments') {
+        toast.info("Feedback mode activated - Comments panel opened", {
           duration: 2000,
         });
       }
     } else {
-      console.warn('HighlightingManager not available for write mode toggle');
+      console.warn('HighlightingManager not available for mode toggle');
     }
 
-    console.log('Write mode:', checked ? 'enabled' : 'disabled');
+    console.log(`Editor mode changed to: ${newMode}`);
   };
 
   return (
@@ -455,30 +410,12 @@ export function EditorHeader({
             />
             <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
 
-            {/* Flow Toggle */}
-            <div className="flex items-center space-x-2 bg-white dark:bg-transparent rounded-lg px-3 py-1.5 shadow-sm dark:shadow-none">
-              <ToggleSwitch
-                checked={isFlowMode}
-                onCheckedChange={handleFlowToggle}
-                label="Flow Mode"
-                onIcon={<Droplet className="h-2.5 w-2.5" strokeWidth={2.5} />}
-                offIcon={<DropletOffIcon />}
-                activeColor="bg-blue-500"
-                size="sm"
-              />
-            </div>
-
-            <div className="flex items-center space-x-2 bg-white dark:bg-transparent rounded-lg px-3 py-1.5 shadow-sm dark:shadow-none">
-              <ToggleSwitch
-                checked={isWriteMode}
-                onCheckedChange={handleWriteModeToggle}
-                label="Write Mode"
-                onIcon={<PencilIcon className="h-2.5 w-2.5" strokeWidth={2.5} />}
-                offIcon={<PencilOffIcon />}
-                activeColor="bg-green-500"
-                size="sm"
-              />
-            </div>
+            {/* Editor Mode Toggle */}
+            <EditorModeToggle
+              value={editorMode}
+              onValueChange={handleModeChange}
+              disabled={isAnyAnalysisRunning}
+            />
 
             <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
             <div className="bg-white dark:bg-transparent rounded-lg shadow-sm dark:shadow-none">
@@ -487,6 +424,7 @@ export function EditorHeader({
               size="sm"
               onClick={() => setIsInsightsOpen(!isInsightsOpen)}
               className="h-7 px-3 text-xs flex items-center space-x-1"
+                disabled={isAnyAnalysisRunning}
             >
               <FileCheck2 className="h-3.5 w-3.5" />
               <span>Toggle Suggestions</span>

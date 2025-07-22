@@ -86,7 +86,7 @@
 .flow-mode-highlight[data-connection-strength^="0.5"],
 .flow-mode-highlight[data-connection-strength^="0.6"],
 .flow-mode-highlight[data-connection-strength^="0.7"] {
-    background-color: rgba(65, 167, 207, 0.5);
+    background-color: rgba(65, 167, 207, 0.4);
         border-bottom: 2px solid rgba(65, 167, 207, 0.6);
     border-radius: 2px;
     z-index: 2;
@@ -150,8 +150,8 @@
 
 /* Exception: Show selected sentence with darkest green highlighting */
 .editor-container[data-highlighting-mode="flow-sentence"] .flow-sentence-selected {
-    background-color: rgba(65, 167, 207, 0.9) !important;
-        border-bottom: 3px solid rgb(65, 167, 207) !important;
+    background-color: rgba(207, 205, 65, 0.9) !important;
+        border-bottom: 3px solid rgb(207, 205, 65) !important;
     border-radius: 2px !important;
     opacity: 1 !important;
     position: relative;

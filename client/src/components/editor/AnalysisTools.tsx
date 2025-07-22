@@ -233,7 +233,11 @@ export function AnalysisTools({
         });
 
         setComments(prev => [...prev, ...newComments]);
-        setIsInsightsOpen(true);
+
+        // Only open comments panel if currently in comments mode
+        if (highlightingManager?.getCurrentMode() === 'comments') {
+          setIsInsightsOpen(true);
+        }
       }
 
       // For custom analysis, now generate full document flow highlights
@@ -341,14 +345,20 @@ export function AnalysisTools({
       icon: <File className="h-3.5 w-3.5 text-blue-500" />,
       className: "flex items-center cursor-pointer border-b border-gray-200 border-solid pt-2 pb-2",
       description: 'Get comprehensive feedback for the entire document',
-      action: () => runContextualAnalysis('all')
+      action: () => {
+        setIsInsightsOpen(false);
+        runContextualAnalysis('all');
+      }
     },
     {
       value: 'custom',
       label: 'Check custom selection',
       description: 'Get feedback for the selected text',
       icon: <Highlighter className="h-3.5 w-3.5 text-purple-500" />,
-      action: () => runContextualAnalysis('custom')
+      action: () => {
+        setIsInsightsOpen(false);
+        runContextualAnalysis('custom');
+      }
     }
   ];
 

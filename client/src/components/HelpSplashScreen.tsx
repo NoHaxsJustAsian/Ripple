@@ -55,6 +55,14 @@ export function HelpSplashScreen({ isOpen, onClose }: HelpSplashScreenProps) {
 
   const videoTiles: VideoTile[] = [
     {
+      id: 'set-topics',
+      title: 'Selecting Paragraph and Essay Topics',
+      description: 'Highlight an important sentence in your editor. Then, right click and select \'Set Paragraph Topic\' or \'Set Essay Topic\'. This will improve the system feedback.',
+      thumbnailUrl: '/tutorial-thumbnails/comments.jpg',
+      videoUrl: 'https://example.com/videos/comments.mp4',
+      icon: <CursorArrowIcon className="h-5 w-5" />,
+    },
+    {
       id: 'doc-feedback',
       title: 'Checking for General Feedback',
       description: 'Get feedback on everything in the editor. Click the \'Check for Feedback\' button and then select \'Check document\'.',
@@ -72,8 +80,8 @@ export function HelpSplashScreen({ isOpen, onClose }: HelpSplashScreenProps) {
     },
     {
       id: 'flow-mode',
-      title: 'Using Flow Mode',
-      description: 'Flow mode is a tool that visalizes how strongly connected each sentence is to other sentences in the document. The darker the shade of blue, the more connected the sentences are. View the flow of your writing after checking for feedback.',
+      title: 'Using the Writing, Flow, and Analysis Modes',
+      description: 'First, get feedback on your document by clicking \'Check for Feedback\'. This will generate sentence flow analysis. Then switch to Flow mode using the mode toggle to view how strongly connected each sentence is to other sentences. The darker the shade of blue, the more connected the sentences are. Click on any highlighted sentence for detailed analysis.',
       thumbnailUrl: '/tutorial-thumbnails/ai-features.jpg',
       videoUrl: 'https://example.com/videos/ai-features.mp4',
       icon: <DropletIcon className="h-5 w-5" />,
@@ -81,26 +89,10 @@ export function HelpSplashScreen({ isOpen, onClose }: HelpSplashScreenProps) {
     {
       id: 'flow-analysis',
       title: 'Viewing Flow Analysis',
-      description: 'Flow analysis is a tool that visualizes which sentences are most strongly conencted to other sentences in the document. The darker the shade of blue, the more connected the sentences are. Flow analysis also gives an explanation of how the sentence is connected to its paragraph and overall document.',
+      description: 'After checking for feedback and switching to Flow mode, click on any highlighted sentence to view detailed flow analysis. This shows how the sentence connects to its paragraph and overall document, with explanations of the connection strength and contextual relationships.',
       thumbnailUrl: '/tutorial-thumbnails/topics.jpg',
       videoUrl: 'https://example.com/videos/topics.mp4',
       icon: <WavesIcon className="h-5 w-5" />,
-    },
-    {
-      id: 'set-topics',
-      title: 'Selecting Paragraph and Essay Topics',
-      description: 'Right click and select \'Set Paragraph Topic\' or \'Set Essay Topic\' to specify the main ideas of your writing. This will improve the system feedback.',
-      thumbnailUrl: '/tutorial-thumbnails/comments.jpg',
-      videoUrl: 'https://example.com/videos/comments.mp4',
-      icon: <CursorArrowIcon className="h-5 w-5" />,
-    },
-    {
-      id: 'writing-mode',
-      title: 'Entering Writing Feedback Mode',
-      description: 'After checking for feedback, new suggestions will appear in the right sidebar. You can right click on the suggestions to generate new suggestions. You can also press the refresh button to get updated feedback.',
-      thumbnailUrl: '/tutorial-thumbnails/ai-features.jpg',
-      videoUrl: 'https://example.com/videos/ai-features.mp4',
-      icon: <DropletIcon className="h-5 w-5" />,
     }
     // ,
     // {
@@ -137,7 +129,7 @@ export function HelpSplashScreen({ isOpen, onClose }: HelpSplashScreenProps) {
       className={cn(
         "fixed left-0 top-0 h-screen bg-background border-r border-border/40",
         "transition-all duration-300 ease-in-out",
-        "z-50 w-[440px] shadow-lg overflow-hidden",
+        "z-[99999] w-[440px] shadow-lg overflow-hidden",
         position
       )}
     >
