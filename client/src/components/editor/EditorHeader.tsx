@@ -9,7 +9,7 @@ import { CommentType } from './types';
 import { Editor } from '@tiptap/react';
 import { useAuth } from '@/lib/auth-context';
 import { FileService } from '@/lib/file-service';
-import { logEvent, EventType } from '@/lib/event-logger';
+import { EventType } from '@/lib/event-logger';
 import { FilePicker } from '@/components/FilePicker';
 import { FileData } from '@/lib/supabase';
 import { HighlightingManager } from '@/lib/highlighting-manager';
@@ -33,6 +33,8 @@ interface EditorHeaderProps {
   setIsAnalysisRunning?: (running: boolean) => void;
   userId?: string;
   isAnyAnalysisRunning?: boolean;
+  editorMode?: EditorMode;
+  onModeChange?: (mode: EditorMode) => void;
 }
 
 export function EditorHeader({
@@ -40,7 +42,6 @@ export function EditorHeader({
   documentTitle,
   setDocumentTitle,
   comments,
-  isInsightsOpen,
   setIsInsightsOpen,
   setIsHelpOpen,
   isHelpOpen,
@@ -53,11 +54,12 @@ export function EditorHeader({
   isAnalysisRunning,
   setIsAnalysisRunning,
   userId,
-  isAnyAnalysisRunning
+  isAnyAnalysisRunning,
+  editorMode,
+  onModeChange
 }: EditorHeaderProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isFilePickerOpen, setIsFilePickerOpen] = useState(false);
-  const [editorMode, setEditorMode] = useState<EditorMode>('flow');
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   const { user } = useAuth();
   const [fileService, setFileService] = useState<FileService | null>(null);
@@ -75,7 +77,7 @@ export function EditorHeader({
 
   // Sync highlighting manager with initial UI state
   useEffect(() => {
-    if (highlightingManager) {
+    if (highlightingManager && editorMode) {
       // Set highlighting manager to match the default UI state
       console.log('🔄 Syncing highlighting manager with initial editor mode state:', editorMode);
       highlightingManager.switchMode(editorMode);
@@ -265,67 +267,7 @@ export function EditorHeader({
     }
   };
 
-  const handleModeChange = (newMode: EditorMode) => {
-    setEditorMode(newMode);
 
-    // Automatically control comments list visibility based on mode
-    if (newMode === 'comments') {
-      // Open comments list when in feedback mode
-      setIsInsightsOpen(true);
-    } else {
-      // Close comments list when in write or flow mode
-      setIsInsightsOpen(false);
-    }
-
-    if (highlightingManager) {
-      console.log(`🔄 MODE SWITCH - Switching to ${newMode} mode`);
-      highlightingManager.switchMode(newMode);
-
-      // Log mode changes
-      if (user?.id) {
-        // Log exit from current mode
-        if (editorMode === 'flow') {
-          logEvent(user.id, 'flow_mode_exit', { file_id: currentFileId });
-        } else if (editorMode === 'write') {
-          logEvent(user.id, 'write_mode_exit', { file_id: currentFileId });
-        } else if (editorMode === 'comments') {
-          logEvent(user.id, 'feedback_mode_exit', { file_id: currentFileId });
-        }
-
-        // Log entry to new mode
-        if (newMode === 'flow') {
-          logEvent(user.id, 'flow_mode_enter', { file_id: currentFileId });
-        } else if (newMode === 'write') {
-          logEvent(user.id, 'write_mode_enter', { file_id: currentFileId });
-        } else if (newMode === 'comments') {
-          logEvent(user.id, 'feedback_mode_enter', { file_id: currentFileId });
-        }
-      }
-
-      // Mode-specific actions
-      if (newMode === 'flow') {
-        // Check if there are no flow highlights yet
-        const flowHighlights = highlightingManager.getHighlightData('flow');
-        if (flowHighlights.size === 0) {
-          toast.info("No flow highlights yet. Check for feedback to generate them.", {
-            duration: 4000,
-          });
-        }
-      } else if (newMode === 'write') {
-        toast.info("Write mode activated - Focus on your writing!", {
-          duration: 3000,
-        });
-      } else if (newMode === 'comments') {
-        toast.info("Feedback mode activated - Comments panel opened", {
-          duration: 2000,
-        });
-      }
-    } else {
-      console.warn('HighlightingManager not available for mode toggle');
-    }
-
-    console.log(`Editor mode changed to: ${newMode}`);
-  };
 
   return (
     <>
@@ -412,17 +354,17 @@ export function EditorHeader({
 
             {/* Editor Mode Toggle */}
             <EditorModeToggle
-              value={editorMode}
-              onValueChange={handleModeChange}
+              value={editorMode || 'flow'}
+              onValueChange={onModeChange || (() => { })}
               disabled={isAnyAnalysisRunning}
             />
 
             <div className="w-[1px] h-7 bg-border/40 dark:bg-zinc-800 rounded-full" />
             <div className="bg-white dark:bg-transparent rounded-lg shadow-sm dark:shadow-none">
             <Button
-                variant={isInsightsOpen ? "ghost" : "ghost"}
+                variant={editorMode === 'comments' ? "default" : "ghost"}
               size="sm"
-              onClick={() => setIsInsightsOpen(!isInsightsOpen)}
+                onClick={() => onModeChange?.('comments')}
               className="h-7 px-3 text-xs flex items-center space-x-1"
                 disabled={isAnyAnalysisRunning}
             >

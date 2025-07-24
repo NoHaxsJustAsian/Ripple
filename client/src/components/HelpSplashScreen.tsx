@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, WavesIcon, DropletIcon, FileCheck2Icon, BookCheckIcon } from 'lucide-react';
+import { X, WavesIcon, DropletIcon, BookCheckIcon } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { Button } from './ui/button';
 import { CursorArrowIcon } from '@radix-ui/react-icons';
@@ -64,24 +64,16 @@ export function HelpSplashScreen({ isOpen, onClose }: HelpSplashScreenProps) {
     },
     {
       id: 'doc-feedback',
-      title: 'Checking for General Feedback',
-      description: 'Get feedback on everything in the editor. Click the \'Check for Feedback\' button and then select \'Check document\'.',
+      title: 'Checking for Feedback',
+      description: 'Get feedback on everything in the editor. Click the \'Check for Feedback\' button and then select \'Check document\'. For more granular feedback, highlight the text you want to check, click the \'Check for Feedback\' button, and then select \'Check custom selection\'.',
       thumbnailUrl: '/tutorial-thumbnails/getting-started.jpg',
       videoUrl: 'https://example.com/videos/getting-started.mp4',
       icon: <BookCheckIcon className="h-5 w-5" />,
     },
     {
-      id: 'custom-feedback',
-      title: 'Checking for Custom Feedback',
-      description: 'Highlight the text you want to check, click the \'Check for Feedback\' button, and then select \'Check custom selection\'.',
-      thumbnailUrl: '/tutorial-thumbnails/getting-started.jpg',
-      videoUrl: 'https://example.com/videos/getting-started.mp4',
-      icon: <FileCheck2Icon className="h-5 w-5" />,
-    },
-    {
       id: 'flow-mode',
-      title: 'Using the Writing, Flow, and Analysis Modes',
-      description: 'First, get feedback on your document by clicking \'Check for Feedback\'. This will generate sentence flow analysis. Then switch to Flow mode using the mode toggle to view how strongly connected each sentence is to other sentences. The darker the shade of blue, the more connected the sentences are. Click on any highlighted sentence for detailed analysis.',
+      title: 'Using the Writing, Flow, and Feedback Modes',
+      description: 'Switch between three different modes. Writing Mode offers a distraction-free writing experience. Feedback Mode shares sentence-by-sentence suggestions. Flow Mode shows how strongly connected each sentence is to other sentences. The darker the shade of blue, the more connected the sentences are',
       thumbnailUrl: '/tutorial-thumbnails/ai-features.jpg',
       videoUrl: 'https://example.com/videos/ai-features.mp4',
       icon: <DropletIcon className="h-5 w-5" />,

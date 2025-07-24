@@ -29,6 +29,7 @@ import { FileService } from '@/lib/file-service';
 import { EventType } from '@/lib/event-logger';
 import { logEvent } from '@/lib/event-logger';
 import { analyzeTextWithContext } from '@/lib/api';
+import { EditorMode } from '@/components/ui/editor-mode-toggle';
 
 import '@/lib/test-prosemirror-search'; // Import to make test functions globally available
 
@@ -68,6 +69,9 @@ export function EditorContainer({
 
   // Ref to trigger comment sorting from parent component
   const sortCommentsRef = useRef<(() => void) | null>(null);
+
+  // Editor mode state
+  const [editorMode, setEditorMode] = useState<EditorMode>('flow');
 
   // Add HighlightingManager state
   const [highlightingManager, setHighlightingManager] = useState<HighlightingManager | null>(null);
@@ -390,6 +394,81 @@ export function EditorContainer({
     }
     setIsAIPanelOpen(!isAIPanelOpen);
   }, [isAIPanelOpen, getSelectedText]);
+
+  // Mode change handler
+  const handleModeChange = useCallback((newMode: EditorMode) => {
+    setEditorMode(newMode);
+
+    // Automatically control comments list visibility based on mode
+    if (newMode === 'comments') {
+      // Open comments list when in feedback mode
+      setIsInsightsOpen(true);
+    } else {
+      // Close comments list when in write or flow mode
+      setIsInsightsOpen(false);
+    }
+
+    if (highlightingManager) {
+      console.log(`🔄 MODE SWITCH - Switching to ${newMode} mode`);
+      highlightingManager.switchMode(newMode);
+
+      // Log mode changes
+      if (user?.id) {
+        const timestamp = new Date().toISOString();
+        const commonEventData = {
+          file_id: currentFileId,
+          timestamp,
+          previous_mode: editorMode,
+          new_mode: newMode
+        };
+
+        // Log exit from current mode
+        if (editorMode === 'flow') {
+          logEvent(user.id, EventType.FLOW_MODE_EXIT, commonEventData, currentFileId || undefined);
+        } else if (editorMode === 'write') {
+          logEvent(user.id, EventType.WRITE_MODE_EXIT, commonEventData, currentFileId || undefined);
+        } else if (editorMode === 'comments') {
+          logEvent(user.id, EventType.FEEDBACK_MODE_EXIT, commonEventData, currentFileId || undefined);
+        }
+
+        // Log entry to new mode
+        if (newMode === 'flow') {
+          logEvent(user.id, EventType.FLOW_MODE_ENTER, commonEventData, currentFileId || undefined);
+        } else if (newMode === 'write') {
+          logEvent(user.id, EventType.WRITE_MODE_ENTER, commonEventData, currentFileId || undefined);
+        } else if (newMode === 'comments') {
+          logEvent(user.id, EventType.FEEDBACK_MODE_ENTER, {
+            ...commonEventData,
+            comments_count: comments.length,
+            panel_was_open: isInsightsOpen
+          }, currentFileId || undefined);
+        }
+      }
+
+      // Mode-specific actions
+      if (newMode === 'flow') {
+        // Check if there are no flow highlights yet
+        const flowHighlights = highlightingManager.getHighlightData('flow');
+        if (flowHighlights.size === 0) {
+          toast.info("No flow highlights yet. Check for feedback to generate them.", {
+            duration: 4000,
+          });
+        }
+      } else if (newMode === 'write') {
+        toast.info("Write mode activated - Focus on your writing!", {
+          duration: 3000,
+        });
+      } else if (newMode === 'comments') {
+        toast.info("Feedback mode activated - Comments panel opened", {
+          duration: 2000,
+        });
+      }
+    } else {
+      console.warn('HighlightingManager not available for mode toggle');
+    }
+
+    console.log(`Editor mode changed to: ${newMode}`);
+  }, [editorMode, setIsInsightsOpen, highlightingManager, user?.id, currentFileId, comments, isInsightsOpen]);
 
   // Memoize toggleTopicSentencesVisibility to prevent recreation on every render
   const toggleTopicSentencesVisibility = useCallback((topicType: string) => {
@@ -1250,6 +1329,8 @@ export function EditorContainer({
                 isAnalysisRunning={isAnalysisRunning}
                 setIsAnalysisRunning={setIsAnalysisRunning}
                 isAnyAnalysisRunning={isAnyAnalysisRunning}
+                editorMode={editorMode}
+                onModeChange={handleModeChange}
                 onLoadFile={(file) => {
                   setCurrentFileId(file.id);
                   setDocumentTitle(file.title);
@@ -1380,6 +1461,7 @@ export function EditorContainer({
                 sortCommentsRef={sortCommentsRef}
                 highlightingManager={highlightingManager}
                 isAnyAnalysisRunning={isAnyAnalysisRunning}
+                onModeChange={handleModeChange}
               />
             </div>
           </div>

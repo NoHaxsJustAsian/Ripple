@@ -243,13 +243,13 @@ Use these highlightStyle colors:
 
 
 CRITICAL ANALYSIS REQUIREMENTS - FOLLOW EXACTLY:
-1. PARAGRAPH-BY-PARAGRAPH ANALYSIS: Go through EVERY paragraph systematically
+1. PARAGRAPH-BY-PARAGRAPH ANALYSIS: Go through EVERY paragraph systematically, and analyze the entire text from beginning to end. Make note of how ideas are connected, reinforced, contradicted, or repeated in order to make the text more coherent and clear.
 2. MINIMUM ISSUE COUNT: Find at least 3-5 issues minimum (more for longer texts)
 3. DISTRIBUTION REQUIREMENT: Issues must be spread across different parts of the text:
   - At least 1 issue from the opening/introduction
   - At least 1 issue from the middle sections/body paragraphs 
   - At least 1 issue from the ending/conclusion
-4. BE CRITICAL: Look for grammar errors, unclear phrasing, weak transitions, repetitive language, unclear arguments, poor word choice, and structural problems
+4. BE CRITICAL: Look for grammar errors, unclear phrasing, weak transitions, repetitive language, repetitive ideas,unclear arguments, poor word choice, and structural problems
 5. NO SHORTCUTS: Do not stop after finding 1-2 issues - continue analyzing until you've covered the entire text
 
 
@@ -1789,21 +1789,63 @@ Format your response as JSON:
             result_text = make_claude_request(
                 model_type="haiku",  # Single paragraph analysis can use fast model
                 messages=[{"role": "user", "content": prompt}],
-                custom_max_tokens=1500,  # Reduced for paragraph-level task
+                custom_max_tokens=2000,  # Increased for complete responses
                 custom_temperature=0.4  # Balanced for analysis
             )
             print(f"🔍 Raw Claude response for paragraph cohesion: {result_text}")
             
-            # Clean markdown code blocks if present
-            if result_text.startswith('```json'):
-                result_text = result_text.replace('```json', '').replace('```', '').strip()
-            elif result_text.startswith('```'):
-                result_text = result_text.replace('```', '').strip()
+            # Enhanced JSON extraction with truncation detection
+            import re
             
-            print(f"🔍 Cleaned response: {result_text}")
+            # Check for obviously incomplete responses
+            if len(result_text.strip()) < 10 or result_text.strip() in ['{', '}', '{"', '{""']:
+                print(f"⚠️ Detected incomplete response (likely truncated): {result_text}")
+                return {
+                    "score": 0.5,
+                    "analysis": "Analysis was incomplete due to response truncation. Please try again."
+                }
+            
+            # Try to extract JSON from the response using multiple methods
+            cleaned_text = result_text
+            
+            # Method 1: Remove markdown code blocks
+            cleaned_text = re.sub(r'```json\s*', '', cleaned_text)
+            cleaned_text = re.sub(r'```\s*', '', cleaned_text)
+            
+            # Method 2: Look for JSON pattern in the text
+            json_pattern = r'\{[^{}]*"score"[^{}]*"analysis"[^{}]*\}'
+            json_match = re.search(json_pattern, cleaned_text, re.DOTALL)
+            
+            if json_match:
+                cleaned_text = json_match.group(0)
+                print(f"🔍 Extracted JSON pattern: {cleaned_text}")
+            else:
+                # Method 3: Try to find any JSON-like structure
+                brace_pattern = r'\{.*\}'
+                brace_match = re.search(brace_pattern, cleaned_text, re.DOTALL)
+                if brace_match:
+                    cleaned_text = brace_match.group(0)
+                    print(f"🔍 Extracted brace pattern: {cleaned_text}")
+                else:
+                    print(f"⚠️ No JSON structure found in response: {result_text}")
+                    return {
+                        "score": 0.5,
+                        "analysis": "Unable to find valid JSON in AI response."
+                    }
+            
+            cleaned_text = cleaned_text.strip()
+            print(f"🔍 Final cleaned response: {cleaned_text}")
+            
+            # Additional check for incomplete JSON
+            if not (cleaned_text.startswith('{') and cleaned_text.endswith('}')):
+                print(f"⚠️ JSON structure appears incomplete: {cleaned_text}")
+                return {
+                    "score": 0.5,
+                    "analysis": "Analysis response was malformed. Please try again."
+                }
             
             # Try to parse as JSON
-            result = json.loads(result_text)
+            result = json.loads(cleaned_text)
             
             # Validate and set defaults
             return {
@@ -1811,8 +1853,9 @@ Format your response as JSON:
                 "analysis": result.get("analysis", "Unable to analyze paragraph cohesion."),
             }
             
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
             print(f"Failed to parse paragraph cohesion JSON: {result_text}")
+            print(f"JSON error: {e}")
             return {
                 "score": 0.5,
                 "analysis": "Unable to analyze paragraph cohesion due to parsing error."
@@ -1913,21 +1956,63 @@ Format your response as JSON:
             result_text = make_claude_request(
                 model_type="sonnet",  # Complex document understanding needs high-quality model
                 messages=[{"role": "user", "content": prompt}],
-                custom_max_tokens=3000,
+                custom_max_tokens=4000,  # Increased token limit
                 custom_temperature=0.4  # Balanced for analysis
             )
             print(f"🔍 Raw Claude response for document cohesion: {result_text}")
             
-            # Clean markdown code blocks if present
-            if result_text.startswith('```json'):
-                result_text = result_text.replace('```json', '').replace('```', '').strip()
-            elif result_text.startswith('```'):
-                result_text = result_text.replace('```', '').strip()
+            # Enhanced JSON extraction with truncation detection
+            import re
             
-            print(f"🔍 Cleaned response: {result_text}")
+            # Check for obviously incomplete responses
+            if len(result_text.strip()) < 10 or result_text.strip() in ['{', '}', '{"', '{""']:
+                print(f"⚠️ Detected incomplete response (likely truncated): {result_text}")
+                return {
+                    "score": 0.5,
+                    "analysis": "Analysis was incomplete due to response truncation. Please try again."
+                }
+            
+            # Try to extract JSON from the response using multiple methods
+            cleaned_text = result_text
+            
+            # Method 1: Remove markdown code blocks
+            cleaned_text = re.sub(r'```json\s*', '', cleaned_text)
+            cleaned_text = re.sub(r'```\s*', '', cleaned_text)
+            
+            # Method 2: Look for JSON pattern in the text
+            json_pattern = r'\{[^{}]*"score"[^{}]*"analysis"[^{}]*\}'
+            json_match = re.search(json_pattern, cleaned_text, re.DOTALL)
+            
+            if json_match:
+                cleaned_text = json_match.group(0)
+                print(f"🔍 Extracted JSON pattern: {cleaned_text}")
+            else:
+                # Method 3: Try to find any JSON-like structure
+                brace_pattern = r'\{.*\}'
+                brace_match = re.search(brace_pattern, cleaned_text, re.DOTALL)
+                if brace_match:
+                    cleaned_text = brace_match.group(0)
+                    print(f"🔍 Extracted brace pattern: {cleaned_text}")
+                else:
+                    print(f"⚠️ No JSON structure found in response: {result_text}")
+                    return {
+                        "score": 0.5,
+                        "analysis": "Unable to find valid JSON in AI response."
+                    }
+            
+            cleaned_text = cleaned_text.strip()
+            print(f"🔍 Final cleaned response: {cleaned_text}")
+            
+            # Additional check for incomplete JSON
+            if not (cleaned_text.startswith('{') and cleaned_text.endswith('}')):
+                print(f"⚠️ JSON structure appears incomplete: {cleaned_text}")
+                return {
+                    "score": 0.5,
+                    "analysis": "Analysis response was malformed. Please try again."
+                }
             
             # Try to parse as JSON
-            result = json.loads(result_text)
+            result = json.loads(cleaned_text)
             
             # Validate and set defaults
             return {
@@ -1935,8 +2020,9 @@ Format your response as JSON:
                 "analysis": result.get("analysis", "Unable to analyze document cohesion.")
             }
             
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
             print(f"Failed to parse document cohesion JSON: {result_text}")
+            print(f"JSON error: {e}")
             return {
                 "score": 0.5,
                 "analysis": "Unable to analyze document cohesion due to parsing error."

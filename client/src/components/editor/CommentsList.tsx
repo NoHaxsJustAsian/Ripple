@@ -6,7 +6,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MultiSelect } from '@/components/ui/multi-select';
 import { CommentType } from './types';
 import { CommentItem } from './CommentItem';
-import { refreshFeedback, regenerateSuggestion } from '@/lib/api';
 import { toast } from "sonner";
 import { HighlightingManager } from '@/lib/highlighting-manager';
 
@@ -23,6 +22,7 @@ interface CommentsListProps {
   sortCommentsRef?: React.MutableRefObject<(() => void) | null>;
   highlightingManager?: HighlightingManager | null;
   isAnyAnalysisRunning?: boolean;
+  onModeChange?: (mode: 'comments') => void;
 }
 
 export function CommentsList({
@@ -37,13 +37,10 @@ export function CommentsList({
   setFocusedCommentId,
   sortCommentsRef,
   highlightingManager,
-  isAnyAnalysisRunning
+  isAnyAnalysisRunning,
+  onModeChange
 }: CommentsListProps) {
   const commentsSectionRef = useRef<HTMLDivElement | null>(null);
-
-  // Track loading states for comments
-  const [refreshingComments, setRefreshingComments] = useState<{ [commentId: string]: boolean }>({});
-  const [regeneratingComments, setRegeneratingComments] = useState<{ [commentId: string]: boolean }>({});
 
   // Current sort method
   const [sortMethod, setSortMethod] = useState<string>("default");
@@ -51,306 +48,6 @@ export function CommentsList({
   // State for collapsed sections
   const [isReplacedOpen, setIsReplacedOpen] = useState<boolean>(false);
   const [isDismissedOpen, setIsDismissedOpen] = useState<boolean>(false);
-
-  // This function will be called when a user clicks the refresh button on a comment
-  const handleRefreshFeedback = async (commentId: string) => {
-    console.log("Refreshing feedback for comment ID:", commentId);
-
-    // Find the comment that needs to be refreshed
-    const commentToRefresh = comments.find(c => c.id === commentId);
-    if (!commentToRefresh) return;
-
-    // Get the current text from the editor where the comment is located
-    if (!editor) return;
-
-    // Find the position of the commented text in the editor
-    let foundPos: { from: number; to: number } | null = null;
-    editor.state.doc.descendants((node, pos) => {
-      const mark = node.marks.find(m =>
-        m.type.name === 'comment' &&
-        m.attrs.commentId === commentId
-      );
-      if (mark) {
-        foundPos = { from: pos, to: pos + node.nodeSize };
-        return false;
-      }
-      return true;
-    });
-
-    if (!foundPos) return;
-
-    // Get the current text content at the comment location
-    const currentText = editor.state.doc.textBetween((foundPos as { from: number; to: number }).from, (foundPos as { from: number; to: number }).to);
-
-    // Set loading state for this comment
-    setRefreshingComments(prev => ({
-      ...prev,
-      [commentId]: true
-    }));
-
-    try {
-      // If we have the original feedback and suggestedEdit, use the API
-      if (commentToRefresh.suggestedEdit && commentToRefresh.suggestedEdit.explanation) {
-        const originalText = commentToRefresh.suggestedEdit.original || commentToRefresh.quotedText;
-        const originalFeedback = commentToRefresh.suggestedEdit.explanation;
-
-        // Call the API to refresh the feedback
-        const response = await refreshFeedback({
-          originalText: originalText || '',
-          currentText: currentText,
-          originalFeedback: originalFeedback,
-          issueType: commentToRefresh.issueType
-        });
-
-        if (response.success) {
-          // Create a new history entry with a complete snapshot
-          const now = new Date().toISOString();
-
-          // Ensure we have a feedbackHistory array, or create a new one with the current state
-          const previousHistory = commentToRefresh.feedbackHistory || [];
-
-          // If there's no history yet, add the initial state first
-          if (previousHistory.length === 0 && commentToRefresh.suggestedEdit) {
-            previousHistory.push({
-              timestamp: commentToRefresh.updatedAt || commentToRefresh.createdAt,
-              original: commentToRefresh.suggestedEdit.original || '',
-              currentText: commentToRefresh.suggestedEdit.original || '',  // Initially, current text is the original
-              suggested: commentToRefresh.suggestedEdit.suggested || '',
-              explanation: commentToRefresh.suggestedEdit.explanation || '',
-              issueType: commentToRefresh.issueType,
-              references: commentToRefresh.suggestedEdit.references || []
-            });
-          }
-
-          // Create a new complete snapshot with all current values
-          const newHistoryEntry = {
-            timestamp: now,
-            original: commentToRefresh.suggestedEdit.original || '',
-            currentText: currentText || '',
-            suggested: commentToRefresh.suggestedEdit.suggested || '',
-            explanation: response.data.updatedFeedback,
-            issueType: commentToRefresh.issueType,
-            references: commentToRefresh.suggestedEdit.references || []
-          };
-
-          // Update the comment with new feedback and the updated history
-          setComments(prevComments =>
-            prevComments.map(c =>
-              c.id === commentId
-                ? {
-                  ...c,
-                  updatedAt: now,
-                  suggestedEdit: c.suggestedEdit
-                    ? {
-                      ...c.suggestedEdit,
-                      explanation: response.data.updatedFeedback
-                    }
-                    : undefined,
-                  feedbackHistory: [...previousHistory, newHistoryEntry]
-                }
-                : c
-            )
-          );
-        }
-      } else {
-        // Fallback to simulated response for comments without suggestedEdit
-        const simulateApiResponse = () => {
-          return new Promise<string>((resolve) => {
-            setTimeout(() => {
-              // Check if text has changed
-              if (currentText !== commentToRefresh.quotedText) {
-                resolve(`This text has been updated. ${Math.random() > 0.5
-                  ? "The issues have been resolved, good job!"
-                  : "There are still some issues to address."
-                  }`);
-              } else {
-                resolve("The text hasn't changed since the last feedback.");
-              }
-            }, 500);
-          });
-        };
-
-        const updatedFeedbackText = await simulateApiResponse();
-        const now = new Date().toISOString();
-
-        // Ensure we have a feedbackHistory array, or create a new one with the current state
-        const previousHistory = commentToRefresh.feedbackHistory || [];
-
-        // If there's no history yet and there's an existing suggestedEdit, add the initial state first
-        if (previousHistory.length === 0 && commentToRefresh.suggestedEdit) {
-          previousHistory.push({
-            timestamp: commentToRefresh.updatedAt || commentToRefresh.createdAt,
-            original: commentToRefresh.suggestedEdit.original || '',
-            currentText: commentToRefresh.suggestedEdit.original || '',
-            suggested: commentToRefresh.suggestedEdit.suggested || '',
-            explanation: commentToRefresh.suggestedEdit.explanation || '',
-            issueType: commentToRefresh.issueType,
-            references: commentToRefresh.suggestedEdit.references || []
-          });
-        }
-
-        // Create a complete snapshot with all current values
-        const newHistoryEntry = {
-          timestamp: now,
-          original: commentToRefresh.suggestedEdit?.original || commentToRefresh.quotedText || '',
-          currentText: currentText || '',
-          suggested: commentToRefresh.suggestedEdit?.suggested || commentToRefresh.quotedText || '',
-          explanation: updatedFeedbackText,
-          issueType: commentToRefresh.issueType,
-          references: commentToRefresh.suggestedEdit?.references || []
-        };
-
-        // Update the comment with new feedback
-        setComments(prevComments =>
-          prevComments.map(c =>
-            c.id === commentId
-              ? {
-                ...c,
-                updatedAt: now,
-                suggestedEdit: c.suggestedEdit
-                  ? {
-                    ...c.suggestedEdit,
-                    explanation: updatedFeedbackText
-                  }
-                  : {
-                    original: c.quotedText || '',
-                    suggested: c.quotedText || '',
-                    explanation: updatedFeedbackText,
-                    references: []
-                  },
-                feedbackHistory: [...previousHistory, newHistoryEntry]
-              }
-              : c
-          )
-        );
-      }
-
-    } catch (error) {
-      console.error("Error refreshing feedback:", error);
-      toast.error("Failed to refresh feedback", {
-        description: "Please try again later."
-      });
-    } finally {
-      // Clear loading state
-      setRefreshingComments(prev => ({
-        ...prev,
-        [commentId]: false
-      }));
-    }
-  };
-
-  // This function will be called when a user clicks the regenerate button on a comment
-  const handleRegenerateSuggestion = async (commentId: string) => {
-    console.log("Regenerating suggestion for comment ID:", commentId);
-
-    // Find the comment that needs regeneration
-    const commentToRegenerate = comments.find(c => c.id === commentId);
-    if (!commentToRegenerate) return;
-
-    // Get the current text from the editor where the comment is located
-    if (!editor) return;
-
-    // Find the position of the commented text in the editor
-    let foundPos: { from: number; to: number } | null = null;
-    editor.state.doc.descendants((node, pos) => {
-      const mark = node.marks.find(m =>
-        m.type.name === 'comment' &&
-        m.attrs.commentId === commentId
-      );
-      if (mark) {
-        foundPos = { from: pos, to: pos + node.nodeSize };
-        return false;
-      }
-      return true;
-    });
-
-    if (!foundPos) return;
-
-    // Get the current text content at the comment location
-    const currentText = editor.state.doc.textBetween((foundPos as { from: number; to: number }).from, (foundPos as { from: number; to: number }).to);
-
-    // Set loading state for this comment
-    setRegeneratingComments(prev => ({
-      ...prev,
-      [commentId]: true
-    }));
-
-    try {
-      const originalText = commentToRegenerate.suggestedEdit?.original || commentToRegenerate.quotedText || '';
-      // Preserve the original explanation if it exists
-      const originalExplanation = commentToRegenerate.suggestedEdit?.explanation || '';
-
-      // Call the API to regenerate the suggestion
-      const response = await regenerateSuggestion({
-        originalText: originalText,
-        currentText: currentText,
-        issueType: commentToRegenerate.issueType,
-        originalExplanation: originalExplanation
-      });
-
-      if (response.success) {
-        const now = new Date().toISOString();
-
-        // Ensure we have a feedbackHistory array, or create a new one with the current state
-        const previousHistory = commentToRegenerate.feedbackHistory || [];
-
-        // If there's no history yet and there's an existing suggestedEdit, add the initial state first
-        if (previousHistory.length === 0 && commentToRegenerate.suggestedEdit) {
-          previousHistory.push({
-            timestamp: commentToRegenerate.updatedAt || commentToRegenerate.createdAt,
-            original: commentToRegenerate.suggestedEdit.original || '',
-            currentText: commentToRegenerate.suggestedEdit.original || '',
-            suggested: commentToRegenerate.suggestedEdit.suggested || '',
-            explanation: commentToRegenerate.suggestedEdit.explanation || '',
-            issueType: commentToRegenerate.issueType,
-            references: commentToRegenerate.suggestedEdit.references || []
-          });
-        }
-
-        // Create a new complete snapshot with all current values
-        const newHistoryEntry = {
-          timestamp: now,
-          original: commentToRegenerate.suggestedEdit?.original || commentToRegenerate.quotedText || '',
-          currentText: currentText || '',
-          suggested: response.data.suggestedEdit.suggested,
-          explanation: response.data.suggestedEdit.explanation,
-          issueType: commentToRegenerate.issueType,
-          references: (response.data.suggestedEdit as any).references || []
-        };
-
-        // Update the comment with the new suggestion
-        setComments(prevComments =>
-          prevComments.map(c =>
-            c.id === commentId
-              ? {
-                ...c,
-                updatedAt: now,
-                suggestedEdit: {
-                  original: commentToRegenerate.suggestedEdit?.original || commentToRegenerate.quotedText || '',
-                  suggested: response.data.suggestedEdit.suggested,
-                  explanation: response.data.suggestedEdit.explanation,
-                  references: (response.data.suggestedEdit as any).references || []
-                },
-                feedbackHistory: [...previousHistory, newHistoryEntry]
-              }
-              : c
-          )
-        );
-      }
-
-    } catch (error) {
-      console.error("Error regenerating suggestion:", error);
-      toast.error("Failed to generate new suggestion", {
-        description: "Please try again later."
-      });
-    } finally {
-      // Clear loading state
-      setRegeneratingComments(prev => ({
-        ...prev,
-        [commentId]: false
-      }));
-    }
-  };
 
   // Handle toggling the pin status of a comment
   const handleTogglePin = (commentId: string, isPinned: boolean) => {
@@ -580,7 +277,15 @@ export function CommentsList({
     >
       {/* Toggle Button */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          if (!isOpen && onModeChange) {
+            // If panel is closed, switch to comments mode (which will open the panel)
+            onModeChange('comments');
+          } else {
+            // If panel is open, just close it
+            setIsOpen(false);
+          }
+        }}
         className={cn(
           "absolute left-0 top-1/4 -translate-y-1/2 -translate-x-full",
           "bg-background border border-border/40 border-r-0",
@@ -657,13 +362,9 @@ export function CommentsList({
                   setActiveCommentId={setActiveCommentId}
                   setComments={setComments}
                   comments={comments}
-                  onRefreshFeedback={handleRefreshFeedback}
-                  onRegenerateSuggestion={handleRegenerateSuggestion}
                   onTogglePin={handleTogglePin}
                   onMarkAsCompleted={handleMarkAsCompleted}
                   onReviveComment={handleReviveComment}
-                  isRefreshing={refreshingComments[comment.id] || false}
-                  isRegenerating={regeneratingComments[comment.id] || false}
                   focusedCommentId={focusedCommentId}
                   setFocusedCommentId={setFocusedCommentId}
                   isWriteMode={highlightingManager?.getCurrentMode() === 'write'}
@@ -755,13 +456,9 @@ export function CommentsList({
                     setActiveCommentId={setActiveCommentId}
                     setComments={setComments}
                     comments={comments}
-                    onRefreshFeedback={handleRefreshFeedback}
-                    onRegenerateSuggestion={handleRegenerateSuggestion}
                     onTogglePin={handleTogglePin}
                     onMarkAsCompleted={handleMarkAsCompleted}
                     onReviveComment={handleReviveComment}
-                    isRefreshing={refreshingComments[comment.id] || false}
-                    isRegenerating={regeneratingComments[comment.id] || false}
                     isCompleted={true}
                     focusedCommentId={focusedCommentId}
                     setFocusedCommentId={setFocusedCommentId}
